@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -61,9 +61,11 @@ export default function FeedScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  useEffect(() => {
-    void fetchPage(1);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchPage(1);
+    }, [])
+  );
 
   async function fetchPage(p: number) {
     try {
