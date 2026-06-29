@@ -12,11 +12,17 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Se necesita la cámara para agregar fotos al reporte.",
         "NSPhotoLibraryUsageDescription": "Se necesita acceso a la galería para adjuntar imágenes al reporte.",
-        "NSLocationWhenInUseUsageDescription": "Se necesita la ubicación para geolocalizar el reporte urbano."
+        "NSLocationWhenInUseUsageDescription": "Se necesita la ubicación para geolocalizar el reporte urbano.",
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.anonymous.urbancheck"
+      "bundleIdentifier": "com.anonymous.urbancheck",
+      "associatedDomains": [
+        "applinks:urbancheck.com.ar",
+        "applinks:urbancheck.com.ar"
+      ]
     },
     "android": {
+      "package": "com.anonymous.urbancheck",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -30,6 +36,23 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "urbancheck.com.ar",
+              "pathPrefix": "/reset-password"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "web": {
@@ -51,6 +74,12 @@
           "locationAlwaysAndWhenInUsePermission": "Se necesita la ubicación para geolocalizar el reporte urbano."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b7d9c204-e269-475e-b852-5d10e9f0a52a"
+      }
+    }
   }
 }
