@@ -16,7 +16,6 @@ import {
 } from "react-native";
 
 import { getMe, patchMe, type UserProfile } from "../../src/api/users";
-import { uriToBlob } from "../../src/api/client";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -74,8 +73,11 @@ export default function EditProfileScreen() {
       const form = new FormData();
       form.append("name", name);
       if (avatar) {
-        const blob = await uriToBlob(avatar.uri);
-        form.append("avatar", blob, avatar.name);
+        form.append("avatar", {
+          uri: avatar.uri,
+          name: avatar.name,
+          type: avatar.type,
+        } as any);
       }
       await patchMe(form);
       Alert.alert("¡Listo!", "Tu perfil fue actualizado.", [

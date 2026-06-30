@@ -17,7 +17,6 @@ import {
 } from "react-native";
 
 import { createReport, type ReportCategory } from "../../src/api/reports";
-import { uriToBlob } from "../../src/api/client";
 
 const CATEGORIES: { value: ReportCategory; label: string }[] = [
   { value: "bache", label: "Bache" },
@@ -123,8 +122,11 @@ export default function CreateReportScreen() {
     setLoading(true);
     try {
       const form = new FormData();
-      const blob = await uriToBlob(photo!.uri);
-      form.append("photo", blob, photo!.name);
+      form.append("photo", {
+        uri: photo!.uri,
+        name: photo!.name,
+        type: photo!.type,
+      } as any);
       form.append("description", description);
       form.append("category", category);
       if (latitude != null) form.append("latitude", String(latitude));
