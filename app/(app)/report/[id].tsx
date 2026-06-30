@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,8 +12,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   addComment,
@@ -42,14 +45,32 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { width } = useWindowDimensions();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [activePage, setActivePage] = useState(0);
+  const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     void fetchReport();
   }, [id]);
+
+  useEffect(() => {
+    if (report?.latitude && report?.longitude) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: Number(report.latitude),
+          longitude: Number(report.longitude),
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        },
+        0,
+      );
+    }
+  }, [report]);
 
   async function fetchReport() {
     try {
@@ -123,7 +144,81 @@ export default function ReportDetailScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView style={styles.container}>
-        <Image source={{ uri: report.photo }} style={styles.photo} />
+        {report.latitude && report.longitude ? (
+          <View style={styles.mediaContainer}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={(event) => {
+                const slide = Math.round(event.nativeEvent.contentOffset.x / width);
+                if (slide !== activePage) {
+                  setActivePage(slide);
+                }
+              }}
+              scrollEventThrottle={16}
+              style={styles.horizontalScroll}
+            >
+              <Image source={{ uri: report.photo }} style={{ width, height: 240 }} />
+              <View style={{ width, height: 240, position: "relative" }}>
+                <MapView
+                  ref={mapRef}
+                  style={StyleSheet.absoluteFillObject}
+                  initialRegion={{
+                    latitude: Number(report.latitude),
+                    longitude: Number(report.longitude),
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                  mapType={mapType}
+                  scrollEnabled={false}
+                  zoomEnabled={true}
+                  zoomControlEnabled={true}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  onRegionChangeComplete={(newRegion) => {
+                    if (report?.latitude && report?.longitude) {
+                      mapRef.current?.animateToRegion(
+                        {
+                          latitude: Number(report.latitude),
+                          longitude: Number(report.longitude),
+                          latitudeDelta: newRegion.latitudeDelta,
+                          longitudeDelta: newRegion.longitudeDelta,
+                        },
+                        150,
+                      );
+                    }
+                  }}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: Number(report.latitude),
+                      longitude: Number(report.longitude),
+                    }}
+                  />
+                </MapView>
+                <Pressable
+                  style={styles.mapTypeBtn}
+                  onPress={() =>
+                    setMapType((m) => (m === "standard" ? "satellite" : "standard"))
+                  }
+                >
+                  <Ionicons
+                    name={mapType === "standard" ? "earth-outline" : "map-outline"}
+                    size={20}
+                    color="#333"
+                  />
+                </Pressable>
+              </View>
+            </ScrollView>
+            <View style={styles.dotsContainer}>
+              <View style={[styles.dot, activePage === 0 && styles.activeDot]} />
+              <View style={[styles.dot, activePage === 1 && styles.activeDot]} />
+            </View>
+          </View>
+        ) : (
+          <Image source={{ uri: report.photo }} style={styles.photo} />
+        )}
 
         <View style={styles.section}>
           <View style={styles.row}>
@@ -216,6 +311,37 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   photo: { width: "100%", height: 240 },
+  mediaContainer: {
+    position: "relative",
+    width: "100%",
+    height: 240,
+  },
+  horizontalScroll: {
+    width: "100%",
+    height: 240,
+  },
+  dotsContainer: {
+    position: "absolute",
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+  },
+  activeDot: {
+    backgroundColor: "#fff",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   section: { padding: 16, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   category: { fontWeight: "bold", color: "#1a73e8", fontSize: 15 },
@@ -277,4 +403,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendBtnText: { color: "#fff", fontWeight: "600" },
+  mapTypeBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
 });
