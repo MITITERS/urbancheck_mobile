@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { login } from "../../src/api/auth";
 import { useAuth } from "../../src/auth/AuthContext";
@@ -20,6 +22,7 @@ export default function LoginScreen() {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,7 +58,10 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>UrbanCheck</Text>
+      <Image
+        source={require("../../assets/urbancheck_logo.png")}
+        style={styles.logo}
+      />
 
       <TextInput
         style={[styles.input, errors.email && styles.inputError]}
@@ -67,13 +73,25 @@ export default function LoginScreen() {
       />
       {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-      <TextInput
-        style={[styles.input, errors.password && styles.inputError]}
-        placeholder="Contraseña"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={[styles.passwordInput, errors.password && styles.inputError]}
+          placeholder="Contraseña"
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <Pressable
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
+        >
+          <Ionicons
+            name={showPassword ? "eye-outline" : "eye-off-outline"}
+            size={22}
+            color="#888"
+          />
+        </Pressable>
+      </View>
       {errors.password && (
         <Text style={styles.errorText}>{errors.password}</Text>
       )}
@@ -112,12 +130,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#fff",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 32,
-    color: "#1a73e8",
+  logo: {
+    width: 308,
+    height: 308,
+    alignSelf: "center",
+    marginTop: -50,
+    marginBottom: 30,
+    resizeMode: "contain",
   },
   input: {
     borderWidth: 1,
@@ -126,6 +145,26 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 4,
     fontSize: 16,
+  },
+  passwordContainer: {
+    position: "relative",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
+    paddingRight: 48,
+    fontSize: 16,
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 12,
+    height: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 8,
   },
   inputError: { borderColor: "#e53935" },
   errorText: { color: "#e53935", fontSize: 12, marginBottom: 8 },
