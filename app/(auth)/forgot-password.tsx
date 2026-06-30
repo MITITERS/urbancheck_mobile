@@ -1,6 +1,8 @@
+import { Link } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,11 +35,18 @@ export default function ForgotPasswordScreen() {
   if (sent) {
     return (
       <KeyboardAvoidingView style={styles.container}>
+        <Image
+          source={require("../../assets/urbancheck_logo.png")}
+          style={styles.logo}
+        />
         <Text style={styles.successTitle}>¡Email enviado!</Text>
         <Text style={styles.successText}>
           Revisá tu bandeja de entrada y seguí el enlace para restablecer tu
           contraseña. El enlace expira en 24 horas.
         </Text>
+        <Link href="/(auth)/login" style={styles.link}>
+          Volver al inicio de sesión
+        </Link>
       </KeyboardAvoidingView>
     );
   }
@@ -47,7 +56,10 @@ export default function ForgotPasswordScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>Recuperar contraseña</Text>
+      <Image
+        source={require("../../assets/urbancheck_logo.png")}
+        style={styles.logo}
+      />
       <Text style={styles.subtitle}>
         Ingresá tu email y te enviaremos un enlace para restablecer tu
         contraseña.
@@ -74,14 +86,30 @@ export default function ForgotPasswordScreen() {
           <Text style={styles.buttonText}>Enviar enlace</Text>
         )}
       </Pressable>
+
+      <Link href="/(auth)/login" style={styles.link}>
+        Volver al inicio de sesión
+      </Link>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: "#fff", justifyContent: "center" },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 8, color: "#1a73e8" },
-  subtitle: { fontSize: 14, color: "#666", marginBottom: 24 },
+  logo: {
+    width: 150,
+    height: 150,
+    alignSelf: "center",
+    marginBottom: 20,
+    resizeMode: "contain",
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 20,
+  },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
@@ -101,6 +129,23 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  successTitle: { fontSize: 22, fontWeight: "bold", color: "#2e7d32", marginBottom: 12 },
-  successText: { fontSize: 15, color: "#444", lineHeight: 22 },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#2e7d32",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  successText: {
+    fontSize: 15,
+    color: "#444",
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  link: {
+    textAlign: "center",
+    marginTop: 16,
+    color: "#1a73e8",
+    fontSize: 14,
+  },
 });
