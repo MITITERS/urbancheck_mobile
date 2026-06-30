@@ -11,11 +11,12 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { logout } from "../../src/api/auth";
-import { listMyReports, type Report } from "../../src/api/reports";
-import { getMe, type UserProfile } from "../../src/api/users";
-import { useAuth } from "../../src/auth/AuthContext";
+import { logout } from "../../../src/api/auth";
+import { listMyReports, type Report } from "../../../src/api/reports";
+import { getMe, type UserProfile } from "../../../src/api/users";
+import { useAuth } from "../../../src/auth/AuthContext";
 
 const STATUS_LABEL: Record<string, string> = {
   reportado: "Reportado",
@@ -54,6 +55,7 @@ function formatDate(isoString: string) {
 export default function ProfileScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,15 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top > 0 ? insets.top + 16 : 28,
+            paddingBottom: 20,
+          },
+        ]}
+      >
         <View style={styles.avatarWrapper}>
           {user?.avatar ? (
             <Image source={{ uri: user.avatar }} style={styles.avatar} />
@@ -157,7 +167,7 @@ export default function ProfileScreen() {
       <FlatList
         data={reports}
         keyExtractor={(r) => String(r.id)}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
         renderItem={({ item }) => {
           const colors = STATUS_COLORS[item.status] ?? { bg: "#f5f5f5", text: "#666" };
           return (

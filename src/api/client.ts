@@ -40,11 +40,14 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    let errorData: unknown;
+    let errorData: any;
     try {
       errorData = await response.json();
     } catch {
       errorData = { detail: response.statusText };
+    }
+    if (errorData && typeof errorData === "object") {
+      errorData.status = response.status;
     }
     throw errorData;
   }

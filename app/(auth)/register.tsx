@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { signup } from "../../src/api/auth";
+import { signup, logout } from "../../src/api/auth";
 import { useAuth } from "../../src/auth/AuthContext";
 
 export default function RegisterScreen() {
@@ -71,21 +71,35 @@ export default function RegisterScreen() {
       const res = await signup({ name, email, password });
       await signIn(res.meta.session_token, false);
     } catch (err: unknown) {
-      const data = err as Record<string, unknown>;
-      if (data?.errors) {
+      let currentErr = err;
+      const data = currentErr as any;
+      if (data?.status === 409) {
+        try {
+          await logout();
+        } catch {}
+        try {
+          const res = await signup({ name, email, password });
+          await signIn(res.meta.session_token, false);
+          return;
+        } catch (retryErr) {
+          currentErr = retryErr;
+        }
+      }
+      const data2 = currentErr as Record<string, unknown>;
+      if (data2?.errors) {
         const mapped: Record<string, string> = {};
-        for (const e of data.errors as Array<{ param?: string; message: string }>) {
+        for (const e of data2.errors as Array<{ param?: string; message: string }>) {
           if (e.param) mapped[e.param] = e.message;
         }
         if (Object.keys(mapped).length > 0) {
           setErrors(mapped);
         } else {
-          Alert.alert("Error registro", JSON.stringify(data.errors));
+          Alert.alert("Error registro", JSON.stringify(data2.errors));
         }
-      } else if (err instanceof Error) {
-        Alert.alert("Error de red", err.message);
+      } else if (currentErr instanceof Error) {
+        Alert.alert("Error de red", currentErr.message);
       } else {
-        Alert.alert("Error inesperado", JSON.stringify(err).slice(0, 300));
+        Alert.alert("Error inesperado", JSON.stringify(currentErr).slice(0, 300));
       }
     } finally {
       setLoading(false);
