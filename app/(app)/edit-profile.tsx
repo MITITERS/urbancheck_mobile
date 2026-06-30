@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { getMe, patchMe, type UserProfile } from "../../src/api/users";
 
@@ -116,81 +117,150 @@ export default function EditProfileScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable style={styles.avatarContainer} onPress={pickAvatar}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarInitial}>
-                {name?.charAt(0)?.toUpperCase() ?? "?"}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.changeAvatarText}>Cambiar foto</Text>
-        </Pressable>
+        <View style={styles.card}>
+          <View style={styles.avatarSection}>
+            <Pressable style={styles.avatarWrapper} onPress={pickAvatar}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Text style={styles.avatarInitial}>
+                    {name?.charAt(0)?.toUpperCase() ?? "?"}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.cameraIconContainer}>
+                <Ionicons name="camera" size={16} color="#fff" />
+              </View>
+            </Pressable>
+            <Text style={styles.changeAvatarText}>Cambiar foto de perfil</Text>
+          </View>
 
-        <Text style={styles.label}>Nombre</Text>
-        <TextInput
-          style={[styles.input, errors.name && styles.inputError]}
-          value={name}
-          onChangeText={setName}
-          placeholder="Tu nombre"
-        />
-        {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Nombre</Text>
+            <TextInput
+              style={[styles.input, errors.name && styles.inputError]}
+              value={name}
+              onChangeText={setName}
+              placeholder="Tu nombre completo"
+            />
+            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+          </View>
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={[styles.input, styles.inputDisabled]}
-          value={user?.email ?? ""}
-          editable={false}
-        />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Correo electrónico</Text>
+            <TextInput
+              style={[styles.input, styles.inputDisabled]}
+              value={user?.email ?? ""}
+              editable={false}
+            />
+            <Text style={styles.helperText}>El correo no puede ser modificado.</Text>
+          </View>
 
-        <Pressable
-          style={[styles.saveBtn, saving && styles.btnDisabled]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveBtnText}>Guardar cambios</Text>
-          )}
-        </Pressable>
+          <Pressable
+            style={[styles.saveBtn, saving && styles.btnDisabled]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.saveBtnText}>Guardar cambios</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: "#fff" },
+  container: { padding: 16, backgroundColor: "#f8f9fa", flexGrow: 1, justifyContent: "center" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  avatarContainer: { alignItems: "center", marginBottom: 24 },
-  avatar: { width: 96, height: 96, borderRadius: 48 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  avatarSection: { alignItems: "center", marginBottom: 28 },
+  avatarWrapper: {
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: "#fff",
+  },
   avatarPlaceholder: {
     backgroundColor: "#1a73e8",
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarInitial: { color: "#fff", fontSize: 36, fontWeight: "bold" },
-  changeAvatarText: { color: "#1a73e8", marginTop: 8, fontWeight: "600" },
-  label: { fontWeight: "600", fontSize: 14, marginBottom: 6, color: "#444" },
+  avatarInitial: { color: "#fff", fontSize: 40, fontWeight: "bold" },
+  cameraIconContainer: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    backgroundColor: "#1a73e8",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  changeAvatarText: { color: "#1a73e8", marginTop: 10, fontWeight: "600", fontSize: 14 },
+  formGroup: { marginBottom: 18 },
+  label: { fontWeight: "600", fontSize: 13, marginBottom: 6, color: "#374151" },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#d1d5db",
     borderRadius: 8,
     padding: 12,
     fontSize: 15,
-    marginBottom: 4,
+    color: "#1f2937",
+    backgroundColor: "#fff",
   },
   inputError: { borderColor: "#e53935" },
-  inputDisabled: { backgroundColor: "#f5f5f5", color: "#999" },
-  errorText: { color: "#e53935", fontSize: 12, marginBottom: 8 },
+  inputDisabled: { backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" },
+  errorText: { color: "#e53935", fontSize: 12, marginTop: 4 },
+  helperText: { color: "#9ca3af", fontSize: 11, marginTop: 4 },
   saveBtn: {
+    flexDirection: "row",
     backgroundColor: "#1a73e8",
     padding: 14,
     borderRadius: 8,
     alignItems: "center",
-    marginTop: 24,
+    justifyContent: "center",
+    marginTop: 12,
+    shadowColor: "#1a73e8",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   btnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
