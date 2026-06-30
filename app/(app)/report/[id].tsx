@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -53,12 +54,36 @@ export default function ReportDetailScreen() {
   const [activePage, setActivePage] = useState(0);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
+  const [isEnlarged, setIsEnlarged] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
+  const containerHeight = useRef(new Animated.Value(240)).current;
+
+  function toggleEnlarged() {
+    Animated.timing(containerHeight, {
+      toValue: isEnlarged ? 240 : 420,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    setIsEnlarged(!isEnlarged);
+  }
 
   useEffect(() => {
     void fetchReport();
   }, [id]);
 
   useEffect(() => {
+    if (report?.photo) {
+      Image.getSize(
+        report.photo,
+        (w, h) => {
+          setIsPortrait(h > w);
+        },
+        () => {
+          setIsPortrait(false);
+        },
+      );
+    }
+
     if (report?.latitude && report?.longitude) {
       mapRef.current?.animateToRegion(
         {
@@ -145,7 +170,7 @@ export default function ReportDetailScreen() {
     >
       <ScrollView style={styles.container}>
         {report.latitude && report.longitude ? (
-          <View style={styles.mediaContainer}>
+          <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
             <ScrollView
               horizontal
               pagingEnabled
@@ -159,8 +184,19 @@ export default function ReportDetailScreen() {
               scrollEventThrottle={16}
               style={styles.horizontalScroll}
             >
-              <Image source={{ uri: report.photo }} style={{ width, height: 240 }} />
-              <View style={{ width, height: 240, position: "relative" }}>
+              <View style={{ width, height: "100%", position: "relative" }}>
+                <Image source={{ uri: report.photo }} style={{ width, height: "100%" }} />
+                {isPortrait && (
+                  <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
+                    <Ionicons
+                      name={isEnlarged ? "contract-outline" : "resize-outline"}
+                      size={20}
+                      color="#333"
+                    />
+                  </Pressable>
+                )}
+              </View>
+              <View style={{ width, height: "100%", position: "relative" }}>
                 <MapView
                   ref={mapRef}
                   style={StyleSheet.absoluteFillObject}
@@ -215,9 +251,20 @@ export default function ReportDetailScreen() {
               <View style={[styles.dot, activePage === 0 && styles.activeDot]} />
               <View style={[styles.dot, activePage === 1 && styles.activeDot]} />
             </View>
-          </View>
+          </Animated.View>
         ) : (
-          <Image source={{ uri: report.photo }} style={styles.photo} />
+          <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
+            <Image source={{ uri: report.photo }} style={{ width, height: "100%" }} />
+            {isPortrait && (
+              <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
+                <Ionicons
+                  name={isEnlarged ? "contract-outline" : "resize-outline"}
+                  size={20}
+                  color="#333"
+                />
+              </Pressable>
+            )}
+          </Animated.View>
         )}
 
         <View style={styles.section}>
@@ -406,6 +453,22 @@ const styles = StyleSheet.create({
   mapTypeBtn: {
     position: "absolute",
     top: 12,
+    right: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  resizeBtn: {
+    position: "absolute",
+    bottom: 12,
     right: 12,
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     width: 38,

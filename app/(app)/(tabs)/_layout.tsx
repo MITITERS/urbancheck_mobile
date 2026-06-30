@@ -74,16 +74,11 @@ export default function TabsLayout() {
         name="create-tab"
         options={{
           title: "Reportar",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="add-circle" size={32} color="#1a73e8" style={{ marginTop: -2 }} />
           ),
         }}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
-            navigation.navigate("create-report");
-          },
-        })}
       />
       <Tabs.Screen
         name="notices"
