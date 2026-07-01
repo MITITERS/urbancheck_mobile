@@ -39,6 +39,7 @@ export default function CreateReportTab() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [address, setAddress] = useState("");
+  const [locationMode, setLocationMode] = useState<"gps" | "manual">("gps");
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -164,6 +165,7 @@ export default function CreateReportTab() {
             setLatitude(null);
             setLongitude(null);
             setAddress("");
+            setLocationMode("gps");
             // Redirect to Feed tab
             router.push("/(app)/(tabs)");
           },
@@ -270,63 +272,95 @@ export default function CreateReportTab() {
 
           {/* LOCATION SELECTOR */}
           <Text style={[styles.label, { marginTop: 20 }]}>Ubicación del incidente *</Text>
-          
-          <View style={styles.locationContainer}>
+
+          <View style={styles.segmentRow}>
             <Pressable
-              style={[
-                styles.gpsButton,
-                latitude != null && styles.gpsButtonSuccess,
-                locating && styles.gpsButtonDisabled,
-              ]}
-              onPress={getLocation}
-              disabled={locating}
-            >
-              {locating ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={latitude != null ? "checkmark-circle" : "location-outline"}
-                    size={18}
-                    color="#fff"
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.gpsButtonText}>
-                    {latitude != null ? "Ubicación GPS Guardada" : "Obtener Ubicación GPS"}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-            {latitude != null && longitude != null && (
-              <Text style={styles.coordinatesText}>
-                Lat: {latitude.toFixed(6)} | Lon: {longitude.toFixed(6)}
-              </Text>
-            )}
-          </View>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.line} />
-            <Text style={styles.orText}>o ingresá dirección a mano</Text>
-            <View style={styles.line} />
-          </View>
-
-          <View style={styles.addressInputWrapper}>
-            <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
-              placeholder="Ej: Av. Corrientes 1234, CABA"
-              placeholderTextColor="#9ca3af"
-              value={address}
-              onChangeText={(t) => {
-                setAddress(t);
+              style={[styles.segment, locationMode === "gps" && styles.segmentActive]}
+              onPress={() => {
+                setLocationMode("gps");
+                setAddress("");
                 setErrors((prev) => ({ ...prev, location: "" }));
-                if (t) {
-                  setLatitude(null);
-                  setLongitude(null);
-                }
               }}
-            />
+            >
+              <Ionicons
+                name="location-outline"
+                size={16}
+                color={locationMode === "gps" ? "#1a73e8" : "#6b7280"}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.segmentText, locationMode === "gps" && styles.segmentTextActive]}>
+                GPS
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.segment, locationMode === "manual" && styles.segmentActive]}
+              onPress={() => {
+                setLocationMode("manual");
+                setLatitude(null);
+                setLongitude(null);
+                setErrors((prev) => ({ ...prev, location: "" }));
+              }}
+            >
+              <Ionicons
+                name="create-outline"
+                size={16}
+                color={locationMode === "manual" ? "#1a73e8" : "#6b7280"}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.segmentText, locationMode === "manual" && styles.segmentTextActive]}>
+                Dirección
+              </Text>
+            </Pressable>
           </View>
+
+          {locationMode === "gps" ? (
+            <View style={styles.locationContainer}>
+              <Pressable
+                style={[
+                  styles.gpsButton,
+                  latitude != null && styles.gpsButtonSuccess,
+                  locating && styles.gpsButtonDisabled,
+                ]}
+                onPress={getLocation}
+                disabled={locating}
+              >
+                {locating ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={latitude != null ? "checkmark-circle" : "location-outline"}
+                      size={18}
+                      color="#fff"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.gpsButtonText}>
+                      {latitude != null ? "Ubicación GPS Guardada" : "Obtener Ubicación GPS"}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+              {latitude != null && longitude != null && (
+                <Text style={styles.coordinatesText}>
+                  Lat: {latitude.toFixed(6)} | Lon: {longitude.toFixed(6)}
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.addressInputWrapper}>
+              <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
+                placeholder="Ej: Av. Corrientes 1234, CABA"
+                placeholderTextColor="#9ca3af"
+                value={address}
+                onChangeText={(t) => {
+                  setAddress(t);
+                  setErrors((prev) => ({ ...prev, location: "" }));
+                }}
+              />
+            </View>
+          )}
           {errors.location && (
             <Text style={styles.errorText}>{errors.location}</Text>
           )}
@@ -498,14 +532,32 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 2,
   },
-  dividerRow: {
+  segmentRow: {
+    flexDirection: "row",
+    backgroundColor: "#f3f4f6",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 12,
+    gap: 4,
+  },
+  segment: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 14,
-    gap: 10,
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  line: { flex: 1, height: 1, backgroundColor: "#e5e7eb" },
-  orText: { fontSize: 11, color: "#9ca3af", fontWeight: "500" },
+  segmentActive: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  segmentText: { fontSize: 13, color: "#6b7280", fontWeight: "600" },
+  segmentTextActive: { color: "#1a73e8", fontWeight: "700" },
   addressInputWrapper: { position: "relative", justifyContent: "center" },
   inputIcon: { position: "absolute", left: 14, zIndex: 1 },
   inputWithIcon: { paddingLeft: 42 },

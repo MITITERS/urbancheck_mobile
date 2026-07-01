@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -59,6 +60,7 @@ export default function FeedScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,7 +81,13 @@ export default function FeedScreen() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      setRefreshing(false);
     }
+  }
+
+  function onRefresh() {
+    setRefreshing(true);
+    void fetchPage(1);
   }
 
   function loadMore() {
@@ -104,6 +112,14 @@ export default function FeedScreen() {
         renderItem={({ item }) => <ReportCard item={item} />}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#1a73e8"]}
+            tintColor="#1a73e8"
+          />
+        }
         contentContainerStyle={{ paddingBottom: 110 }}
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null

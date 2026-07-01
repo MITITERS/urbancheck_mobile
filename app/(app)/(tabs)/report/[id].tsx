@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -46,6 +47,7 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +60,21 @@ export default function ReportDetailScreen() {
   const [isEnlarged, setIsEnlarged] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
   const containerHeight = useRef(new Animated.Value(240)).current;
+
+  // Left-edge swipe-back gesture (bottom-tabs has no native back gesture).
+  const swipeBack = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, g) => {
+        const startX = evt.nativeEvent.pageX - g.dx;
+        return startX < 30 && g.dx > 12 && Math.abs(g.dy) < 12;
+      },
+      onPanResponderRelease: (_evt, g) => {
+        if (g.dx > 80 && g.vx > 0) {
+          router.back();
+        }
+      },
+    }),
+  ).current;
 
   function toggleEnlarged() {
     Animated.timing(containerHeight, {
@@ -173,6 +190,7 @@ export default function ReportDetailScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      {...swipeBack.panHandlers}
     >
       <ScrollView style={styles.container}>
         {report.latitude && report.longitude ? (
