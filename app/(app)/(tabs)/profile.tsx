@@ -173,7 +173,7 @@ export default function ProfileScreen() {
           return (
             <Pressable
               style={styles.reportCard}
-              onPress={() => router.push(`/(app)/report/${item.id}`)}
+              onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportCategory}>

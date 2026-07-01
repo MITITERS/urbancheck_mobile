@@ -34,7 +34,7 @@ function ReportCard({ item }: { item: Report }) {
   return (
     <Pressable
       style={styles.card}
-      onPress={() => router.push(`/(app)/report/${item.id}`)}
+      onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
     >
       <Image source={{ uri: item.photo }} style={styles.photo} />
       <View style={styles.cardBody}>

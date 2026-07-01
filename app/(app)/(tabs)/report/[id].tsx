@@ -25,7 +25,7 @@ import {
   likeReport,
   type ReportDetail,
   unlikeReport,
-} from "../../../src/api/reports";
+} from "../../../../src/api/reports";
 
 const STATUS_LABEL: Record<string, string> = {
   reportado: "Reportado",
@@ -52,6 +52,7 @@ export default function ReportDetailScreen() {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activePage, setActivePage] = useState(0);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
   const [isEnlarged, setIsEnlarged] = useState(false);
@@ -68,6 +69,11 @@ export default function ReportDetailScreen() {
   }
 
   useEffect(() => {
+    // Reset stale data so previous report's image/content doesn't flash
+    setReport(null);
+    setLoading(true);
+    setImgLoaded(false);
+    setActivePage(0);
     void fetchReport();
   }, [id]);
 
@@ -185,7 +191,17 @@ export default function ReportDetailScreen() {
               style={styles.horizontalScroll}
             >
               <View style={{ width, height: "100%", position: "relative" }}>
-                <Image source={{ uri: report.photo }} style={{ width, height: "100%" }} />
+                <Image
+                  source={{ uri: report.photo }}
+                  style={{ width, height: "100%" }}
+                  onLoadStart={() => setImgLoaded(false)}
+                  onLoad={() => setImgLoaded(true)}
+                />
+                {!imgLoaded && (
+                  <View style={styles.photoSkeleton}>
+                    <ActivityIndicator color="#bbb" />
+                  </View>
+                )}
                 {isPortrait && (
                   <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
                     <Ionicons
@@ -254,7 +270,17 @@ export default function ReportDetailScreen() {
           </Animated.View>
         ) : (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
-            <Image source={{ uri: report.photo }} style={{ width, height: "100%" }} />
+            <Image
+              source={{ uri: report.photo }}
+              style={{ width, height: "100%" }}
+              onLoadStart={() => setImgLoaded(false)}
+              onLoad={() => setImgLoaded(true)}
+            />
+            {!imgLoaded && (
+              <View style={styles.photoSkeleton}>
+                <ActivityIndicator color="#bbb" />
+              </View>
+            )}
             {isPortrait && (
               <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
                 <Ionicons
@@ -366,6 +392,12 @@ const styles = StyleSheet.create({
   horizontalScroll: {
     width: "100%",
     height: 240,
+  },
+  photoSkeleton: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#e9edf2",
+    justifyContent: "center",
+    alignItems: "center",
   },
   dotsContainer: {
     position: "absolute",

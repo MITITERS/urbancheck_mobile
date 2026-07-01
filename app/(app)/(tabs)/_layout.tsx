@@ -1,11 +1,12 @@
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Dimensions, View } from "react-native";
+import { Dimensions, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const screenWidth = Dimensions.get("window").width;
   const horizontalMargin = screenWidth * 0.05;
 
@@ -34,6 +35,7 @@ export default function TabsLayout() {
         </View>
       )}
       screenOptions={{
+        animation: "shift",
         tabBarActiveTintColor: "#1a73e8",
         tabBarInactiveTintColor: "#777",
         tabBarStyle: {
@@ -97,6 +99,23 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "person" : "person-outline"} size={25} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="report/[id]"
+        options={{
+          href: null,
+          headerShown: true,
+          headerTitle: "Detalle del reporte",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={12}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#1a73e8" />
+            </Pressable>
           ),
         }}
       />
