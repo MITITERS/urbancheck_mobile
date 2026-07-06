@@ -2,7 +2,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +19,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { createReport, type ReportCategory } from "../../../src/api/reports";
+import {
+  createReport,
+  geocodeAddress,
+  type GeocodeResult,
+  type ReportCategory,
+} from "../../../src/api/reports";
 
 const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
   { value: "bache", label: "Bache", icon: "construct-outline" },
@@ -43,6 +48,11 @@ export default function CreateReportTab() {
   const [locationMode, setLocationMode] = useState<"gps" | "manual">("gps");
   const [locationFromPhoto, setLocationFromPhoto] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [suggestions, setSuggestions] = useState<GeocodeResult[]>([]);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  // Evita que el autocompletado vuelva a buscar el texto que el propio usuario
+  // acaba de elegir de la lista de sugerencias.
+  const justSelectedRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -181,6 +191,54 @@ export default function CreateReportTab() {
     }
   }
 
+  // Autocompletado de direcciones (modo manual). Debounce alto (600ms) + mínimo de
+  // caracteres para respetar la política de uso de Nominatim (máx. 1 req/seg) y no
+  // buscar en cada pulsación de tecla.
+  useEffect(() => {
+    if (locationMode !== "manual") {
+      setSuggestions([]);
+      return;
+    }
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+    const query = address.trim();
+    if (query.length < 4) {
+      setSuggestions([]);
+      setSearchingAddress(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchingAddress(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { results } = await geocodeAddress(query);
+        if (!cancelled) setSuggestions(results);
+      } catch {
+        if (!cancelled) setSuggestions([]);
+      } finally {
+        if (!cancelled) setSearchingAddress(false);
+      }
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [address, locationMode]);
+
+  function selectSuggestion(item: GeocodeResult) {
+    justSelectedRef.current = true;
+    setAddress(item.display_name);
+    setLatitude(item.latitude);
+    setLongitude(item.longitude);
+    setSuggestions([]);
+    setLocationFromPhoto(false);
+    setErrors((prev) => ({ ...prev, location: "" }));
+  }
+
   async function handleSubmit() {
     const newErrors: Record<string, string> = {};
     if (!photo) newErrors.photo = "La foto es obligatoria.";
@@ -221,6 +279,7 @@ export default function CreateReportTab() {
             setAddress("");
             setLocationMode("gps");
             setLocationFromPhoto(false);
+            setSuggestions([]);
             // Redirect to Feed tab
             router.push("/(app)/(tabs)");
           },
@@ -411,18 +470,66 @@ export default function CreateReportTab() {
               )}
             </View>
           ) : (
-            <View style={styles.addressInputWrapper}>
-              <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
-                placeholder="Ej: Av. Corrientes 1234, CABA"
-                placeholderTextColor="#9ca3af"
-                value={address}
-                onChangeText={(t) => {
-                  setAddress(t);
-                  setErrors((prev) => ({ ...prev, location: "" }));
-                }}
-              />
+            <View style={styles.locationContainer}>
+              <View style={styles.addressInputWrapper}>
+                <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
+                  placeholder="Ej: Av. Corrientes 1234, CABA"
+                  placeholderTextColor="#9ca3af"
+                  value={address}
+                  onChangeText={(t) => {
+                    setAddress(t);
+                    // El texto ya no corresponde a la sugerencia elegida: descartamos
+                    // las coordenadas hasta que el usuario seleccione otra (o el backend
+                    // geocodifique la dirección al enviar).
+                    setLatitude(null);
+                    setLongitude(null);
+                    setErrors((prev) => ({ ...prev, location: "" }));
+                  }}
+                />
+              </View>
+
+              {searchingAddress && (
+                <View style={styles.addressStatusRow}>
+                  <ActivityIndicator size="small" color="#6b7280" />
+                  <Text style={styles.addressStatusText}>Buscando dirección…</Text>
+                </View>
+              )}
+
+              {suggestions.length > 0 && (
+                <View style={styles.suggestionsBox}>
+                  {suggestions.map((item, i) => (
+                    <Pressable
+                      key={`${item.latitude},${item.longitude},${i}`}
+                      style={[
+                        styles.suggestionItem,
+                        i < suggestions.length - 1 && styles.suggestionItemBorder,
+                      ]}
+                      onPress={() => selectSuggestion(item)}
+                    >
+                      <Ionicons
+                        name="location-outline"
+                        size={16}
+                        color="#1a73e8"
+                        style={{ marginRight: 8, marginTop: 1 }}
+                      />
+                      <Text style={styles.suggestionText} numberOfLines={2}>
+                        {item.display_name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              {latitude != null && longitude != null && (
+                <View style={styles.photoLocationHint}>
+                  <Ionicons name="checkmark-circle" size={14} color="#10b981" style={{ marginRight: 4 }} />
+                  <Text style={styles.photoLocationHintText}>
+                    Ubicación fijada · Lat: {latitude.toFixed(5)} | Lon: {longitude.toFixed(5)}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
           {errors.location && (
@@ -636,6 +743,23 @@ const styles = StyleSheet.create({
   addressInputWrapper: { position: "relative", justifyContent: "center" },
   inputIcon: { position: "absolute", left: 14, zIndex: 1 },
   inputWithIcon: { paddingLeft: 42 },
+  addressStatusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  addressStatusText: { fontSize: 12, color: "#6b7280" },
+  suggestionsBox: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  suggestionItemBorder: { borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  suggestionText: { flex: 1, fontSize: 13, color: "#374151", lineHeight: 18 },
   submitButton: {
     flexDirection: "row",
     backgroundColor: "#1a73e8",
