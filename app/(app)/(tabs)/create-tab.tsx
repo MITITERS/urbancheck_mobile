@@ -1,3 +1,4 @@
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -40,9 +41,69 @@ export default function CreateReportTab() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [address, setAddress] = useState("");
   const [locationMode, setLocationMode] = useState<"gps" | "manual">("gps");
+  const [locationFromPhoto, setLocationFromPhoto] = useState(false);
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /**
+   * Intenta extraer coordenadas GPS del EXIF de una imagen.
+   * expo-image-picker devuelve GPSLatitude/GPSLongitude como grados decimales
+   * (positivos), y GPSLatitudeRef/GPSLongitudeRef ("N"/"S", "E"/"W") indican el signo.
+   * Nota: en iOS las fotos tomadas con la cámara no incluyen tags GPS.
+   */
+  function extractExifLocation(
+    exif: Record<string, any> | null | undefined,
+  ): { latitude: number; longitude: number } | null {
+    if (!exif) return null;
+    const rawLat = exif.GPSLatitude;
+    const rawLon = exif.GPSLongitude;
+    if (typeof rawLat !== "number" || typeof rawLon !== "number") return null;
+    if (rawLat === 0 && rawLon === 0) return null;
+
+    const latRef = typeof exif.GPSLatitudeRef === "string" ? exif.GPSLatitudeRef : "N";
+    const lonRef = typeof exif.GPSLongitudeRef === "string" ? exif.GPSLongitudeRef : "E";
+    const latitude = latRef.toUpperCase() === "S" ? -Math.abs(rawLat) : Math.abs(rawLat);
+    const longitude = lonRef.toUpperCase() === "W" ? -Math.abs(rawLon) : Math.abs(rawLon);
+
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+    return { latitude, longitude };
+  }
+
+  async function applyPhotoAsset(asset: ImagePicker.ImagePickerAsset) {
+    // Extraemos la ubicación del EXIF ANTES de convertir la imagen: la conversión
+    // a JPEG elimina los metadatos, pero asset.exif viene directo del picker.
+    if (latitude == null && longitude == null && !address.trim()) {
+      const coords = extractExifLocation(asset.exif);
+      if (coords) {
+        setLatitude(coords.latitude);
+        setLongitude(coords.longitude);
+        setAddress("");
+        setLocationMode("gps");
+        setLocationFromPhoto(true);
+        setErrors((prev) => ({ ...prev, location: "" }));
+      }
+    }
+
+    // iOS entrega las fotos de la galería en formato HEIC, que el backend (Pillow)
+    // rechaza como "imagen inválida". Re-codificamos siempre a JPEG para garantizar
+    // un formato compatible.
+    try {
+      const context = ImageManipulator.manipulate(asset.uri);
+      const rendered = await context.renderAsync();
+      const jpeg = await rendered.saveAsync({
+        format: SaveFormat.JPEG,
+        compress: 0.8,
+      });
+      setPhoto({ uri: jpeg.uri, name: "photo.jpg", type: "image/jpeg" });
+    } catch {
+      // Si la conversión falla, usamos la imagen original como respaldo.
+      const name = asset.fileName ?? asset.uri.split("/").pop() ?? "photo.jpg";
+      const type = asset.mimeType ?? "image/jpeg";
+      setPhoto({ uri: asset.uri, name, type });
+    }
+    setErrors((prev) => ({ ...prev, photo: "" }));
+  }
 
   async function pickPhoto() {
     try {
@@ -54,14 +115,10 @@ export default function CreateReportTab() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: "images",
         quality: 0.8,
+        exif: true,
       });
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const name = uri.split("/").pop() ?? "photo.jpg";
-        const type = asset.mimeType ?? "image/jpeg";
-        setPhoto({ uri, name, type });
-        setErrors((prev) => ({ ...prev, photo: "" }));
+        await applyPhotoAsset(result.assets[0]);
       }
     } catch (err) {
       Alert.alert("Error galería", String(err));
@@ -78,14 +135,10 @@ export default function CreateReportTab() {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: "images",
         quality: 0.8,
+        exif: true,
       });
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const name = uri.split("/").pop() ?? "photo.jpg";
-        const type = asset.mimeType ?? "image/jpeg";
-        setPhoto({ uri, name, type });
-        setErrors((prev) => ({ ...prev, photo: "" }));
+        await applyPhotoAsset(result.assets[0]);
       }
     } catch (err) {
       Alert.alert("Error cámara", String(err));
@@ -119,6 +172,7 @@ export default function CreateReportTab() {
       setLatitude(loc.coords.latitude);
       setLongitude(loc.coords.longitude);
       setAddress("");
+      setLocationFromPhoto(false);
       setErrors((prev) => ({ ...prev, location: "" }));
     } catch {
       Alert.alert("Error GPS", "No se pudo obtener la ubicación GPS. Ingresala manualmente.");
@@ -166,6 +220,7 @@ export default function CreateReportTab() {
             setLongitude(null);
             setAddress("");
             setLocationMode("gps");
+            setLocationFromPhoto(false);
             // Redirect to Feed tab
             router.push("/(app)/(tabs)");
           },
@@ -298,6 +353,7 @@ export default function CreateReportTab() {
                 setLocationMode("manual");
                 setLatitude(null);
                 setLongitude(null);
+                setLocationFromPhoto(false);
                 setErrors((prev) => ({ ...prev, location: "" }));
               }}
             >
@@ -344,6 +400,14 @@ export default function CreateReportTab() {
                 <Text style={styles.coordinatesText}>
                   Lat: {latitude.toFixed(6)} | Lon: {longitude.toFixed(6)}
                 </Text>
+              )}
+              {locationFromPhoto && latitude != null && (
+                <View style={styles.photoLocationHint}>
+                  <Ionicons name="image-outline" size={14} color="#10b981" style={{ marginRight: 4 }} />
+                  <Text style={styles.photoLocationHintText}>
+                    Ubicación obtenida de la foto
+                  </Text>
+                </View>
               )}
             </View>
           ) : (
@@ -531,6 +595,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "500",
     marginTop: 2,
+  },
+  photoLocationHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  photoLocationHintText: {
+    fontSize: 11,
+    color: "#10b981",
+    fontWeight: "600",
   },
   segmentRow: {
     flexDirection: "row",
