@@ -23,11 +23,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
+  pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
-  en_revision: "En revisión",
   en_proceso: "En proceso",
   resuelto: "Resuelto",
-  rechazado: "Rechazado",
+  cancelado: "Cancelado",
+  archivado: "Archivado",
 };
 
 function ReportCard({ item }: { item: Report }) {

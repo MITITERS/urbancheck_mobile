@@ -29,12 +29,21 @@ import {
 } from "../../../../src/api/reports";
 
 const STATUS_LABEL: Record<string, string> = {
+  pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
-  en_revision: "En revisión",
   en_proceso: "En proceso",
   resuelto: "Resuelto",
-  rechazado: "Rechazado",
+  cancelado: "Cancelado",
+  archivado: "Archivado",
 };
+
+// Pasos del flujo principal (happy path) que se van desbloqueando.
+const TIMELINE_STEPS = [
+  "pendiente_validacion",
+  "reportado",
+  "en_proceso",
+  "resuelto",
+] as const;
 
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
@@ -341,20 +350,123 @@ export default function ReportDetailScreen() {
           </Text>
         </Pressable>
 
-        {/* Status history */}
+        {/* Status timeline */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Historial de estados</Text>
-          {report.status_history.map((h, i) => (
-            <View key={i} style={styles.historyItem}>
-              <Text style={styles.historyStatus}>
-                {STATUS_LABEL[h.status] ?? h.status}
-              </Text>
-              <Text style={styles.historyMeta}>
-                {new Date(h.created_at).toLocaleDateString("es-AR")}
-                {h.changed_by ? ` • ${h.changed_by.name}` : ""}
-              </Text>
-            </View>
-          ))}
+          {(() => {
+            // Fecha en que se alcanzó cada estado (la más antigua si hay varias).
+            const reachedAt: Record<string, string> = {};
+            report.status_history.forEach((h) => {
+              reachedAt[h.status] = h.created_at;
+            });
+
+            // Índice del paso alcanzado en el flujo principal.
+            let reachedIndex = TIMELINE_STEPS.indexOf(
+              report.status as (typeof TIMELINE_STEPS)[number],
+            );
+            if (reachedIndex === -1) {
+              // Estado terminal fuera del flujo (cancelado/archivado):
+              // marcamos hasta el último paso presente en el historial.
+              for (let i = TIMELINE_STEPS.length - 1; i >= 0; i--) {
+                if (reachedAt[TIMELINE_STEPS[i]]) {
+                  reachedIndex = i;
+                  break;
+                }
+              }
+            }
+            const isTerminal =
+              report.status === "cancelado" || report.status === "archivado";
+
+            return (
+              <>
+                <View style={styles.timeline}>
+                  {TIMELINE_STEPS.map((step, i) => {
+                    const completed = i < reachedIndex;
+                    const current = i === reachedIndex && !isTerminal;
+                    const active = i <= reachedIndex;
+                    return (
+                      <View key={step} style={styles.tlStep}>
+                        {i > 0 && (
+                          <View
+                            style={[
+                              styles.tlLine,
+                              styles.tlLineLeft,
+                              i <= reachedIndex && styles.tlLineActive,
+                            ]}
+                          />
+                        )}
+                        {i < TIMELINE_STEPS.length - 1 && (
+                          <View
+                            style={[
+                              styles.tlLine,
+                              styles.tlLineRight,
+                              i < reachedIndex && styles.tlLineActive,
+                            ]}
+                          />
+                        )}
+                        <View
+                          style={[
+                            styles.tlDot,
+                            active && styles.tlDotActive,
+                            current && styles.tlDotCurrent,
+                          ]}
+                        >
+                          {completed && (
+                            <Ionicons name="checkmark" size={14} color="#fff" />
+                          )}
+                          {current && <View style={styles.tlDotInner} />}
+                        </View>
+                        <Text
+                          style={[styles.tlLabel, active && styles.tlLabelActive]}
+                        >
+                          {STATUS_LABEL[step]}
+                        </Text>
+                        {reachedAt[step] && (
+                          <Text style={styles.tlDate}>
+                            {new Date(reachedAt[step]).toLocaleDateString(
+                              "es-AR",
+                            )}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {isTerminal && (
+                  <View style={styles.tlTerminal}>
+                    <Ionicons
+                      name={
+                        report.status === "cancelado"
+                          ? "close-circle"
+                          : "archive"
+                      }
+                      size={16}
+                      color={report.status === "cancelado" ? "#c62828" : "#546e7a"}
+                    />
+                    <Text
+                      style={[
+                        styles.tlTerminalText,
+                        {
+                          color:
+                            report.status === "cancelado"
+                              ? "#c62828"
+                              : "#546e7a",
+                        },
+                      ]}
+                    >
+                      {STATUS_LABEL[report.status]}
+                      {reachedAt[report.status]
+                        ? ` • ${new Date(
+                            reachedAt[report.status],
+                          ).toLocaleDateString("es-AR")}`
+                        : ""}
+                    </Text>
+                  </View>
+                )}
+              </>
+            );
+          })()}
         </View>
 
         {/* Comments */}
@@ -464,9 +576,50 @@ const styles = StyleSheet.create({
   },
   likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 16 },
   sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
-  historyItem: { marginBottom: 8 },
-  historyStatus: { fontWeight: "600", fontSize: 13 },
-  historyMeta: { fontSize: 12, color: "#888" },
+  timeline: { flexDirection: "row", marginTop: 6, paddingHorizontal: 4 },
+  tlStep: { flex: 1, alignItems: "center" },
+  tlLine: {
+    position: "absolute",
+    top: 11,
+    height: 2,
+    backgroundColor: "#e0e0e0",
+  },
+  tlLineLeft: { left: 0, right: "50%" },
+  tlLineRight: { left: "50%", right: 0 },
+  tlLineActive: { backgroundColor: "#2e7d32" },
+  tlDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tlDotActive: { backgroundColor: "#2e7d32", borderColor: "#2e7d32" },
+  tlDotCurrent: { backgroundColor: "#fff", borderColor: "#2e7d32" },
+  tlDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2e7d32",
+  },
+  tlLabel: {
+    fontSize: 11,
+    color: "#aaa",
+    textAlign: "center",
+    marginTop: 6,
+  },
+  tlLabelActive: { color: "#333", fontWeight: "600" },
+  tlDate: { fontSize: 10, color: "#bbb", marginTop: 2 },
+  tlTerminal: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 16,
+  },
+  tlTerminalText: { fontSize: 13, fontWeight: "600" },
   comment: {
     marginBottom: 12,
     padding: 10,

@@ -9,11 +9,12 @@ export type ReportCategory =
   | "otro";
 
 export type ReportStatus =
+  | "pendiente_validacion"
   | "reportado"
-  | "en_revision"
   | "en_proceso"
   | "resuelto"
-  | "rechazado";
+  | "cancelado"
+  | "archivado";
 
 export interface ReportAuthor {
   id: number;

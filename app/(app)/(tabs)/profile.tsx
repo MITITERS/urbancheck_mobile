@@ -19,11 +19,12 @@ import { getMe, type UserProfile } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 
 const STATUS_LABEL: Record<string, string> = {
+  pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
-  en_revision: "En revisión",
   en_proceso: "En proceso",
   resuelto: "Resuelto",
-  rechazado: "Rechazado",
+  cancelado: "Cancelado",
+  archivado: "Archivado",
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -36,11 +37,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  pendiente_validacion: { bg: "#fff3e0", text: "#ef6c00" },
   reportado: { bg: "#e3f2fd", text: "#1565c0" },
-  en_revision: { bg: "#fff3e0", text: "#ef6c00" },
   en_proceso: { bg: "#fffde7", text: "#f57f17" },
   resuelto: { bg: "#e8f5e9", text: "#2e7d32" },
-  rechazado: { bg: "#ffebee", text: "#c62828" },
+  cancelado: { bg: "#ffebee", text: "#c62828" },
+  archivado: { bg: "#eceff1", text: "#546e7a" },
 };
 
 function formatDate(isoString: string) {
