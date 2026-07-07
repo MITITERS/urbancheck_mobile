@@ -35,7 +35,6 @@ export default function TabsLayout() {
         </View>
       )}
       screenOptions={{
-        animation: "shift",
         tabBarActiveTintColor: "#1a73e8",
         tabBarInactiveTintColor: "#777",
         tabBarStyle: {

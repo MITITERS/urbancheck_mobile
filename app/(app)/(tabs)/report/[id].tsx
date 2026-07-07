@@ -133,6 +133,8 @@ export default function ReportDetailScreen() {
     try {
       const data = await getReport(Number(id));
       setReport(data);
+    } catch {
+      setReport(null);
     } finally {
       setLoading(false);
     }

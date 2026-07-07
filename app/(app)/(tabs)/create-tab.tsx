@@ -36,7 +36,6 @@ const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
 ];
 
 export default function CreateReportTab() {
-  console.log("CreateReportTab mounted successfully!");
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);

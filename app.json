@@ -78,8 +78,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b7d9c204-e269-475e-b852-5d10e9f0a52a"
+        "projectId": "77b9ed73-56a3-46a4-b651-d6885046c6e5"
       }
-    }
+    },
+    "owner": "lucasleone03"
   }
 }
