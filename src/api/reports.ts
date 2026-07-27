@@ -9,11 +9,12 @@ export type ReportCategory =
   | "otro";
 
 export type ReportStatus =
+  | "pendiente_validacion"
   | "reportado"
-  | "en_revision"
   | "en_proceso"
   | "resuelto"
-  | "rechazado";
+  | "cancelado"
+  | "archivado";
 
 export interface ReportAuthor {
   id: number;
@@ -92,4 +93,16 @@ export function getComments(id: number) {
 
 export function addComment(id: number, text: string) {
   return api.post<Comment>(`/api/reports/${id}/comments/`, { text });
+}
+
+export interface GeocodeResult {
+  display_name: string;
+  latitude: number;
+  longitude: number;
+}
+
+export function geocodeAddress(query: string) {
+  return api.get<{ results: GeocodeResult[] }>(
+    `/api/reports/geocode/?q=${encodeURIComponent(query)}`,
+  );
 }

@@ -25,11 +25,7 @@ export function login(data: LoginData) {
 }
 
 export function logout() {
-  // 401 response from DELETE is expected (success) — client.ts won't throw for it
-  // because we treat 401 as session expired. We need raw fetch here.
-  return fetch(`${process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"}/_allauth/app/v1/auth/session`, {
-    method: "DELETE",
-  });
+  return api.delete("/_allauth/app/v1/auth/session");
 }
 
 export function getSession() {

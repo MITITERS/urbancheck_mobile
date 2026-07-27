@@ -1,16 +1,17 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
-import { type Report, listReports } from "../../src/api/reports";
+import { type Report, listReports } from "../../../src/api/reports";
 
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
@@ -22,11 +23,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
+  pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
-  en_revision: "En revisión",
   en_proceso: "En proceso",
   resuelto: "Resuelto",
-  rechazado: "Rechazado",
+  cancelado: "Cancelado",
+  archivado: "Archivado",
 };
 
 function ReportCard({ item }: { item: Report }) {
@@ -34,7 +36,7 @@ function ReportCard({ item }: { item: Report }) {
   return (
     <Pressable
       style={styles.card}
-      onPress={() => router.push(`/(app)/report/${item.id}`)}
+      onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
     >
       <Image source={{ uri: item.photo }} style={styles.photo} />
       <View style={styles.cardBody}>
@@ -54,16 +56,18 @@ function ReportCard({ item }: { item: Report }) {
 }
 
 export default function FeedScreen() {
-  const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    void fetchPage(1);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchPage(1);
+    }, [])
+  );
 
   async function fetchPage(p: number) {
     try {
@@ -78,7 +82,13 @@ export default function FeedScreen() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      setRefreshing(false);
     }
+  }
+
+  function onRefresh() {
+    setRefreshing(true);
+    void fetchPage(1);
   }
 
   function loadMore() {
@@ -103,6 +113,15 @@ export default function FeedScreen() {
         renderItem={({ item }) => <ReportCard item={item} />}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#1a73e8"]}
+            tintColor="#1a73e8"
+          />
+        }
+        contentContainerStyle={{ paddingBottom: 110 }}
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null
         }
@@ -110,18 +129,6 @@ export default function FeedScreen() {
           <Text style={styles.emptyText}>No hay reportes aún.</Text>
         }
       />
-      <Pressable
-        style={styles.fab}
-        onPress={() => router.push("/(app)/create-report")}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </Pressable>
-      <Pressable
-        style={styles.profileBtn}
-        onPress={() => router.push("/(app)/profile")}
-      >
-        <Text style={styles.profileBtnText}>Mi perfil</Text>
-      </Pressable>
     </View>
   );
 }
@@ -148,28 +155,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between" },
   meta: { fontSize: 12, color: "#888" },
   emptyText: { textAlign: "center", marginTop: 40, color: "#888" },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#1a73e8",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5,
-  },
-  fabText: { color: "#fff", fontSize: 28, lineHeight: 30 },
-  profileBtn: {
-    position: "absolute",
-    left: 20,
-    bottom: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    elevation: 3,
-  },
-  profileBtnText: { color: "#1a73e8", fontWeight: "600" },
 });
