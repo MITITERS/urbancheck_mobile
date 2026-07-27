@@ -2,13 +2,18 @@ import { api } from "../client";
 import {
   addComment,
   createReport,
+  deleteComment,
+  deleteReport,
   geocodeAddress,
   getComments,
   getReport,
   likeReport,
+  listMapMarkers,
   listMyReports,
   listReports,
+  listUserReports,
   unlikeReport,
+  updateReport,
 } from "../reports";
 
 jest.mock("../client", () => ({
@@ -35,7 +40,61 @@ describe("reports api", () => {
 
   it("listMyReports adds mine=true filter", () => {
     listMyReports(2);
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?mine=true&page=2");
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=2&mine=true");
+  });
+
+  it("listReports joins several categories and statuses with commas", () => {
+    listReports(1, {
+      categories: ["bache", "basura"],
+      statuses: ["reportado"],
+    });
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/api/reports/?page=1&category=bache%2Cbasura&status=reportado",
+    );
+  });
+
+  it("listReports URL-encodes and trims the search term", () => {
+    listReports(1, { search: "  Av. Rivadavia  " });
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/api/reports/?page=1&search=Av.%20Rivadavia",
+    );
+  });
+
+  it("listReports omits empty filters", () => {
+    listReports(1, { search: "   ", categories: [], statuses: [] });
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=1");
+  });
+
+  it("listUserReports filters by author", () => {
+    listUserReports(9, 2);
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=2&author=9");
+  });
+
+  it("listMapMarkers hits the map endpoint without pagination", () => {
+    listMapMarkers({ categories: ["bache"] });
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/?category=bache");
+  });
+
+  it("listMapMarkers without filters has no query string", () => {
+    listMapMarkers();
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/");
+  });
+
+  it("updateReport patches the detail endpoint", () => {
+    updateReport(5, { description: "Corregido" });
+    expect(mockedApi.patch).toHaveBeenCalledWith("/api/reports/5/", {
+      description: "Corregido",
+    });
+  });
+
+  it("deleteReport deletes the detail endpoint", () => {
+    deleteReport(5);
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/reports/5/");
+  });
+
+  it("deleteComment targets the standalone comment resource", () => {
+    deleteComment(12);
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/comments/12/");
   });
 
   it("getReport requests the detail endpoint", () => {
