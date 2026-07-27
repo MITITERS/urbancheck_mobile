@@ -19,23 +19,26 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { tabBarClearance } from "../../../../src/constants/layout";
+
+import { errorDetail, isSessionExpired } from "../../../../src/api/errors";
 import {
   addComment,
+  deleteComment,
+  deleteReport,
   getReport,
   likeReport,
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
-
-const STATUS_LABEL: Record<string, string> = {
-  pendiente_validacion: "Pendiente de validación",
-  reportado: "Reportado",
-  en_proceso: "En proceso",
-  resuelto: "Resuelto",
-  cancelado: "Cancelado",
-  archivado: "Archivado",
-};
+import {
+  STATUS_LABEL,
+  categoryLabel,
+  statusLabel,
+} from "../../../../src/constants/reports";
 
 // Pasos del flujo principal (happy path) que se van desbloqueando.
 const TIMELINE_STEPS = [
@@ -45,23 +48,18 @@ const TIMELINE_STEPS = [
   "resuelto",
 ] as const;
 
-const CATEGORY_LABEL: Record<string, string> = {
-  bache: "Bache",
-  alumbrado: "Alumbrado",
-  basura: "Basura",
-  semaforo: "Semáforo",
-  vereda: "Vereda",
-  otro: "Otro",
-};
-
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const scrollRef = useRef<ScrollView>(null);
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [activePage, setActivePage] = useState(0);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
@@ -142,21 +140,95 @@ export default function ReportDetailScreen() {
 
   async function handleLike() {
     if (!report) return;
+    // Optimista: el ícono responde al toque y se revierte si el backend falla.
+    const rollback = { is_liked: report.is_liked, like_count: report.like_count };
+    setReport((r) =>
+      r
+        ? {
+            ...r,
+            is_liked: !r.is_liked,
+            like_count: r.like_count + (r.is_liked ? -1 : 1),
+          }
+        : r,
+    );
     try {
-      if (report.is_liked) {
-        await unlikeReport(report.id);
-        setReport((r) =>
-          r ? { ...r, is_liked: false, like_count: r.like_count - 1 } : r,
-        );
+      const result = rollback.is_liked
+        ? await unlikeReport(report.id)
+        : await likeReport(report.id);
+      setReport((r) =>
+        r ? { ...r, is_liked: result.liked, like_count: result.like_count } : r,
+      );
+    } catch (err) {
+      setReport((r) => (r ? { ...r, ...rollback } : r));
+      if (isSessionExpired(err)) {
+        Alert.alert("Sesión expirada", "Iniciá sesión de nuevo para dar like.");
       } else {
-        await likeReport(report.id);
-        setReport((r) =>
-          r ? { ...r, is_liked: true, like_count: r.like_count + 1 } : r,
-        );
+        Alert.alert("Error", "No se pudo procesar el like.");
       }
-    } catch {
-      Alert.alert("Error", "No se pudo procesar el like.");
     }
+  }
+
+  /** US-019: el borrado es definitivo, así que se avisa antes de confirmar. */
+  function handleDeleteReport() {
+    if (!report) return;
+    Alert.alert(
+      "Eliminar reporte",
+      "Esta acción es permanente: el reporte desaparecerá del feed, del mapa y de tu historial, y no se puede recuperar.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteReport(report.id);
+              router.replace("/(app)/(tabs)");
+            } catch (err) {
+              if (!isSessionExpired(err)) {
+                Alert.alert(
+                  "No se pudo eliminar",
+                  errorDetail(
+                    err,
+                    "Este reporte ya está siendo gestionado y no puede eliminarse.",
+                  ),
+                );
+              }
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleDeleteComment(commentId: number) {
+    Alert.alert("Eliminar comentario", "¿Querés borrar tu comentario?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: async () => {
+          const previous = report;
+          setReport((r) =>
+            r
+              ? {
+                  ...r,
+                  comments: r.comments.filter((c) => c.id !== commentId),
+                  comment_count: Math.max(0, r.comment_count - 1),
+                }
+              : r,
+          );
+          try {
+            await deleteComment(commentId);
+          } catch {
+            setReport(previous);
+            Alert.alert("Error", "No se pudo eliminar el comentario.");
+          }
+        },
+      },
+    ]);
   }
 
   async function handleComment() {
@@ -201,9 +273,21 @@ export default function ReportDetailScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // Sin compensar el alto del header, iOS levanta el contenido de menos y el
+      // campo de comentario queda tapado por el teclado.
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       {...swipeBack.panHandlers}
     >
-      <ScrollView style={styles.container}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.container}
+        // La barra de pestañas flota en absoluto sobre el contenido: sin esta
+        // reserva, el campo de comentario queda debajo y no se puede tocar.
+        contentContainerStyle={{ paddingBottom: tabBarClearance(insets.bottom) }}
+        // Permite tocar "Enviar" con el teclado abierto; si no, el primer toque
+        // se consume cerrando el teclado en vez de mandar el comentario.
+        keyboardShouldPersistTaps="handled"
+      >
         {report.latitude && report.longitude ? (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
             <ScrollView
@@ -324,18 +408,30 @@ export default function ReportDetailScreen() {
 
         <View style={styles.section}>
           <View style={styles.row}>
-            <Text style={styles.category}>
-              {CATEGORY_LABEL[report.category] ?? report.category}
-            </Text>
-            <Text style={styles.status}>
-              {STATUS_LABEL[report.status] ?? report.status}
-            </Text>
+            <Text style={styles.category}>{categoryLabel(report.category)}</Text>
+            <Text style={styles.status}>{statusLabel(report.status)}</Text>
           </View>
           <Text style={styles.description}>{report.description}</Text>
-          <Text style={styles.meta}>
-            Por {report.author.name} •{" "}
-            {new Date(report.created_at).toLocaleDateString("es-AR")}
-          </Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.meta}>Por </Text>
+            <Pressable
+              onPress={() => router.push(`/(app)/user/${report.author.id}`)}
+              hitSlop={6}
+              accessibilityLabel={`Ver perfil de ${report.author.name}`}
+            >
+              <Text style={styles.authorLink}>{report.author.name}</Text>
+            </Pressable>
+            <Text style={styles.meta}>
+              {" • "}
+              {new Date(report.created_at).toLocaleDateString("es-AR")}
+            </Text>
+          </View>
+          {/* US-018: la fecha de última modificación es visible en el detalle. */}
+          {report.edited_at && (
+            <Text style={styles.editedNote}>
+              Editado el {new Date(report.edited_at).toLocaleDateString("es-AR")}
+            </Text>
+          )}
           {(report.latitude || report.address) && (
             <Text style={styles.location}>
               📍{" "}
@@ -346,11 +442,55 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
-        <Pressable style={styles.likeBtn} onPress={handleLike}>
-          <Text style={styles.likeBtnText}>
-            {report.is_liked ? "♥" : "♡"} {report.like_count}
-          </Text>
-        </Pressable>
+        <View style={styles.actionsRow}>
+          <Pressable style={styles.likeBtn} onPress={handleLike}>
+            <Ionicons
+              name={report.is_liked ? "heart" : "heart-outline"}
+              size={18}
+              color="#e53935"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.likeBtnText}>{report.like_count}</Text>
+          </Pressable>
+
+          {/* Editar y eliminar solo aparecen si soy el autor y el reporte
+              todavía no entró en gestión municipal (US-018 / US-019). */}
+          {report.can_edit && (
+            <>
+              <Pressable
+                style={styles.editBtn}
+                onPress={() => router.push(`/(app)/edit-report/${report.id}`)}
+              >
+                <Ionicons
+                  name="pencil-outline"
+                  size={16}
+                  color="#1a73e8"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.editBtnText}>Editar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
+                onPress={handleDeleteReport}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#e53935" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="trash-outline"
+                      size={16}
+                      color="#e53935"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.deleteBtnText}>Eliminar</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          )}
+        </View>
 
         {/* Status timeline */}
         <View style={styles.section}>
@@ -476,9 +616,31 @@ export default function ReportDetailScreen() {
           <Text style={styles.sectionTitle}>
             Comentarios ({report.comment_count})
           </Text>
+          {report.comments.length === 0 && (
+            <Text style={styles.noComments}>
+              Todavía no hay comentarios. Sé el primero en aportar información.
+            </Text>
+          )}
           {report.comments.map((c) => (
             <View key={c.id} style={styles.comment}>
-              <Text style={styles.commentAuthor}>{c.author.name}</Text>
+              <View style={styles.commentHeader}>
+                <Pressable
+                  onPress={() => router.push(`/(app)/user/${c.author.id}`)}
+                  hitSlop={6}
+                  accessibilityLabel={`Ver perfil de ${c.author.name}`}
+                >
+                  <Text style={styles.commentAuthor}>{c.author.name}</Text>
+                </Pressable>
+                {c.is_mine && (
+                  <Pressable
+                    onPress={() => handleDeleteComment(c.id)}
+                    hitSlop={10}
+                    accessibilityLabel="Eliminar mi comentario"
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#c0c4cc" />
+                  </Pressable>
+                )}
+              </View>
               <Text style={styles.commentText}>{c.text}</Text>
               <Text style={styles.commentDate}>
                 {new Date(c.created_at).toLocaleDateString("es-AR")}
@@ -494,6 +656,11 @@ export default function ReportDetailScreen() {
             value={commentText}
             onChangeText={setCommentText}
             multiline
+            // El campo vive al final de una pantalla larga: al enfocarlo lo
+            // traemos a la vista en vez de obligar a deslizar hasta el fondo.
+            onFocus={() => {
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+            }}
           />
           <Pressable
             style={[styles.sendBtn, submitting && { opacity: 0.6 }]}
@@ -565,18 +732,46 @@ const styles = StyleSheet.create({
     color: "#1a73e8",
   },
   description: { fontSize: 15, color: "#333", marginBottom: 8, lineHeight: 22 },
+  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
   meta: { fontSize: 12, color: "#888" },
+  authorLink: { fontSize: 12, color: "#1a73e8", fontWeight: "600" },
+  editedNote: { fontSize: 11, color: "#9ca3af", fontStyle: "italic", marginTop: 4 },
   location: { fontSize: 13, color: "#666", marginTop: 6 },
-  likeBtn: {
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
     margin: 16,
-    alignSelf: "flex-start",
-    paddingHorizontal: 20,
+  },
+  likeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#e53935",
   },
-  likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 16 },
+  likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 15 },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#e8f0fe",
+  },
+  editBtnText: { color: "#1a73e8", fontWeight: "600", fontSize: 14 },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#fce8e6",
+  },
+  deleteBtnText: { color: "#e53935", fontWeight: "600", fontSize: 14 },
   sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
   timeline: { flexDirection: "row", marginTop: 6, paddingHorizontal: 4 },
   tlStep: { flex: 1, alignItems: "center" },
@@ -628,7 +823,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
   },
-  commentAuthor: { fontWeight: "600", fontSize: 13, marginBottom: 2 },
+  commentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  commentAuthor: { fontWeight: "600", fontSize: 13, color: "#1a73e8" },
+  noComments: { fontSize: 13, color: "#9ca3af", lineHeight: 18 },
   commentText: { fontSize: 14, color: "#333" },
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
   commentInput: {
@@ -637,7 +839,6 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    marginBottom: 32,
   },
   commentField: {
     flex: 1,
