@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -51,6 +52,7 @@ const TIMELINE_STEPS = [
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -60,6 +62,7 @@ export default function ReportDetailScreen() {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState(0);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
@@ -126,6 +129,31 @@ export default function ReportDetailScreen() {
       );
     }
   }, [report]);
+
+  // US-018 / US-019: las acciones del autor viven en el menú del header, no en
+  // el cuerpo del detalle. El header lo define el layout de tabs, así que se
+  // inyecta el botón desde acá donde vive el estado del reporte.
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: report?.can_edit
+        ? () => (
+            <Pressable
+              onPress={() => setMenuOpen(true)}
+              hitSlop={12}
+              style={{ paddingHorizontal: 12 }}
+              accessibilityLabel="Acciones del reporte"
+              accessibilityRole="button"
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color="#1a73e8" />
+              ) : (
+                <Ionicons name="ellipsis-vertical" size={22} color="#1a73e8" />
+              )}
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, report?.can_edit, deleting]);
 
   async function fetchReport() {
     try {
@@ -452,44 +480,6 @@ export default function ReportDetailScreen() {
             />
             <Text style={styles.likeBtnText}>{report.like_count}</Text>
           </Pressable>
-
-          {/* Editar y eliminar solo aparecen si soy el autor y el reporte
-              todavía no entró en gestión municipal (US-018 / US-019). */}
-          {report.can_edit && (
-            <>
-              <Pressable
-                style={styles.editBtn}
-                onPress={() => router.push(`/(app)/edit-report/${report.id}`)}
-              >
-                <Ionicons
-                  name="pencil-outline"
-                  size={16}
-                  color="#1a73e8"
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={styles.editBtnText}>Editar</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
-                onPress={handleDeleteReport}
-                disabled={deleting}
-              >
-                {deleting ? (
-                  <ActivityIndicator size="small" color="#e53935" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="trash-outline"
-                      size={16}
-                      color="#e53935"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.deleteBtnText}>Eliminar</Text>
-                  </>
-                )}
-              </Pressable>
-            </>
-          )}
         </View>
 
         {/* Status timeline */}
@@ -675,6 +665,44 @@ export default function ReportDetailScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Menú de acciones del autor, anclado bajo el ícono del header. */}
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
+          <View style={[styles.menu, { top: headerHeight - 6 }]}>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                router.push(`/(app)/edit-report/${report.id}`);
+              }}
+            >
+              <Ionicons name="pencil-outline" size={18} color="#1a73e8" />
+              <Text style={styles.menuItemText}>Editar</Text>
+            </Pressable>
+            <View style={styles.menuDivider} />
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                // El Alert se pisa con el cierre del modal en iOS si se abre
+                // en el mismo frame.
+                setTimeout(handleDeleteReport, 250);
+              }}
+            >
+              <Ionicons name="trash-outline" size={18} color="#e53935" />
+              <Text style={[styles.menuItemText, { color: "#e53935" }]}>
+                Eliminar
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -754,24 +782,29 @@ const styles = StyleSheet.create({
     borderColor: "#e53935",
   },
   likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 15 },
-  editBtn: {
+  menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.15)" },
+  menu: {
+    position: "absolute",
+    right: 10,
+    minWidth: 170,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#e8f0fe",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  editBtnText: { color: "#1a73e8", fontWeight: "600", fontSize: 14 },
-  deleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#fce8e6",
-  },
-  deleteBtnText: { color: "#e53935", fontWeight: "600", fontSize: 14 },
+  menuItemText: { fontSize: 15, color: "#1a73e8", fontWeight: "600" },
+  menuDivider: { height: 1, backgroundColor: "#f0f0f0", marginHorizontal: 10 },
   sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
   timeline: { flexDirection: "row", marginTop: 6, paddingHorizontal: 4 },
   tlStep: { flex: 1, alignItems: "center" },
