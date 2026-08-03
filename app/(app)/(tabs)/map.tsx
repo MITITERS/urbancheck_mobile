@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   Linking,
   Platform,
   Pressable,
@@ -13,8 +14,10 @@ import {
   View,
 } from "react-native";
 import MapView, { Callout, Marker, type Region } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { isSessionExpired } from "../../../src/api/errors";
+import { tabBarClearance } from "../../../src/constants/layout";
 import { type ReportMarker, listMapMarkers } from "../../../src/api/reports";
 import ReportFilterBar, {
   EMPTY_FILTERS,
@@ -42,6 +45,7 @@ type GpsState = "unknown" | "granted" | "denied" | "disabled";
 
 export default function MapTab() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [markers, setMarkers] = useState<ReportMarker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,6 +198,10 @@ export default function MapTab() {
           initialRegion={FALLBACK_REGION}
           showsUserLocation={gpsState === "granted"}
           showsMyLocationButton={false}
+          // El mapa ocupa toda la pantalla: sin esto, el teclado de la búsqueda
+          // solo se cierra con la tecla "Buscar" del sistema.
+          onPress={() => Keyboard.dismiss()}
+          onPanDrag={() => Keyboard.dismiss()}
         >
           {markers.map((marker) => {
             const colors = statusColors(marker.status);
@@ -253,7 +261,9 @@ export default function MapTab() {
         )}
 
         <Pressable
-          style={styles.locateBtn}
+          // La barra de pestañas flota sobre el mapa: se apoya el botón por
+          // encima de ella en vez de fijar un alto que no contempla el notch.
+          style={[styles.locateBtn, { bottom: tabBarClearance(insets.bottom) }]}
           onPress={centerOnMe}
           accessibilityLabel="Centrar en mi ubicación"
         >
@@ -302,7 +312,6 @@ const styles = StyleSheet.create({
   locateBtn: {
     position: "absolute",
     right: 16,
-    bottom: 100,
     width: 46,
     height: 46,
     borderRadius: 23,

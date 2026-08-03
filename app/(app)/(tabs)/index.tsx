@@ -237,6 +237,9 @@ export default function FeedScreen() {
           )}
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
+          // Cierra el teclado de la búsqueda al arrastrar la lista.
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
