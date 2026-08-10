@@ -42,6 +42,9 @@ import {
 } from "../../../../src/constants/reports";
 
 // Pasos del flujo principal (happy path) que se van desbloqueando.
+// Alto de una línea del campo de comentario, y alto fijo del botón Enviar.
+const COMMENT_ROW_HEIGHT = 42;
+
 const TIMELINE_STEPS = [
   "pendiente_validacion",
   "reportado",
@@ -868,6 +871,10 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
   commentInput: {
     flexDirection: "row",
+    // El campo crece al escribir varias líneas; sin esto la fila estira al botón
+    // para igualarlo. Anclado arriba, el botón queda quieto mientras el campo
+    // crece hacia abajo.
+    alignItems: "flex-start",
     padding: 12,
     gap: 8,
     borderTopWidth: 1,
@@ -880,13 +887,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     fontSize: 14,
+    minHeight: COMMENT_ROW_HEIGHT,
     maxHeight: 80,
   },
   sendBtn: {
     backgroundColor: "#1a73e8",
     paddingHorizontal: 16,
     borderRadius: 8,
+    alignItems: "center",
     justifyContent: "center",
+    // Alto fijo: el botón no debe crecer con el texto del comentario.
+    height: COMMENT_ROW_HEIGHT,
   },
   sendBtnText: { color: "#fff", fontWeight: "600" },
   mapTypeBtn: {
