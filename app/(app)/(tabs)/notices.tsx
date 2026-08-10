@@ -21,6 +21,11 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../src/api/notifications";
+import {
+  adjustUnread,
+  refreshUnread,
+  setUnread,
+} from "../../../src/notifications/unreadStore";
 
 const KIND_ICON: Record<NotificationKind, string> = {
   nuevo_comentario: "chatbubble-ellipses",
@@ -63,6 +68,8 @@ export default function NoticesTab() {
       setNotifications((prev) => (p === 1 ? data.results : [...prev, ...data.results]));
       setHasMore(!!data.next);
       setPage(p);
+      // Puede haber llegado un aviso nuevo mientras la bandeja estaba abierta.
+      if (p === 1) void refreshUnread();
     } catch (err) {
       if (!isSessionExpired(err)) {
         Alert.alert("Error", "No se pudieron cargar los avisos.");
@@ -92,7 +99,12 @@ export default function NoticesTab() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)),
       );
-      void markNotificationRead(item.id).catch(() => {});
+      // El badge de la pestaña baja en el acto y después se confirma contra el
+      // servidor, para que no siga mostrando un aviso ya leído.
+      adjustUnread(-1);
+      markNotificationRead(item.id)
+        .then(() => refreshUnread())
+        .catch(() => void refreshUnread());
     }
     if (item.report_id != null) {
       router.push(`/(app)/(tabs)/report/${item.report_id}`);
@@ -102,22 +114,29 @@ export default function NoticesTab() {
   async function handleReadAll() {
     const previous = notifications;
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnread(0);
     try {
       await markAllNotificationsRead();
     } catch {
       setNotifications(previous);
       Alert.alert("Error", "No se pudieron marcar los avisos como leídos.");
+    } finally {
+      await refreshUnread();
     }
   }
 
   async function handleDelete(item: AppNotification) {
     const previous = notifications;
     setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    // Descartar un aviso sin leer también lo saca de la cuenta.
+    if (!item.is_read) adjustUnread(-1);
     try {
       await deleteNotification(item.id);
     } catch {
       setNotifications(previous);
       Alert.alert("Error", "No se pudo descartar el aviso.");
+    } finally {
+      await refreshUnread();
     }
   }
 
