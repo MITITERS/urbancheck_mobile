@@ -22,6 +22,7 @@ import { type ReportMarker, listMapMarkers } from "../../../src/api/reports";
 import ReportFilterBar, {
   EMPTY_FILTERS,
   type ReportFilterState,
+  countActiveFilters,
 } from "../../../src/components/ReportFilterBar";
 import {
   categoryColor,
@@ -63,21 +64,63 @@ export default function MapTab() {
   const criteriaRef = useRef<ReportFilterState>(EMPTY_FILTERS);
   criteriaRef.current = { ...filters, search: debouncedSearch };
 
-  const fetchMarkers = useCallback(async () => {
-    try {
-      const { results } = await listMapMarkers(criteriaRef.current);
-      setMarkers(results);
-    } catch (err) {
-      if (!isSessionExpired(err)) {
-        setMarkers([]);
-      }
-    } finally {
-      setLoading(false);
+  /**
+   * Encuadra el mapa sobre los marcadores dados.
+   *
+   * Es lo que hace visible el filtrado: sin esto la vista se queda donde estaba
+   * y, si los resultados caen fuera de pantalla, parece que la búsqueda no hizo
+   * nada. Con un solo resultado se hace zoom sobre él; con varios se ajusta el
+   * encuadre para que entren todos.
+   */
+  const frameMarkers = useCallback((list: ReportMarker[]) => {
+    if (list.length === 0) return;
+
+    if (list.length === 1) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: Number(list[0].latitude),
+          longitude: Number(list[0].longitude),
+          latitudeDelta: ZOOM_DELTA,
+          longitudeDelta: ZOOM_DELTA,
+        },
+        600,
+      );
+      return;
     }
+
+    mapRef.current?.fitToCoordinates(
+      list.map((m) => ({
+        latitude: Number(m.latitude),
+        longitude: Number(m.longitude),
+      })),
+      {
+        edgePadding: { top: 80, right: 60, bottom: 140, left: 60 },
+        animated: true,
+      },
+    );
   }, []);
+
+  const fetchMarkers = useCallback(
+    async (frameResults = false) => {
+      try {
+        const { results } = await listMapMarkers(criteriaRef.current);
+        setMarkers(results);
+        if (frameResults) frameMarkers(results);
+      } catch (err) {
+        if (!isSessionExpired(err)) {
+          setMarkers([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [frameMarkers],
+  );
 
   useFocusEffect(
     useCallback(() => {
+      // Al volver a la pestaña se refresca sin tocar el encuadre: el usuario
+      // dejó el mapa donde quería.
       void fetchMarkers();
     }, [fetchMarkers]),
   );
@@ -89,7 +132,9 @@ export default function MapTab() {
       return;
     }
     setLoading(true);
-    void fetchMarkers();
+    // Acá sí se reencuadra: el usuario acaba de cambiar el criterio y espera
+    // ver los resultados.
+    void fetchMarkers(true);
   }, [debouncedSearch, categoryKey, statusKey, fetchMarkers]);
 
   // US-022: seguimiento de la posición propia mientras el mapa está montado.
@@ -172,10 +217,20 @@ export default function MapTab() {
   }
 
   const gpsUnavailable = gpsState === "denied" || gpsState === "disabled";
+  const isFiltering =
+    debouncedSearch.trim().length > 0 || countActiveFilters(filters) > 0;
 
   return (
     <View style={styles.container}>
-      <ReportFilterBar filters={filters} onChange={setFilters} />
+      <ReportFilterBar
+        filters={filters}
+        onChange={setFilters}
+        resultLabel={
+          isFiltering && !loading
+            ? `${markers.length} ${markers.length === 1 ? "reporte encontrado" : "reportes encontrados"}`
+            : undefined
+        }
+      />
 
       {gpsUnavailable && (
         <View style={styles.gpsBanner}>
