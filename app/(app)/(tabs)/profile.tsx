@@ -17,42 +17,12 @@ import { logout } from "../../../src/api/auth";
 import { listMyReports, type Report } from "../../../src/api/reports";
 import { getMe, type UserProfile } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
-
-const STATUS_LABEL: Record<string, string> = {
-  pendiente_validacion: "Pendiente de validación",
-  reportado: "Reportado",
-  en_proceso: "En proceso",
-  resuelto: "Resuelto",
-  cancelado: "Cancelado",
-  archivado: "Archivado",
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  bache: "Bache",
-  alumbrado: "Alumbrado",
-  basura: "Basura",
-  semaforo: "Semáforo",
-  vereda: "Vereda",
-  otro: "Otro",
-};
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pendiente_validacion: { bg: "#fff3e0", text: "#ef6c00" },
-  reportado: { bg: "#e3f2fd", text: "#1565c0" },
-  en_proceso: { bg: "#fffde7", text: "#f57f17" },
-  resuelto: { bg: "#e8f5e9", text: "#2e7d32" },
-  cancelado: { bg: "#ffebee", text: "#c62828" },
-  archivado: { bg: "#eceff1", text: "#546e7a" },
-};
-
-function formatDate(isoString: string) {
-  try {
-    const d = new Date(isoString);
-    return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return "";
-  }
-}
+import {
+  categoryLabel,
+  formatDate,
+  statusColors,
+  statusLabel,
+} from "../../../src/constants/reports";
 
 export default function ProfileScreen() {
   const { signOut } = useAuth();
@@ -171,16 +141,14 @@ export default function ProfileScreen() {
         keyExtractor={(r) => String(r.id)}
         contentContainerStyle={{ paddingBottom: 110 }}
         renderItem={({ item }) => {
-          const colors = STATUS_COLORS[item.status] ?? { bg: "#f5f5f5", text: "#666" };
+          const colors = statusColors(item.status);
           return (
             <Pressable
               style={styles.reportCard}
               onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
             >
               <View style={styles.reportRow}>
-                <Text style={styles.reportCategory}>
-                  {CATEGORY_LABEL[item.category] ?? item.category}
-                </Text>
+                <Text style={styles.reportCategory}>{categoryLabel(item.category)}</Text>
                 <Text style={styles.reportDate}>{formatDate(item.created_at)}</Text>
               </View>
               <Text style={styles.reportDesc} numberOfLines={2}>
@@ -189,7 +157,7 @@ export default function ProfileScreen() {
               <View style={styles.reportFooter}>
                 <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                   <Text style={[styles.statusBadgeText, { color: colors.text }]}>
-                    {STATUS_LABEL[item.status] ?? item.status}
+                    {statusLabel(item.status)}
                   </Text>
                 </View>
                 <View style={styles.reportStats}>

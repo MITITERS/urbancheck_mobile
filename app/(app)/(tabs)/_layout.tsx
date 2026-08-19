@@ -1,14 +1,40 @@
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Dimensions, Pressable, View } from "react-native";
+import { useEffect } from "react";
+import { AppState, Dimensions, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
+
+import { refreshUnread, useUnreadCount } from "../../../src/notifications/unreadStore";
+
+// Cada cuánto se refresca el contador de avisos sin leer con la app en primer plano.
+const UNREAD_POLL_MS = 60_000;
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const screenWidth = Dimensions.get("window").width;
   const horizontalMargin = screenWidth * 0.05;
+  // El valor vive en un store compartido con la bandeja de avisos, así el badge
+  // se actualiza apenas el usuario lee algo en vez de esperar al próximo sondeo.
+  const unread = useUnreadCount();
+
+  // US-009: el badge avisa que llegaron comentarios nuevos sin obligar a entrar
+  // a la pestaña. Se sondea en vez de usar push porque el backend todavía no
+  // tiene canal de notificaciones en tiempo real.
+  useEffect(() => {
+    void refreshUnread();
+    const timer = setInterval(() => void refreshUnread(), UNREAD_POLL_MS);
+    // Al volver del segundo plano el contador puede estar viejo: se refresca ya.
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refreshUnread();
+    });
+
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <Tabs
@@ -85,7 +111,9 @@ export default function TabsLayout() {
         name="notices"
         options={{
           title: "Avisos",
-          headerTitle: "Avisos del Municipio",
+          headerTitle: "Mis avisos",
+          tabBarBadge: unread > 0 ? (unread > 99 ? "99+" : unread) : undefined,
+          tabBarBadgeStyle: { backgroundColor: "#e53935", fontSize: 10 },
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "notifications" : "notifications-outline"} size={25} color={color} />
           ),

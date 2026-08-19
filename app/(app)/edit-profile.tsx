@@ -22,6 +22,7 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [name, setName] = useState("");
+  const [isPublic, setIsPublic] = useState(true);
   const [avatar, setAvatar] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,6 +33,7 @@ export default function EditProfileScreen() {
       .then((u) => {
         setUser(u);
         setName(u.name);
+        setIsPublic(u.is_public);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -73,6 +75,8 @@ export default function EditProfileScreen() {
     try {
       const form = new FormData();
       form.append("name", name);
+      // Django interpreta el multipart, así que el booleano viaja como "true"/"false".
+      form.append("is_public", isPublic ? "true" : "false");
       if (avatar) {
         form.append("avatar", {
           uri: avatar.uri,
@@ -155,6 +159,36 @@ export default function EditProfileScreen() {
               editable={false}
             />
             <Text style={styles.helperText}>El correo no puede ser modificado.</Text>
+          </View>
+
+          {/* US-027: control de visibilidad del perfil público. */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Privacidad</Text>
+            <Pressable
+              style={styles.privacyRow}
+              onPress={() => setIsPublic((v) => !v)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: isPublic }}
+            >
+              <Ionicons
+                name={isPublic ? "eye-outline" : "eye-off-outline"}
+                size={20}
+                color={isPublic ? "#1a73e8" : "#6b7280"}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.privacyTitle}>
+                  {isPublic ? "Perfil público" : "Perfil privado"}
+                </Text>
+                <Text style={styles.privacyHint}>
+                  {isPublic
+                    ? "Otros usuarios pueden ver tus reportes y desde cuándo participás."
+                    : "Otros usuarios solo verán tu nombre y tu foto."}
+                </Text>
+              </View>
+              <View style={[styles.switchTrack, isPublic && styles.switchTrackOn]}>
+                <View style={[styles.switchThumb, isPublic && styles.switchThumbOn]} />
+              </View>
+            </Pressable>
           </View>
 
           <Pressable
@@ -248,6 +282,34 @@ const styles = StyleSheet.create({
   inputDisabled: { backgroundColor: "#f3f4f6", color: "#6b7280", borderColor: "#e5e7eb" },
   errorText: { color: "#e53935", fontSize: 12, marginTop: 4 },
   helperText: { color: "#9ca3af", fontSize: 11, marginTop: 4 },
+  privacyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#fafafa",
+  },
+  privacyTitle: { fontSize: 14, fontWeight: "600", color: "#1f2937" },
+  privacyHint: { fontSize: 11, color: "#6b7280", marginTop: 2, lineHeight: 15 },
+  switchTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#d1d5db",
+    padding: 3,
+    justifyContent: "center",
+  },
+  switchTrackOn: { backgroundColor: "#1a73e8" },
+  switchThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  switchThumbOn: { alignSelf: "flex-end" },
   saveBtn: {
     flexDirection: "row",
     backgroundColor: "#1a73e8",
