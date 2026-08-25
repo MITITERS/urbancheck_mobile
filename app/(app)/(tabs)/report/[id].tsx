@@ -27,6 +27,9 @@ import {
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
+import { useAuth } from "../../../../src/auth/AuthContext";
+import { canValidateReport } from "../../../../src/validation/canValidateReport";
+import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
 const STATUS_LABEL: Record<string, string> = {
   pendiente_validacion: "Pendiente de validación",
@@ -58,6 +61,7 @@ export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { user } = useAuth();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -197,6 +201,12 @@ export default function ReportDetailScreen() {
     );
   }
 
+  // US-036: validar, rechazar, o nada. La regla vive en un solo lugar.
+  const showValidationActions = canValidateReport({
+    user,
+    status: report.status,
+  });
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -320,6 +330,10 @@ export default function ReportDetailScreen() {
               </Pressable>
             )}
           </Animated.View>
+        )}
+
+        {showValidationActions && (
+          <ValidationActions reportId={report.id} onCompleted={() => void fetchReport()} />
         )}
 
         <View style={styles.section}>

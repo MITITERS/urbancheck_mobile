@@ -4,9 +4,17 @@ import { Dimensions, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
 
+import { canValidate } from "../../../src/api/users";
+import { useAuth } from "../../../src/auth/AuthContext";
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
+  // La bandeja de validación solo existe para validadores activos (US-037).
+  // `Tabs.Protected` la saca de la navegación, así que tampoco se alcanza
+  // escribiendo la ruta a mano.
+  const showValidation = canValidate(user);
   const screenWidth = Dimensions.get("window").width;
   const horizontalMargin = screenWidth * 0.05;
 
@@ -81,6 +89,22 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Protected guard={showValidation}>
+        <Tabs.Screen
+          name="validate"
+          options={{
+            title: "Validar",
+            headerTitle: "Pendientes de validación",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "shield-checkmark" : "shield-checkmark-outline"}
+                size={25}
+                color={color}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
       <Tabs.Screen
         name="notices"
         options={{

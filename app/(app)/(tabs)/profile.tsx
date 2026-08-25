@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { logout } from "../../../src/api/auth";
 import { listMyReports, type Report } from "../../../src/api/reports";
-import { getMe, type UserProfile } from "../../../src/api/users";
+import { getMe, type UserProfile, type UserRole } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -54,11 +54,22 @@ function formatDate(isoString: string) {
   }
 }
 
+// Etiquetas de los cuatro roles de la plataforma (US-017).
+const ROLE_LABEL: Record<UserRole, string> = {
+  ciudadano: "Ciudadano",
+  validador: "Validador",
+  agente_municipal: "Agente Municipal",
+  admin_plataforma: "Administrador de la plataforma",
+};
+
+const MUNICIPAL_ROLES: UserRole[] = ["validador", "agente_municipal", "admin_plataforma"];
+
 export default function ProfileScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const isMunicipalRole = MUNICIPAL_ROLES.includes(user?.role ?? "ciudadano");
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -122,23 +133,21 @@ export default function ProfileScreen() {
         </View>
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
-        <View
+<View
           style={[
             styles.roleBadge,
-            user?.role === "municipal"
-              ? styles.roleBadgeMunicipal
-              : styles.roleBadgeCiudadano,
+            isMunicipalRole ? styles.roleBadgeMunicipal : styles.roleBadgeCiudadano,
           ]}
         >
           <Text
             style={[
               styles.roleBadgeText,
-              user?.role === "municipal"
+              isMunicipalRole
                 ? styles.roleBadgeTextMunicipal
                 : styles.roleBadgeTextCiudadano,
             ]}
           >
-            {user?.role === "municipal" ? "Personal Municipal" : "Ciudadano"}
+            {ROLE_LABEL[user?.role ?? "ciudadano"]}
           </Text>
         </View>
       </View>
@@ -150,6 +159,18 @@ export default function ProfileScreen() {
         >
           <Ionicons name="pencil-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
           <Text style={styles.editBtnText}>Editar perfil</Text>
+        </Pressable>
+        <Pressable
+          style={styles.prefsBtn}
+          onPress={() => router.push("/(app)/notification-preferences")}
+        >
+          <Ionicons
+            name="notifications-outline"
+            size={16}
+            color="#1a73e8"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={styles.prefsBtnText}>Notificaciones</Text>
         </Pressable>
         <Pressable style={styles.logoutBtn} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={16} color="#e53935" style={{ marginRight: 6 }} />
@@ -287,6 +308,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   editBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
+  prefsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e8f0fe",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  prefsBtnText: { color: "#1a73e8", fontWeight: "600", fontSize: 14 },
   logoutBtn: {
     flex: 1,
     flexDirection: "row",

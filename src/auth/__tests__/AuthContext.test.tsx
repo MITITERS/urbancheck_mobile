@@ -4,6 +4,7 @@ import React from "react";
 
 import { getSession } from "../../api/auth";
 import { setSessionToken } from "../../api/client";
+import { getMe, type UserProfile } from "../../api/users";
 import { AuthProvider, useAuth } from "../AuthContext";
 
 jest.mock("expo-secure-store", () => ({
@@ -21,11 +22,29 @@ jest.mock("../../api/client", () => ({
   setUnauthorizedHandler: jest.fn(),
 }));
 
+// El contexto carga el perfil al hidratar: el rol y el flag de contraseña
+// temporal deciden qué pantallas están disponibles (US-017).
+jest.mock("../../api/users", () => ({
+  getMe: jest.fn(),
+}));
+
 const mockedStore = SecureStore as jest.Mocked<typeof SecureStore>;
 const mockedGetSession = getSession as jest.MockedFunction<typeof getSession>;
 const mockedSetSessionToken = setSessionToken as jest.MockedFunction<
   typeof setSessionToken
 >;
+const mockedGetMe = getMe as jest.MockedFunction<typeof getMe>;
+
+const CITIZEN: UserProfile = {
+  id: 1,
+  name: "Vecina Ejemplo",
+  email: "vecina@test.com",
+  avatar: null,
+  role: "ciudadano",
+  municipality: null,
+  must_change_password: false,
+  url: "/api/users/1/",
+};
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
@@ -34,6 +53,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 beforeEach(() => {
   mockedStore.setItemAsync.mockResolvedValue(undefined);
   mockedStore.deleteItemAsync.mockResolvedValue(undefined);
+  mockedGetMe.mockResolvedValue(CITIZEN);
 });
 
 describe("AuthContext hydration", () => {
@@ -116,5 +136,44 @@ describe("useAuth outside provider", () => {
     expect(() => renderHook(() => useAuth())).toThrow(
       "useAuth must be used within AuthProvider",
     );
+  });
+});
+
+describe("profile loading", () => {
+  it("loads the profile on hydration so the guards can read the role", async () => {
+    mockedStore.getItemAsync.mockResolvedValue("stored-token");
+    mockedGetSession.mockResolvedValue({ meta: { session_token: "fresh-token" } });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.user).toEqual(CITIZEN);
+  });
+
+  it("exposes the temporary-password flag that gates the app", async () => {
+    mockedStore.getItemAsync.mockResolvedValue("stored-token");
+    mockedGetSession.mockResolvedValue({ meta: { session_token: "fresh-token" } });
+    mockedGetMe.mockResolvedValue({
+      ...CITIZEN,
+      role: "validador",
+      must_change_password: true,
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.user?.must_change_password).toBe(true);
+  });
+
+  it("keeps the session usable when the profile cannot be read", async () => {
+    mockedStore.getItemAsync.mockResolvedValue("stored-token");
+    mockedGetSession.mockResolvedValue({ meta: { session_token: "fresh-token" } });
+    mockedGetMe.mockRejectedValue(new Error("offline"));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.token).toBe("fresh-token");
+    expect(result.current.user).toBeNull();
   });
 });

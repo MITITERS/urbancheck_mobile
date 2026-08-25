@@ -71,6 +71,22 @@ export function listMyReports(page = 1) {
   return api.get<PaginatedReports>(`/api/reports/?mine=true&page=${page}`);
 }
 
+/** Marcadores geolocalizados, sin paginar: el mapa los necesita todos. */
+export interface ReportMarker {
+  id: number;
+  photo: string;
+  category: ReportCategory;
+  status: ReportStatus;
+  latitude: string;
+  longitude: string;
+  address: string;
+  like_count: number;
+}
+
+export function listMapReports() {
+  return api.get<{ results: ReportMarker[] }>("/api/reports/map/");
+}
+
 export function getReport(id: number) {
   return api.get<ReportDetail>(`/api/reports/${id}/`);
 }
