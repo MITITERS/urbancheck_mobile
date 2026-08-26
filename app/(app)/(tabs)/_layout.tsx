@@ -1,54 +1,44 @@
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Dimensions, Pressable, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BottomTabBar } from "@react-navigation/bottom-tabs";
+import { Pressable } from "react-native";
 
-import { canValidate } from "../../../src/api/users";
+import { participatesAsCitizen, canValidate } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
+import {
+  FloatingTabBar,
+  TAB_BAR_HEIGHT,
+} from "../../../src/components/floatingTabBar";
+import {
+  formatUnreadBadge,
+  useUnread,
+} from "../../../src/notifications/UnreadContext";
 
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   // La bandeja de validación solo existe para validadores activos (US-037).
   // `Tabs.Protected` la saca de la navegación, así que tampoco se alcanza
   // escribiendo la ruta a mano.
   const showValidation = canValidate(user);
-  const screenWidth = Dimensions.get("window").width;
-  const horizontalMargin = screenWidth * 0.05;
+  // Las cuentas de trabajo no reportan: la pestaña de alta no existe para
+  // ellas, ni siquiera escribiendo la ruta.
+  const showCreate = participatesAsCitizen(user);
+  const { unread } = useUnread();
 
   return (
     <Tabs
-      tabBar={(props) => (
-        <View
-          style={{
-            position: "absolute",
-            bottom: insets.bottom > 0 ? insets.bottom + 4 : 12,
-            left: horizontalMargin,
-            right: horizontalMargin,
-            borderRadius: 32,
-            overflow: "hidden",
-            backgroundColor: "#ffffff",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.1,
-            shadowRadius: 12,
-            elevation: 8,
-            borderWidth: 1,
-            borderColor: "#f0f0f0",
-          }}
-        >
-          <BottomTabBar {...props} />
-        </View>
-      )}
+      // La barra flota sobre el contenido: las pantallas se reservan el espacio
+      // con `useFloatingTabBarInset()`.
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: "#1a73e8",
         tabBarInactiveTintColor: "#777",
         tabBarStyle: {
           borderTopWidth: 0,
-          backgroundColor: "#ffffff",
-          height: 65,
+          // El fondo y las esquinas redondeadas los pinta la isla: un fondo
+          // opaco acá taparía esas esquinas con un rectángulo.
+          backgroundColor: "transparent",
+          height: TAB_BAR_HEIGHT,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -79,16 +69,18 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="create-tab"
-        options={{
-          title: "Reportar",
-          headerShown: false,
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="add-circle" size={32} color="#1a73e8" style={{ marginTop: -2 }} />
-          ),
-        }}
-      />
+      <Tabs.Protected guard={showCreate}>
+        <Tabs.Screen
+          name="create-tab"
+          options={{
+            title: "Reportar",
+            headerShown: false,
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="add-circle" size={32} color="#1a73e8" style={{ marginTop: -2 }} />
+            ),
+          }}
+        />
+      </Tabs.Protected>
       <Tabs.Protected guard={showValidation}>
         <Tabs.Screen
           name="validate"
@@ -110,6 +102,15 @@ export default function TabsLayout() {
         options={{
           title: "Avisos",
           headerTitle: "Avisos del Municipio",
+          // Sin avisos pendientes tiene que ser `undefined`: con `0` o `""` el
+          // badge se dibuja igual, vacío, y queda un punto rojo permanente.
+          tabBarBadge: formatUnreadBadge(unread),
+          tabBarBadgeStyle: {
+            backgroundColor: "#e53935",
+            color: "#fff",
+            fontSize: 10,
+            fontWeight: "700",
+          },
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "notifications" : "notifications-outline"} size={25} color={color} />
           ),

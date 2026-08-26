@@ -6,7 +6,7 @@ import {
   Animated,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   PanResponder,
   Platform,
   Pressable,
@@ -27,7 +27,10 @@ import {
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
+import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
+import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
+import { useKeyboardVisible } from "../../../../src/components/useKeyboardVisible";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
 import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
@@ -48,6 +51,10 @@ const TIMELINE_STEPS = [
   "resuelto",
 ] as const;
 
+// Aire entre el cajón de comentarios y el teclado abierto. Con el teclado
+// cerrado el espacio lo define la barra de pestañas flotante.
+const COMMENT_BOX_KEYBOARD_MARGIN = 16;
+
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
   alumbrado: "Alumbrado",
@@ -62,6 +69,12 @@ export default function ReportDetailScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
+  // La barra de pestañas flota sobre el contenido: sin este espacio reservado,
+  // el cajón de comentarios queda debajo de ella y no se puede ni leer ni tocar.
+  const tabBarInset = useFloatingTabBarInset();
+  // Con el teclado abierto la barra queda tapada, así que ese espacio deja de
+  // hacer falta: si se mantuviera, el cajón flotaría lejos del teclado.
+  const keyboardVisible = useKeyboardVisible();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -178,6 +191,9 @@ export default function ReportDetailScreen() {
           : r,
       );
       setCommentText("");
+      // El comentario ya se fue: el teclado no tiene por qué seguir tapando la
+      // lista donde el usuario quiere verlo aparecer.
+      Keyboard.dismiss();
     } catch {
       Alert.alert("Error", "No se pudo enviar el comentario.");
     } finally {
@@ -206,14 +222,33 @@ export default function ReportDetailScreen() {
     user,
     status: report.status,
   });
+  // Las cuentas de trabajo leen el reporte y los comentarios de los vecinos,
+  // pero no aportan: se esconden los controles, no el contenido.
+  const canParticipate = participatesAsCitizen(user);
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      {...swipeBack.panHandlers}
-    >
-      <ScrollView style={styles.container}>
+    <View style={{ flex: 1 }} {...swipeBack.panHandlers}>
+      <ScrollView
+        style={styles.container}
+        // Reemplaza al `KeyboardAvoidingView` que había acá: con un header
+        // arriba, éste calcula de menos —mide su marco relativo al padre y lo
+        // compara contra coordenadas de pantalla— y dejaba el cajón de
+        // comentarios parcialmente debajo del teclado. iOS ajusta el inset solo
+        // y sin que haya que pasarle el alto del header; en Android lo resuelve
+        // el `adjustResize` de la ventana.
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        contentContainerStyle={{
+          paddingBottom: keyboardVisible
+            ? COMMENT_BOX_KEYBOARD_MARGIN
+            : tabBarInset,
+        }}
+        // Sin esto el primer toque sobre «Enviar» con el teclado abierto solo lo
+        // cierra y no llega al botón: hay que tocar dos veces para comentar.
+        keyboardShouldPersistTaps="handled"
+        // Arrastrar la pantalla cierra el teclado, que es lo que el usuario
+        // espera cuando quiere volver a leer los comentarios.
+        keyboardDismissMode="on-drag"
+      >
         {report.latitude && report.longitude ? (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
             <ScrollView
@@ -360,11 +395,19 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
-        <Pressable style={styles.likeBtn} onPress={handleLike}>
-          <Text style={styles.likeBtnText}>
-            {report.is_liked ? "♥" : "♡"} {report.like_count}
-          </Text>
-        </Pressable>
+        {canParticipate ? (
+          <Pressable style={styles.likeBtn} onPress={handleLike}>
+            <Text style={styles.likeBtnText}>
+              {report.is_liked ? "♥" : "♡"} {report.like_count}
+            </Text>
+          </Pressable>
+        ) : (
+          // El contador se sigue viendo: es información del reporte. Lo que se
+          // saca es poder tocarlo.
+          <View style={styles.likeCount}>
+            <Text style={styles.likeCountText}>♡ {report.like_count}</Text>
+          </View>
+        )}
 
         {/* Status timeline */}
         <View style={styles.section}>
@@ -501,6 +544,7 @@ export default function ReportDetailScreen() {
           ))}
         </View>
 
+        {canParticipate && (
         <View style={styles.commentInput}>
           <TextInput
             style={styles.commentField}
@@ -521,8 +565,9 @@ export default function ReportDetailScreen() {
             )}
           </Pressable>
         </View>
+        )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -645,13 +690,18 @@ const styles = StyleSheet.create({
   commentAuthor: { fontWeight: "600", fontSize: 13, marginBottom: 2 },
   commentText: { fontSize: 14, color: "#333" },
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
+  likeCount: {
+    margin: 16,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  likeCountText: { fontSize: 16, color: "#6b7280" },
   commentInput: {
     flexDirection: "row",
     padding: 12,
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    marginBottom: 32,
   },
   commentField: {
     flex: 1,

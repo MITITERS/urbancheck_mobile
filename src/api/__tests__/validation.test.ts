@@ -1,5 +1,5 @@
 import { api } from "../client";
-import { canValidate, type UserProfile } from "../users";
+import { participatesAsCitizen, canValidate, type UserProfile } from "../users";
 import {
   formatDistance,
   isTooFarError,
@@ -142,5 +142,30 @@ describe("canValidateReport", () => {
         status: "pendiente_validacion",
       }),
     ).toBe(false);
+  });
+});
+
+describe("participatesAsCitizen", () => {
+  it.each(["validador", "agente_municipal", "admin_plataforma"] as const)(
+    "rejects the %s: es una cuenta de trabajo, no la de un vecino",
+    (role) => {
+      expect(participatesAsCitizen({ ...VALIDATOR, role })).toBe(false);
+    },
+  );
+
+  it("keeps rejecting a work account that still has the temporary password", () => {
+    // La regla es del rol: no depende del estado de la cuenta, al revés que
+    // `canValidate`.
+    expect(participatesAsCitizen({ ...VALIDATOR, must_change_password: true })).toBe(
+      false,
+    );
+  });
+
+  it("accepts only the ciudadano role", () => {
+    expect(participatesAsCitizen({ ...VALIDATOR, role: "ciudadano" })).toBe(true);
+  });
+
+  it("rejects a missing user", () => {
+    expect(participatesAsCitizen(null)).toBe(false);
   });
 });

@@ -44,3 +44,36 @@ export function patchMe(data: FormData) {
 export function canValidate(user: UserProfile | null): boolean {
   return user !== null && user.role === "validador" && !user.must_change_password;
 }
+
+/**
+ * Cuentas de trabajo: operan el circuito en vez de usarlo como vecinos. Es el
+ * complemento exacto de `ciudadano`, espejo de `User.WORK_ROLES` en el backend.
+ */
+const WORK_ROLES: readonly UserRole[] = [
+  "validador",
+  "agente_municipal",
+  "admin_plataforma",
+];
+
+/**
+ * Única regla de "este usuario participa como vecino" del lado del cliente:
+ * reportar, comentar y dar me gusta.
+ *
+ * Solo el vecino participa. Las cuentas de trabajo operan el circuito —el
+ * validador verifica en terreno, el agente gestiona desde el panel, el
+ * administrador opera la plataforma—, así que un aporte propio las pondría de
+ * los dos lados del mismo caso. Quien además quiera usar UrbanCheck como vecino
+ * se crea una cuenta personal.
+ *
+ * **Leer no está alcanzado**: el personal municipal sigue viendo el feed, el
+ * mapa, el detalle y los comentarios de los vecinos. Lo que se esconde son los
+ * controles de aporte, no el contenido.
+ *
+ * A diferencia de `canValidate()`, acá alcanza con el rol —el estado de la
+ * cuenta no lo habilita de vuelta—, así que el cliente decide lo mismo que el
+ * backend y no hay una pantalla que muestre la opción para después recibir un
+ * 403.
+ */
+export function participatesAsCitizen(user: UserProfile | null): boolean {
+  return user !== null && !WORK_ROLES.includes(user.role);
+}

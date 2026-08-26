@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -18,6 +18,8 @@ import {
   type Notification,
   type NotificationKind,
 } from "../../../src/api/notifications";
+import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import { useUnread } from "../../../src/notifications/UnreadContext";
 
 /**
  * Ícono e color por tipo de aviso. El de cambio de estado (US-011) se distingue
@@ -44,10 +46,15 @@ function relativeDate(value: string): string {
 /** Bandeja de avisos: sociales (US-033) y de cambio de estado (US-011). */
 export default function NoticesTab() {
   const router = useRouter();
+  const tabBarInset = useFloatingTabBarInset();
+  // El contador sale del backend, no de la lista: la bandeja está paginada, así
+  // que contar lo que hay en pantalla daría de menos con más de una página.
+  const { unread, refreshUnread, applyUnreadDelta, clearUnread } = useUnread();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -62,11 +69,16 @@ export default function NoticesTab() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const unread = notifications.filter((item) => !item.is_read).length;
+  // Cubre también el montaje, porque la pantalla se monta ya enfocada: un
+  // `useEffect` además de esto dispararía dos veces el mismo pedido. Hace falta
+  // en cada foco porque la pantalla queda montada al cambiar de pestaña, y sin
+  // esto volver a Avisos muestra la lista vieja, desalineada con el badge.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      void refreshUnread();
+    }, [load, refreshUnread]),
+  );
 
   async function open(notification: Notification) {
     if (!notification.is_read) {
@@ -75,7 +87,11 @@ export default function NoticesTab() {
           item.id === notification.id ? { ...item, is_read: true } : item,
         ),
       );
-      await markNotificationRead(notification.id).catch(() => load());
+      applyUnreadDelta(-1);
+      await markNotificationRead(notification.id).catch(() => {
+        void load();
+        void refreshUnread();
+      });
     }
     if (notification.report_id) {
       router.push(`/(app)/(tabs)/report/${notification.report_id}`);
@@ -83,8 +99,20 @@ export default function NoticesTab() {
   }
 
   async function readAll() {
+    if (unread === 0 || markingAll) return;
+    setMarkingAll(true);
     setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
-    await markAllNotificationsRead().catch(() => load());
+    clearUnread();
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      // El optimismo no se sostuvo: se vuelve al estado real del servidor en
+      // vez de dejar la bandeja mintiendo.
+      await load();
+      await refreshUnread();
+    } finally {
+      setMarkingAll(false);
+    }
   }
 
   if (loading) {
@@ -97,13 +125,44 @@ export default function NoticesTab() {
 
   return (
     <View style={styles.container}>
-      {unread > 0 && (
+      {/* La barra se muestra siempre que haya avisos, no solo cuando hay sin
+          leer: si apareciera y desapareciera, el botón sería difícil de
+          encontrar justo cuando se lo busca. Sin nada pendiente queda
+          deshabilitado y dice por qué. */}
+      {notifications.length > 0 && (
         <View style={styles.header}>
           <Text style={styles.headerText}>
-            {unread} {unread === 1 ? "aviso sin leer" : "avisos sin leer"}
+            {unread > 0
+              ? `${unread} ${unread === 1 ? "aviso sin leer" : "avisos sin leer"}`
+              : "Estás al día"}
           </Text>
-          <Pressable onPress={() => void readAll()}>
-            <Text style={styles.headerAction}>Marcar todo como leído</Text>
+          <Pressable
+            style={[styles.readAllButton, unread === 0 && styles.readAllButtonDisabled]}
+            onPress={() => void readAll()}
+            disabled={unread === 0 || markingAll}
+            accessibilityRole="button"
+            accessibilityLabel="Marcar todos los avisos como leídos"
+            accessibilityState={{ disabled: unread === 0 || markingAll }}
+          >
+            {markingAll ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons
+                  name="checkmark-done"
+                  size={15}
+                  color={unread === 0 ? "#9ca3af" : "#fff"}
+                />
+                <Text
+                  style={[
+                    styles.readAllText,
+                    unread === 0 && styles.readAllTextDisabled,
+                  ]}
+                >
+                  Marcar todo como leído
+                </Text>
+              </>
+            )}
           </Pressable>
         </View>
       )}
@@ -120,7 +179,7 @@ export default function NoticesTab() {
       <FlatList
         data={notifications}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarInset }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -176,9 +235,23 @@ const styles = StyleSheet.create({
   },
   headerText: { fontSize: 13, color: "#4b5563", fontWeight: "600" },
   headerAction: { fontSize: 13, color: "#1a73e8", fontWeight: "600" },
+  readAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1a73e8",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    minHeight: 34,
+  },
+  readAllButtonDisabled: { backgroundColor: "#eef1f5" },
+  readAllText: { fontSize: 12, color: "#fff", fontWeight: "700" },
+  readAllTextDisabled: { color: "#9ca3af" },
   errorBox: { backgroundColor: "#fef2f2", padding: 12 },
   errorText: { fontSize: 13, color: "#b91c1c" },
-  listContent: { padding: 12, paddingBottom: 100, flexGrow: 1 },
+  // `paddingBottom` lo pone la pantalla: sale del alto de la barra flotante.
+  listContent: { padding: 12, flexGrow: 1 },
   card: {
     flexDirection: "row",
     alignItems: "center",

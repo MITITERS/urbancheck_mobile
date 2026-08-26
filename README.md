@@ -24,10 +24,11 @@ La plataforma tiene cuatro roles: `ciudadano`, `validador`, `agente_municipal` y
 `admin_plataforma`. **Esta app es para los dos primeros**; los municipales
 trabajan desde el panel web.
 
-La cuenta de validador es una **cuenta de trabajo**: solo ve reportes de la
-municipalidad que se le asignó, también en el feed y en el mapa. Un reporte de
-otra jurisdicción directamente no existe para esa cuenta. Quien además quiera
-usar UrbanCheck como vecino se crea una cuenta personal aparte.
+Las cuentas de **validador** y de **agente municipal** son **cuentas de
+trabajo**: solo ven reportes de la municipalidad que se les asignó, también en el
+feed y en el mapa. Un reporte de otra jurisdicción directamente no existe para
+esas cuentas. Quien además quiera usar UrbanCheck como vecino se crea una cuenta
+personal aparte.
 
 El filtro lo aplica el backend, así que la app no tiene que saber nada: pide el
 feed como siempre y recibe solo lo que corresponde.
@@ -45,6 +46,111 @@ deciden qué se dibuja.
 La baja lógica del validador (`is_validator_active`) no viaja en el perfil, así
 que un validador desactivado ve la opción y recibe un `403` al usarla. Por eso
 las pantallas manejan ese error en vez de confiar en el cálculo local.
+
+### Solo el vecino participa: reportar, comentar y dar me gusta
+
+Las cuentas de trabajo operan el circuito en vez de usarlo: el validador
+verifica en terreno, el agente gestiona desde el panel y el administrador opera
+la plataforma. Un aporte propio las pondría de los dos lados del mismo caso.
+
+`participatesAsCitizen()` (`src/api/users.ts`) es la única regla del lado del
+cliente, y la consumen tres lugares:
+
+| Dónde | Qué se esconde |
+|---|---|
+| `(tabs)/_layout.tsx` | la pestaña **Reportar**, con `Tabs.Protected` |
+| `report/[id].tsx` | el botón de me gusta y el cajón de comentarios |
+| `(tabs)/profile.tsx` | la sección **Mis reportes** |
+
+**Leer no está alcanzado.** Lo que se esconde son los controles de aporte, no el
+contenido: el personal municipal sigue viendo el feed, el mapa, el detalle y los
+comentarios de los vecinos. En el detalle el contador de me gusta se sigue
+mostrando —es información del reporte—; lo que se saca es poder tocarlo.
+
+En el perfil no se oculta una lista vacía: se oculta la sección entera, porque
+«Mis reportes» pertenece a la cuenta de vecino y mostrarla vacía es prometer algo
+que esa cuenta no va a poder llenar. Tampoco se piden los reportes, que es una
+request menos en cada entrada.
+
+A diferencia de validar, acá **alcanza con el rol**: el estado de la cuenta no la
+habilita de vuelta, porque sigue siendo de trabajo. Como el rol sí viaja en el
+perfil, cliente y backend deciden lo mismo y no hay una pantalla que muestre la
+opción para después fallar.
+
+`WORK_ROLES` en `src/api/users.ts` es el espejo de `User.WORK_ROLES` del backend.
+Si allá se agrega un rol, hay que agregarlo acá o la app va a ofrecer una opción
+que después falla con `403`.
+
+### El badge de la campana
+
+El número de avisos sin leer vive en un contexto
+(`src/notifications/UnreadContext.tsx`) montado en el layout del área
+autenticada, no en la pantalla de avisos: el badge tiene que poder mostrarse
+justamente cuando esa pantalla no está montada.
+
+El número lo da `/api/notifications/unread_count/` y **no** la lista cargada. La
+bandeja está paginada, así que contar lo que hay en pantalla daría de menos en
+cuanto haya más de una página.
+
+Como todavía no hay push (`send_push()` es un stub en el backend), la única
+forma de enterarse de un aviso nuevo sin abrir la bandeja es preguntar cada
+tanto: se refresca al montar, cada `UNREAD_POLL_INTERVAL_MS` mientras la app
+está en primer plano, al volver del segundo plano y cada vez que la pestaña de
+avisos toma el foco. Cuando haya push, esto se reemplaza por el evento.
+
+Dos detalles que no son evidentes:
+
+- `formatUnreadBadge()` devuelve `undefined` sin avisos pendientes. Con `0` o
+  `""` react-navigation dibuja el globo igual, vacío, y queda un punto rojo
+  permanente sobre la campana.
+- Marcar un aviso leído ajusta el contador de forma optimista y descarta las
+  respuestas de `refresh` que quedaron en vuelo. Sin eso, un refresh viejo
+  contestando tarde devuelve el badge al número anterior con el aviso ya leído.
+
+### La barra de pestañas flota: el espacio se reserva a mano
+
+La «isla» inferior está posicionada en absoluto sobre el contenido, así que no
+le quita alto a las pantallas: cada una tiene que reservarse ese espacio o su
+último elemento queda tapado. La isla y sus medidas viven juntas en
+`src/components/floatingTabBar.tsx`, y las consume tanto el layout que dibuja la
+barra como las pantallas que se corren, para que no puedan divergir en silencio.
+
+Una pantalla scrolleable usa `useFloatingTabBarInset()` como `paddingBottom` de
+su `contentContainerStyle`.
+
+Dos reglas de la isla que no se pueden romper sin borrar el badge de la campana:
+
+- **El safe area se cuenta una sola vez.** La isla ya se levanta por encima del
+  home indicator, pero `BottomTabBar` agrega además su propio
+  `paddingBottom: insets.bottom`. Con el `height` y el `paddingTop` que fija
+  `tabBarStyle`, esos ~34px de más dejaban 23px de alto útil para íconos de 28.
+  Por eso se le pasan los insets con el `bottom` en cero.
+- **Nada de `overflow: "hidden"`.** El badge se dibuja en `top: -3` respecto del
+  ícono, o sea deliberadamente fuera de su caja: recortar el contenedor lo borra.
+  Las esquinas redondeadas y el fondo los pinta la isla, y la barra va
+  transparente encima.
+
+Los tests de `src/components/__tests__/floatingTabBar.test.tsx` miran el estilo
+efectivo de los contenedores, no si el badge está en el árbol: estando recortado
+igual aparece en el árbol, que es lo que hizo que el bug pasara desapercibido.
+
+### Teclado en el detalle del reporte
+
+El cajón de comentarios está al final de un `ScrollView` con header arriba. Ahí
+`KeyboardAvoidingView` calcula de menos —mide su marco relativo al padre y lo
+compara contra coordenadas de pantalla, así que le falta el alto del header— y
+dejaba el cajón parcialmente debajo del teclado. Se reemplazó por
+`automaticallyAdjustKeyboardInsets` (iOS ajusta el inset solo, sin que haya que
+pasarle el alto del header); en Android lo resuelve el `adjustResize` de la
+ventana.
+
+Para que el teclado se cierre cuando corresponde: `keyboardDismissMode="on-drag"`
+—arrastrar la lista lo baja—, `keyboardShouldPersistTaps="handled"` —sin esto el
+primer toque sobre «Enviar» solo cierra el teclado y hay que tocar dos veces— y
+`Keyboard.dismiss()` después de publicar el comentario.
+
+Mientras el teclado está abierto el espacio de la barra deja de reservarse: la
+barra ya está tapada y, si se mantuviera, el cajón flotaría lejos del teclado.
 
 ### Contraseña temporal
 

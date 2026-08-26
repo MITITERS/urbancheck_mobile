@@ -15,7 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { logout } from "../../../src/api/auth";
 import { listMyReports, type Report } from "../../../src/api/reports";
-import { getMe, type UserProfile, type UserRole } from "../../../src/api/users";
+import {
+  getMe,
+  participatesAsCitizen,
+  type UserProfile,
+  type UserRole,
+} from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -62,24 +67,34 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin_plataforma: "Administrador de la plataforma",
 };
 
-const MUNICIPAL_ROLES: UserRole[] = ["validador", "agente_municipal", "admin_plataforma"];
-
 export default function ProfileScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [user, setUser] = useState<UserProfile | null>(null);
-  const isMunicipalRole = MUNICIPAL_ROLES.includes(user?.role ?? "ciudadano");
+  // Las cuentas de trabajo no reportan, así que «Mis reportes» no les aplica:
+  // mostrarles la sección vacía es prometerles algo que no van a poder llenar.
+  const isCitizen = participatesAsCitizen(user);
+  const isMunicipalRole = user !== null && !isCitizen;
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      void Promise.all([
-        getMe().then(setUser),
-        listMyReports().then((r) => setReports(r.results)),
-      ]).finally(() => setLoading(false));
+      void getMe()
+        .then(async (profile) => {
+          setUser(profile);
+          // No se piden si no van a mostrarse: una request menos en cada
+          // entrada al perfil del personal municipal.
+          if (!participatesAsCitizen(profile)) {
+            setReports([]);
+            return;
+          }
+          const { results } = await listMyReports();
+          setReports(results);
+        })
+        .finally(() => setLoading(false));
     }, []),
   );
 
@@ -178,6 +193,10 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
+      {/* «Mis reportes» es de la cuenta de vecino. Para el personal municipal
+          no es una lista vacía: es una sección que no le corresponde. */}
+      {isCitizen && (
+        <>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Mis reportes</Text>
         {reports.length > 0 && (
@@ -234,6 +253,8 @@ export default function ProfileScreen() {
           </View>
         }
       />
+        </>
+      )}
     </View>
   );
 }
