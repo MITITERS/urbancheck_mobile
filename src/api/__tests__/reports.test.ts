@@ -6,6 +6,7 @@ import {
   getComments,
   getReport,
   likeReport,
+  listMapReports,
   listMyReports,
   listReports,
   unlikeReport,
@@ -33,9 +34,31 @@ describe("reports api", () => {
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=3");
   });
 
+  it("listReports sends the location so the feed is scoped to the municipality", () => {
+    listReports(1, { latitude: -32.4103, longitude: -63.24 });
+
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/api/reports/?page=1&latitude=-32.4103&longitude=-63.24",
+    );
+  });
+
   it("listMyReports adds mine=true filter", () => {
     listMyReports(2);
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?mine=true&page=2");
+  });
+
+  it("listMapReports scopes the markers to the citizen location", () => {
+    listMapReports({ latitude: -32.4103, longitude: -63.24 });
+
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/api/reports/map/?latitude=-32.4103&longitude=-63.24",
+    );
+  });
+
+  it("listMapReports without location asks for every marker", () => {
+    listMapReports();
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/");
   });
 
   it("getReport requests the detail endpoint", () => {

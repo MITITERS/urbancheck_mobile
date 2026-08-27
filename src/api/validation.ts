@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { Coordinates } from "../location/coordinates";
 import type { ReportAuthor, ReportCategory, ReportStatus } from "./reports";
 
 /** Un reporte de la bandeja de pendientes de validación (US-037). */
@@ -24,10 +25,12 @@ export interface PaginatedPending {
   results: PendingReport[];
 }
 
-export interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
+/**
+ * Re-exportada para no romper los usos existentes: la forma es la misma que
+ * consume el feed acotado por ubicación, así que la definición vive en
+ * `src/location/coordinates.ts` y no en la API de validación.
+ */
+export type { Coordinates };
 
 /** Error específico de "estás demasiado lejos", con la distancia real. */
 export interface TooFarError {

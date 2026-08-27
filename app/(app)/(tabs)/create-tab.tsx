@@ -19,12 +19,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
 import {
   createReport,
   geocodeAddress,
   type GeocodeResult,
   type ReportCategory,
 } from "../../../src/api/reports";
+import { Notice } from "../../../src/components/Notice";
 
 const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
   { value: "bache", label: "Bache", icon: "construct-outline" },
@@ -54,6 +56,7 @@ export default function CreateReportTab() {
   const justSelectedRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
 
   /**
    * Intenta extraer coordenadas GPS del EXIF de una imagen.
@@ -130,7 +133,11 @@ export default function CreateReportTab() {
         await applyPhotoAsset(result.assets[0]);
       }
     } catch (err) {
-      Alert.alert("Error galería", String(err));
+      setNotice({
+        tone: "error",
+        title: "No pudimos abrir la galería",
+        message: "Probá de nuevo. Si sigue pasando, revisá los permisos de la app.",
+      });
     }
   }
 
@@ -150,7 +157,11 @@ export default function CreateReportTab() {
         await applyPhotoAsset(result.assets[0]);
       }
     } catch (err) {
-      Alert.alert("Error cámara", String(err));
+      setNotice({
+        tone: "error",
+        title: "No pudimos abrir la cámara",
+        message: "Probá de nuevo. Si sigue pasando, revisá los permisos de la app.",
+      });
     }
   }
 
@@ -285,14 +296,13 @@ export default function CreateReportTab() {
         },
       ]);
     } catch (err: unknown) {
-      const data = err as Record<string, unknown>;
-      if (data?.photo) {
-        setErrors({ photo: String((data.photo as string[])[0]) });
-      } else if (err instanceof Error) {
-        Alert.alert("Error de red", err.message);
-      } else {
-        Alert.alert("Error servidor", JSON.stringify(err).slice(0, 300));
+      const described = describeApiError(err, "No pudimos enviar el reporte");
+      // El campo queda marcado en rojo aunque se cierre el aviso: si el
+      // problema es la ubicación, hay que poder ver cuál corregir.
+      if (described.field) {
+        setErrors({ [described.field]: described.message });
       }
+      setNotice(described);
     } finally {
       setLoading(false);
     }
@@ -303,6 +313,13 @@ export default function CreateReportTab() {
       style={{ flex: 1, backgroundColor: "#f8f9fa" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <Notice
+        visible={notice !== null}
+        tone={notice?.tone}
+        title={notice?.title ?? ""}
+        message={notice?.message ?? ""}
+        onClose={() => setNotice(null)}
+      />
       <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 16 : 24 }]}>
         <Text style={styles.title}>Nuevo Reporte</Text>
         <Text style={styles.subtitle}>Reportá problemas en la vía pública para que el municipio los resuelva.</Text>

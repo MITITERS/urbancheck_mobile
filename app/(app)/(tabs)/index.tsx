@@ -11,7 +11,14 @@ import {
   View,
 } from "react-native";
 
-import { type Report, listReports } from "../../../src/api/reports";
+import {
+  type FeedCoverage,
+  type Report,
+  listReports,
+} from "../../../src/api/reports";
+import { participatesAsCitizen } from "../../../src/api/users";
+import { useAuth } from "../../../src/auth/AuthContext";
+import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
@@ -30,6 +37,21 @@ const STATUS_LABEL: Record<string, string> = {
   cancelado: "Cancelado",
   archivado: "Archivado",
 };
+
+const DENIED_REASON =
+  "Necesitamos tu ubicación para armar tu feed: mostramos los reportes del " +
+  "municipio en el que estás parado.";
+const BLOCKED_REASON =
+  "El permiso de ubicación está bloqueado. Habilitalo en los ajustes del " +
+  "sistema para ver los reportes de tu zona.";
+const NO_POSITION_REASON =
+  "No pudimos determinar dónde estás, así que todavía no sabemos qué " +
+  "municipio te corresponde.";
+const OUT_OF_COVERAGE_TITLE = "Estás fuera del área de cobertura";
+const OUT_OF_COVERAGE_BODY =
+  "Tu ubicación no cae dentro del radio de ninguna municipalidad adherida a " +
+  "UrbanCheck, así que no hay reportes para mostrarte. Si te moviste recién, " +
+  "deslizá para actualizar.";
 
 function ReportCard({ item }: { item: Report }) {
   const router = useRouter();
@@ -55,44 +77,100 @@ function ReportCard({ item }: { item: Report }) {
   );
 }
 
+/**
+ * Feed del vecino, acotado al municipio donde está parado.
+ *
+ * La app manda la ubicación y el servidor resuelve la jurisdicción con el mismo
+ * criterio con el que asigna un reporte nuevo: el vecino ve exactamente el
+ * municipio al que le va a llegar lo que reporte. Fuera de toda cobertura no se
+ * muestra nada y se explica por qué, en lugar de un feed vacío sin motivo.
+ *
+ * Las cuentas de trabajo no se acotan por ubicación: el validador y el agente
+ * ya están atados a su municipalidad del lado del servidor, y hacerles pedir el
+ * permiso de ubicación acá no cambiaría lo que ven.
+ */
 export default function FeedScreen() {
+  const { user } = useAuth();
+  // Ante la duda se acota: si el perfil todavía no cargó, mostrar el feed de
+  // todos los municipios es justo lo que esta pantalla no debe hacer. Solo las
+  // cuentas de trabajo, que se identifican por su rol, quedan exentas.
+  const scopedToLocation = user === null || participatesAsCitizen(user);
+  const { permission, coords, reason, request } = useCurrentLocation({
+    deniedReason: DENIED_REASON,
+    blockedReason: BLOCKED_REASON,
+    enabled: scopedToLocation,
+  });
+
   const [reports, setReports] = useState<Report[]>([]);
+  const [coverage, setCoverage] = useState<FeedCoverage | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sin ubicación no hay feed que pedir: el servidor devolvería el de todos los
+  // municipios, que es justamente lo que esta pantalla no debe mostrar.
+  const canQuery = !scopedToLocation || coords !== null;
+
+  const fetchPage = useCallback(
+    async (p: number) => {
+      try {
+        const data = await listReports(p, coords);
+        setReports((prev) => (p === 1 ? data.results : [...prev, ...data.results]));
+        setCoverage(data.coverage ?? null);
+        setHasMore(!!data.next);
+        setPage(p);
+        setError(null);
+      } catch {
+        // Sin esto la promesa quedaba sin atrapar y el error terminaba en la
+        // consola en lugar de en la pantalla.
+        setError("No pudimos cargar el feed. Deslizá para reintentar.");
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
+      }
+    },
+    [coords],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void fetchPage(1);
-    }, [])
-  );
-
-  async function fetchPage(p: number) {
-    try {
-      const data = await listReports(p);
-      if (p === 1) {
-        setReports(data.results);
-      } else {
-        setReports((prev) => [...prev, ...data.results]);
+      if (permission === "checking") return;
+      if (!canQuery) {
+        // El permiso se resolvió y no hay posición: no hay nada que pedir, pero
+        // la pantalla tiene que dejar de mostrar el spinner y explicarlo.
+        setReports([]);
+        setCoverage(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
       }
-      setHasMore(!!data.next);
-      setPage(p);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
-    }
-  }
+      void fetchPage(1);
+    }, [canQuery, fetchPage, permission]),
+  );
 
   function onRefresh() {
     setRefreshing(true);
+    if (!canQuery) {
+      // Deslizar hacia abajo es el gesto con el que se reintenta: si el permiso
+      // se puede volver a pedir, se pide.
+      void request().finally(() => setRefreshing(false));
+      return;
+    }
     void fetchPage(1);
   }
 
   function loadMore() {
-    if (!hasMore || loadingMore) return;
+    // `reports.length` no es una optimización: `FlatList` dispara
+    // `onEndReached` ya en el primer render, cuando la lista está vacía y la
+    // página 1 todavía viaja. Pedir la 2 ahí es pedir una página que puede no
+    // existir, y el servidor responde 404.
+    if (!hasMore || loadingMore || loading || !canQuery) return;
+    if (reports.length === 0) return;
     setLoadingMore(true);
     void fetchPage(page + 1);
   }
@@ -105,8 +183,40 @@ export default function FeedScreen() {
     );
   }
 
+  const locationNotice =
+    permission === "denied" || permission === "blocked"
+      ? reason
+      : permission === "granted" && coords === null
+        ? NO_POSITION_REASON
+        : null;
+  const isOutOfCoverage = coverage !== null && !coverage.in_coverage;
+  const city = coverage?.municipality?.city ?? null;
+
   return (
     <View style={styles.container}>
+      {error && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      {locationNotice && (
+        <View style={styles.notice}>
+          <Text style={styles.noticeText}>{locationNotice}</Text>
+          {permission !== "blocked" && (
+            <Pressable onPress={() => void request()}>
+              <Text style={styles.noticeAction}>Permitir ubicación</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {city && (
+        <View style={styles.scopeBar}>
+          <Text style={styles.scopeText}>Reportes de {city}</Text>
+        </View>
+      )}
+
       <FlatList
         data={reports}
         keyExtractor={(r) => String(r.id)}
@@ -121,12 +231,25 @@ export default function FeedScreen() {
             tintColor="#1a73e8"
           />
         }
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={{ paddingBottom: 110, flexGrow: 1 }}
         ListFooterComponent={
           loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null
         }
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No hay reportes aún.</Text>
+          isOutOfCoverage ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>{OUT_OF_COVERAGE_TITLE}</Text>
+              <Text style={styles.emptyBody}>{OUT_OF_COVERAGE_BODY}</Text>
+            </View>
+          ) : locationNotice ? (
+            // El motivo ya está explicado arriba: repetirlo acá sería decir dos
+            // veces lo mismo en la misma pantalla.
+            <View style={styles.emptyBox} />
+          ) : (
+            <Text style={styles.emptyText}>
+              {city ? `Todavía no hay reportes en ${city}.` : "No hay reportes aún."}
+            </Text>
+          )
         }
       />
     </View>
@@ -136,6 +259,17 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  notice: { backgroundColor: "#fff7ed", padding: 12 },
+  errorBox: { backgroundColor: "#fef2f2", padding: 12 },
+  errorText: { fontSize: 13, color: "#b91c1c" },
+  noticeText: { fontSize: 13, color: "#9a3412", lineHeight: 18 },
+  noticeAction: { fontSize: 13, fontWeight: "600", color: "#1a73e8", marginTop: 6 },
+  scopeBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#eef4fe",
+  },
+  scopeText: { fontSize: 12, fontWeight: "600", color: "#1a73e8" },
   card: {
     backgroundColor: "#fff",
     marginHorizontal: 12,
@@ -155,4 +289,18 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between" },
   meta: { fontSize: 12, color: "#888" },
   emptyText: { textAlign: "center", marginTop: 40, color: "#888" },
+  emptyBox: { paddingHorizontal: 28, paddingTop: 56, alignItems: "center" },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptyBody: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 20,
+  },
 });

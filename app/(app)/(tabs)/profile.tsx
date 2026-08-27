@@ -22,6 +22,7 @@ import {
   type UserRole,
 } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
+import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
 
 const STATUS_LABEL: Record<string, string> = {
   pendiente_validacion: "Pendiente de validación",
@@ -50,6 +51,15 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   archivado: { bg: "#eceff1", text: "#546e7a" },
 };
 
+const CATEGORY_ICON: Record<string, string> = {
+  bache: "construct-outline",
+  alumbrado: "bulb-outline",
+  basura: "trash-outline",
+  semaforo: "stopwatch-outline",
+  vereda: "walk-outline",
+  otro: "ellipsis-horizontal-outline",
+};
+
 function formatDate(isoString: string) {
   try {
     const d = new Date(isoString);
@@ -67,10 +77,45 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin_plataforma: "Administrador de la plataforma",
 };
 
+/** Una fila de acción: ícono, etiqueta y el chevron que anticipa que abre algo. */
+function ActionRow({
+  icon,
+  label,
+  tint = "#1a73e8",
+  onPress,
+  last = false,
+}: {
+  icon: string;
+  label: string;
+  tint?: string;
+  onPress: () => void;
+  last?: boolean;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.actionRow,
+        !last && styles.actionRowDivider,
+        pressed && styles.actionRowPressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={[styles.actionIcon, { backgroundColor: `${tint}14` }]}>
+        <Ionicons name={icon as never} size={19} color={tint} />
+      </View>
+      <Text style={[styles.actionLabel, { color: tint === "#1a73e8" ? "#1f2937" : tint }]}>
+        {label}
+      </Text>
+      <Ionicons name="chevron-forward" size={18} color="#c3c8d0" />
+    </Pressable>
+  );
+}
+
 export default function ProfileScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tabBarInset = useFloatingTabBarInset();
   const [user, setUser] = useState<UserProfile | null>(null);
   // Las cuentas de trabajo no reportan, así que «Mis reportes» no les aplica:
   // mostrarles la sección vacía es prometerles algo que no van a poder llenar.
@@ -99,21 +144,17 @@ export default function ProfileScreen() {
   );
 
   async function handleLogout() {
-    Alert.alert(
-      "Cerrar sesión",
-      "¿Estás seguro que querés cerrar sesión?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Cerrar sesión",
-          style: "destructive",
-          onPress: async () => {
-            await logout().catch(() => {});
-            await signOut();
-          },
+    Alert.alert("Cerrar sesión", "¿Estás seguro que querés cerrar sesión?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar sesión",
+        style: "destructive",
+        onPress: async () => {
+          await logout().catch(() => {});
+          await signOut();
         },
-      ],
-    );
+      },
+    ]);
   }
 
   if (loading) {
@@ -124,18 +165,15 @@ export default function ProfileScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top > 0 ? insets.top + 16 : 28,
-            paddingBottom: 20,
-          },
-        ]}
-      >
-        <View style={styles.avatarWrapper}>
+  // Las tres cifras salen de la misma lista que se muestra abajo: así lo que
+  // dice el resumen y lo que se ve al scrollear no pueden discrepar.
+  const inProgress = reports.filter((r) => r.status === "en_proceso").length;
+  const resolved = reports.filter((r) => r.status === "resuelto").length;
+
+  const header = (
+    <>
+      <View style={[styles.hero, { paddingTop: insets.top > 0 ? insets.top + 20 : 32 }]}>
+        <View style={styles.avatarRing}>
           {user?.avatar ? (
             <Image source={{ uri: user.avatar }} style={styles.avatar} />
           ) : (
@@ -148,244 +186,289 @@ export default function ProfileScreen() {
         </View>
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
-<View
-          style={[
-            styles.roleBadge,
-            isMunicipalRole ? styles.roleBadgeMunicipal : styles.roleBadgeCiudadano,
-          ]}
-        >
-          <Text
-            style={[
-              styles.roleBadgeText,
-              isMunicipalRole
-                ? styles.roleBadgeTextMunicipal
-                : styles.roleBadgeTextCiudadano,
-            ]}
-          >
+        <View style={styles.roleBadge}>
+          <Ionicons
+            name={isMunicipalRole ? "briefcase" : "person"}
+            size={12}
+            color="#fff"
+          />
+          <Text style={styles.roleBadgeText}>
             {ROLE_LABEL[user?.role ?? "ciudadano"]}
           </Text>
         </View>
       </View>
 
-      <View style={styles.actions}>
-        <Pressable
-          style={styles.editBtn}
-          onPress={() => router.push("/(app)/edit-profile")}
-        >
-          <Ionicons name="pencil-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.editBtnText}>Editar perfil</Text>
-        </Pressable>
-        <Pressable
-          style={styles.prefsBtn}
-          onPress={() => router.push("/(app)/notification-preferences")}
-        >
-          <Ionicons
-            name="notifications-outline"
-            size={16}
-            color="#1a73e8"
-            style={{ marginRight: 6 }}
-          />
-          <Text style={styles.prefsBtnText}>Notificaciones</Text>
-        </Pressable>
-        <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={16} color="#e53935" style={{ marginRight: 6 }} />
-          <Text style={styles.logoutBtnText}>Cerrar sesión</Text>
-        </Pressable>
-      </View>
-
-      {/* «Mis reportes» es de la cuenta de vecino. Para el personal municipal
-          no es una lista vacía: es una sección que no le corresponde. */}
+      {/* El resumen monta sobre el borde del encabezado: ata las dos zonas en
+          lugar de dejar una franja de color y una lista sueltas. */}
       {isCitizen && (
-        <>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Mis reportes</Text>
-        {reports.length > 0 && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{reports.length}</Text>
+        <View style={styles.statsCard}>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{reports.length}</Text>
+            <Text style={styles.statLabel}>Reportes</Text>
           </View>
-        )}
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: "#f57f17" }]}>{inProgress}</Text>
+            <Text style={styles.statLabel}>En proceso</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.stat}>
+            <Text style={[styles.statValue, { color: "#2e7d32" }]}>{resolved}</Text>
+            <Text style={styles.statLabel}>Resueltos</Text>
+          </View>
+        </View>
+      )}
+
+      <View style={[styles.card, !isCitizen && { marginTop: -28 }]}>
+        <ActionRow
+          icon="person-circle-outline"
+          label="Editar perfil"
+          onPress={() => router.push("/(app)/edit-profile")}
+        />
+        <ActionRow
+          icon="notifications-outline"
+          label="Notificaciones"
+          onPress={() => router.push("/(app)/notification-preferences")}
+          last
+        />
       </View>
 
-      <FlatList
-        data={reports}
-        keyExtractor={(r) => String(r.id)}
-        contentContainerStyle={{ paddingBottom: 110 }}
-        renderItem={({ item }) => {
-          const colors = STATUS_COLORS[item.status] ?? { bg: "#f5f5f5", text: "#666" };
-          return (
-            <Pressable
-              style={styles.reportCard}
-              onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
-            >
-              <View style={styles.reportRow}>
+      <View style={styles.card}>
+        <ActionRow
+          icon="log-out-outline"
+          label="Cerrar sesión"
+          tint="#e53935"
+          onPress={handleLogout}
+          last
+        />
+      </View>
+
+      {isCitizen && (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Mis reportes</Text>
+          {reports.length > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{reports.length}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </>
+  );
+
+  return (
+    <FlatList
+      style={styles.container}
+      // La pantalla entera scrollea: con el encabezado fijo, en un teléfono
+      // chico las acciones se comían la lista.
+      ListHeaderComponent={header}
+      data={isCitizen ? reports : []}
+      keyExtractor={(r) => String(r.id)}
+      contentContainerStyle={{ paddingBottom: tabBarInset }}
+      renderItem={({ item }) => {
+        const colors = STATUS_COLORS[item.status] ?? { bg: "#f5f5f5", text: "#666" };
+        return (
+          <Pressable
+            style={({ pressed }) => [styles.reportCard, pressed && styles.reportCardPressed]}
+            onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
+          >
+            <View style={styles.reportRow}>
+              <View style={styles.reportTitle}>
+                <View style={[styles.categoryIcon, { backgroundColor: colors.bg }]}>
+                  <Ionicons
+                    name={(CATEGORY_ICON[item.category] ?? "ellipse-outline") as never}
+                    size={15}
+                    color={colors.text}
+                  />
+                </View>
                 <Text style={styles.reportCategory}>
                   {CATEGORY_LABEL[item.category] ?? item.category}
                 </Text>
-                <Text style={styles.reportDate}>{formatDate(item.created_at)}</Text>
               </View>
-              <Text style={styles.reportDesc} numberOfLines={2}>
-                {item.description}
-              </Text>
-              <View style={styles.reportFooter}>
-                <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: colors.text }]}>
-                    {STATUS_LABEL[item.status] ?? item.status}
-                  </Text>
+              <Text style={styles.reportDate}>{formatDate(item.created_at)}</Text>
+            </View>
+            <Text style={styles.reportDesc} numberOfLines={2}>
+              {item.description}
+            </Text>
+            <View style={styles.reportFooter}>
+              <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+                <Text style={[styles.statusBadgeText, { color: colors.text }]}>
+                  {STATUS_LABEL[item.status] ?? item.status}
+                </Text>
+              </View>
+              <View style={styles.reportStats}>
+                <View style={styles.reportStat}>
+                  <Ionicons name="heart-outline" size={14} color="#9ca3af" />
+                  <Text style={styles.statText}>{item.like_count}</Text>
                 </View>
-                <View style={styles.reportStats}>
-                  <View style={styles.stat}>
-                    <Ionicons name="heart-outline" size={14} color="#888" />
-                    <Text style={styles.statText}>{item.like_count}</Text>
-                  </View>
-                  <View style={styles.stat}>
-                    <Ionicons name="chatbubble-outline" size={14} color="#888" />
-                    <Text style={styles.statText}>{item.comment_count}</Text>
-                  </View>
+                <View style={styles.reportStat}>
+                  <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                  <Text style={styles.statText}>{item.comment_count}</Text>
                 </View>
               </View>
+            </View>
+          </Pressable>
+        );
+      }}
+      ListEmptyComponent={
+        isCitizen ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="megaphone-outline" size={26} color="#1a73e8" />
+            </View>
+            <Text style={styles.emptyTitle}>Todavía no reportaste nada</Text>
+            <Text style={styles.emptyText}>
+              Cuando cargues un problema de la vía pública, vas a poder seguir su
+              estado desde acá.
+            </Text>
+            <Pressable
+              style={styles.emptyAction}
+              onPress={() => router.push("/(app)/(tabs)/create-tab")}
+            >
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.emptyActionText}>Crear mi primer reporte</Text>
             </Pressable>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={48} color="#ccc" style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyText}>No tenés reportes aún.</Text>
           </View>
-        }
-      />
-        </>
-      )}
-    </View>
+        ) : null
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
+  container: { flex: 1, backgroundColor: "#f4f6f8" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  header: {
+
+  hero: {
     alignItems: "center",
-    paddingVertical: 28,
     paddingHorizontal: 24,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    // Deja lugar para la tarjeta de cifras, que monta sobre este borde.
+    paddingBottom: 52,
+    backgroundColor: "#1a73e8",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
-  avatarWrapper: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+  avatarRing: {
+    padding: 4,
+    borderRadius: 54,
+    backgroundColor: "rgba(255,255,255,0.25)",
     marginBottom: 14,
   },
-  avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
-    borderColor: "#fff",
-  },
+  avatar: { width: 92, height: 92, borderRadius: 46 },
   avatarPlaceholder: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#0f56b3",
     justifyContent: "center",
     alignItems: "center",
   },
   avatarInitial: { color: "#fff", fontSize: 36, fontWeight: "bold" },
-  name: { fontSize: 22, fontWeight: "bold", color: "#1f2937" },
-  email: { fontSize: 14, color: "#6b7280", marginTop: 4 },
+  name: { fontSize: 22, fontWeight: "700", color: "#fff", textAlign: "center" },
+  email: { fontSize: 13.5, color: "rgba(255,255,255,0.82)", marginTop: 4 },
   roleBadge: {
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleBadgeMunicipal: { backgroundColor: "#e8f5e9" },
-  roleBadgeCiudadano: { backgroundColor: "#e3f2fd" },
-  roleBadgeText: { fontSize: 12, fontWeight: "600" },
-  roleBadgeTextMunicipal: { color: "#2e7d32" },
-  roleBadgeTextCiudadano: { color: "#1565c0" },
-  actions: {
     flexDirection: "row",
-    gap: 12,
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    marginBottom: 16,
-  },
-  editBtn: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "#1a73e8",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#1a73e8",
+    gap: 5,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  roleBadgeText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+
+  statsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: -28,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  stat: { flex: 1, alignItems: "center" },
+  statValue: { fontSize: 20, fontWeight: "700", color: "#1f2937" },
+  statLabel: { fontSize: 11.5, color: "#6b7280", marginTop: 2 },
+  statDivider: { width: 1, height: 28, backgroundColor: "#eef0f3" },
+
+  card: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 2,
   },
-  editBtnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-  prefsBtn: {
+  actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#e8f0fe",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  actionRowDivider: { borderBottomWidth: 1, borderBottomColor: "#f1f3f5" },
+  actionRowPressed: { backgroundColor: "#f7f9fc" },
+  actionIcon: {
+    width: 34,
+    height: 34,
     borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  prefsBtnText: { color: "#1a73e8", fontWeight: "600", fontSize: 14 },
-  logoutBtn: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "#fce8e6",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  logoutBtnText: { color: "#e53935", fontWeight: "600", fontSize: 14 },
+  actionLabel: { flex: 1, fontSize: 15, fontWeight: "600" },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 18,
-    marginBottom: 10,
+    paddingHorizontal: 20,
+    marginTop: 26,
+    marginBottom: 4,
   },
-  sectionTitle: { fontWeight: "700", fontSize: 16, color: "#374151" },
+  sectionTitle: { fontWeight: "700", fontSize: 17, color: "#1f2937" },
   countBadge: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e8f0fe",
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
     marginLeft: 8,
   },
-  countBadgeText: { fontSize: 12, fontWeight: "600", color: "#4b5563" },
+  countBadgeText: { fontSize: 12, fontWeight: "700", color: "#1a73e8" },
+
   reportCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    padding: 14,
     marginHorizontal: 16,
-    marginVertical: 6,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    marginTop: 10,
+    shadowColor: "#0f172a",
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
+  reportCardPressed: { backgroundColor: "#f7f9fc" },
   reportRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  reportCategory: { fontWeight: "700", color: "#1f2937", fontSize: 14 },
+  reportTitle: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  categoryIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportCategory: { fontWeight: "700", color: "#1f2937", fontSize: 14.5 },
   reportDate: { fontSize: 12, color: "#9ca3af" },
   reportDesc: { color: "#4b5563", fontSize: 13, lineHeight: 18, marginBottom: 12 },
   reportFooter: {
@@ -396,15 +479,45 @@ const styles = StyleSheet.create({
     borderTopColor: "#f3f4f6",
     paddingTop: 10,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusBadgeText: { fontSize: 11, fontWeight: "600" },
+  statusBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  statusBadgeText: { fontSize: 11, fontWeight: "700" },
   reportStats: { flexDirection: "row", gap: 12 },
-  stat: { flexDirection: "row", alignItems: "center", gap: 4 },
+  reportStat: { flexDirection: "row", alignItems: "center", gap: 4 },
   statText: { fontSize: 12, color: "#6b7280" },
-  emptyContainer: { alignItems: "center", justifyContent: "center", padding: 40, marginTop: 20 },
-  emptyText: { textAlign: "center", color: "#9ca3af", fontSize: 14, fontWeight: "500" },
+
+  emptyCard: {
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 24,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#e8f0fe",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  emptyTitle: { fontSize: 15.5, fontWeight: "700", color: "#1f2937", marginBottom: 6 },
+  emptyText: {
+    textAlign: "center",
+    color: "#6b7280",
+    fontSize: 13.5,
+    lineHeight: 19,
+    marginBottom: 18,
+  },
+  emptyAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#1a73e8",
+    paddingHorizontal: 18,
+    height: 42,
+    borderRadius: 21,
+  },
+  emptyActionText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });

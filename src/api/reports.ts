@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { Coordinates } from "../location/coordinates";
 
 export type ReportCategory =
   | "bache"
@@ -56,15 +57,49 @@ export interface ReportDetail extends Report {
   status_history: StatusHistoryEntry[];
 }
 
+/** La municipalidad que cubre la ubicación del vecino, resumida. */
+export interface CoverageMunicipality {
+  id: number;
+  city: string;
+  province: string;
+}
+
+/**
+ * Resultado de ubicar al vecino dentro de las áreas de cobertura.
+ *
+ * Solo viaja cuando el feed se pidió con coordenadas. Es lo que separa dos
+ * respuestas que llegan igual de vacías: `in_coverage: true` es "todavía no hay
+ * reportes en tu municipio" y `false` es "no estás dentro del radio de ninguna
+ * municipalidad adherida", que se le explican al vecino de forma distinta.
+ */
+export interface FeedCoverage {
+  in_coverage: boolean;
+  municipality: CoverageMunicipality | null;
+}
+
 export interface PaginatedReports {
   count: number;
   next: string | null;
   previous: string | null;
   results: Report[];
+  coverage?: FeedCoverage;
 }
 
-export function listReports(page = 1) {
-  return api.get<PaginatedReports>(`/api/reports/?page=${page}`);
+/**
+ * Feed público, acotado al municipio donde está parado el vecino.
+ *
+ * Las coordenadas son opcionales y el servidor decide: con ubicación devuelve
+ * únicamente los reportes del municipio que la cubre —ninguno si no la cubre
+ * ninguno—, y sin ubicación devuelve el feed completo, que es lo que ven las
+ * cuentas de trabajo.
+ */
+export function listReports(page = 1, coords: Coordinates | null = null) {
+  const params = new URLSearchParams({ page: String(page) });
+  if (coords) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+  return api.get<PaginatedReports>(`/api/reports/?${params}`);
 }
 
 export function listMyReports(page = 1) {
@@ -83,8 +118,26 @@ export interface ReportMarker {
   like_count: number;
 }
 
-export function listMapReports() {
-  return api.get<{ results: ReportMarker[] }>("/api/reports/map/");
+export interface MapReports {
+  results: ReportMarker[];
+  coverage?: FeedCoverage;
+}
+
+/**
+ * Marcadores del mapa, acotados igual que el feed.
+ *
+ * Con ubicación el servidor devuelve solo los del municipio que la cubre: el
+ * mapa se puede desplazar y hacer zoom, pero lo que muestra sigue siendo el
+ * municipio del vecino, no el del vecino de al lado.
+ */
+export function listMapReports(coords: Coordinates | null = null) {
+  const params = new URLSearchParams();
+  if (coords) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+  const query = params.toString();
+  return api.get<MapReports>(`/api/reports/map/${query ? `?${query}` : ""}`);
 }
 
 export function getReport(id: number) {

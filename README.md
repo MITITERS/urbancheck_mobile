@@ -169,6 +169,41 @@ La bandeja de validación es **solo una lista**, ordenada por cercanía. Tuvo un
 vista de mapa propia y se quitó: era ofrecer dos veces lo mismo, y la pestaña
 Mapa ya cumple ese rol para todos los roles por igual.
 
+### El feed y el mapa muestran el municipio donde estás parado
+
+El vecino ve **solo los reportes de la municipalidad cuya área de cobertura
+contiene su ubicación actual**. La app manda la posición en cada carga y el
+servidor resuelve la jurisdicción con el mismo criterio con el que le asigna
+municipio a un reporte nuevo: así el vecino ve exactamente el municipio al que
+le va a llegar lo que reporte.
+
+La regla vale igual para las dos pantallas. Que el mapa se pueda desplazar y
+hacer zoom no lo convierte en una ventana a los municipios vecinos: muestra lo
+mismo que el feed, en otro formato.
+
+El servidor pide las dos cosas —que el reporte sea de ese municipio y que esté
+adentro del radio—, así que un reporte viejo mal asignado tampoco se cuela.
+
+Fuera de toda cobertura el feed viene vacío **y lo dice**. Es una pantalla
+propia y no el "no hay reportes aún" de siempre, porque son dos cosas distintas
+y el servidor las distingue en la clave `coverage` de la respuesta:
+`in_coverage: true` con cero resultados es "todavía no hay reportes en tu
+municipio"; `false` es "no estás dentro del radio de ninguna municipalidad
+adherida".
+
+Dos cosas quedan **fuera** del acotado, a propósito:
+
+- **"Mis reportes"**: son del autor, no del lugar donde abre la app. Se siguen
+  viendo desde cualquier parte.
+- **Las cuentas de trabajo**: el validador y el agente ya están atados a su
+  municipalidad del lado del servidor, así que la app no les acota nada por
+  ubicación. En el feed ni siquiera les pide el permiso; en el mapa sí, pero
+  solo para centrar la vista donde están.
+
+Sin permiso de ubicación no se muestran reportes: se explica para qué se
+necesita y se ofrece concederlo. Mostrar los de todos los municipios sería
+justamente lo contrario de lo que piden estas pantallas.
+
 ### Ubicación
 
 La bandeja de pendientes pide la ubicación **una vez** al entrar y la usa para
@@ -183,6 +218,11 @@ Los tres estados del permiso —concedido, denegado y denegado de forma
 permanente— se manejan explícitamente, y sin ubicación las acciones se muestran
 **deshabilitadas con su razón**, no ocultas: esconderlas dejaría al validador
 sin saber por qué no puede trabajar.
+
+La mecánica del permiso vive en un solo lugar —`src/location/useCurrentLocation.ts`—
+y la comparten la validación en terreno y el feed: lo único que cambia entre
+las dos pantallas es el texto con el que explican para qué necesitan la
+ubicación.
 
 ### Limitación conocida: ubicación simulada
 

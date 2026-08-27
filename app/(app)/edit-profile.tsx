@@ -16,7 +16,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { describeApiError, type ApiErrorDescription } from "../../src/api/errors";
 import { getMe, patchMe, type UserProfile } from "../../src/api/users";
+import { Notice } from "../../src/components/Notice";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -26,6 +28,7 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
 
   useEffect(() => {
     getMe()
@@ -59,7 +62,11 @@ export default function EditProfileScreen() {
         });
       }
     } catch (err) {
-      Alert.alert("Error galería", String(err));
+      setNotice({
+        tone: "error",
+        title: "No pudimos abrir la galería",
+        message: "Probá de nuevo. Si sigue pasando, revisá los permisos de la app.",
+      });
     }
   }
 
@@ -85,14 +92,11 @@ export default function EditProfileScreen() {
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (err: unknown) {
-      const data = err as Record<string, string[]>;
-      if (data?.name) {
-        setErrors({ name: data.name[0] });
-      } else if (err instanceof Error) {
-        Alert.alert("Error de red", err.message);
-      } else {
-        Alert.alert("Error servidor", JSON.stringify(err).slice(0, 300));
+      const described = describeApiError(err, "No pudimos guardar tu perfil");
+      if (described.field) {
+        setErrors({ [described.field]: described.message });
       }
+      setNotice(described);
     } finally {
       setSaving(false);
     }
@@ -113,6 +117,13 @@ export default function EditProfileScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <Notice
+        visible={notice !== null}
+        tone={notice?.tone}
+        title={notice?.title ?? ""}
+        message={notice?.message ?? ""}
+        onClose={() => setNotice(null)}
+      />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
