@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +31,9 @@ export default function RegisterScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleRegister() {
+    // Si queda abierto, tapa los errores de validación que se muestran debajo
+    // de cada campo.
+    Keyboard.dismiss();
     const tempErrors: Record<string, string> = {};
 
     // Validate Name
@@ -136,7 +140,10 @@ export default function RegisterScreen() {
     >
       <ScrollView
         contentContainerStyle={styles.container}
+        // Toca fuera de los campos y el toque llega igual al botón; arrastrá y
+        // el teclado se baja. Sin lo segundo quedaba arriba para siempre.
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <Image
           source={require("../../assets/urbancheck_logo.png")}

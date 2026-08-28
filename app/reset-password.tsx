@@ -4,9 +4,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -27,6 +29,7 @@ export default function ResetPasswordScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleReset() {
+    Keyboard.dismiss();
     setErrors({});
 
     if (!key) {
@@ -85,9 +88,16 @@ export default function ResetPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* El scroll es lo que permite bajar el teclado arrastrando o tocando
+          fuera de los campos. */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       <Image
         source={require("../assets/urbancheck_logo.png")}
         style={styles.logo}
@@ -126,6 +136,8 @@ export default function ResetPasswordScreen() {
           secureTextEntry={!showConfirmPassword}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
+          returnKeyType="go"
+          onSubmitEditing={() => void handleReset()}
         />
         <Pressable
           style={styles.eyeButton}
@@ -161,13 +173,15 @@ export default function ResetPasswordScreen() {
       <Link href="/(auth)/login" style={styles.link}>
         Cancelar y volver al login
       </Link>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: "#fff" },
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     backgroundColor: "#fff",
     justifyContent: "center",

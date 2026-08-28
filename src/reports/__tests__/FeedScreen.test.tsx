@@ -1,4 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import {
+  render,
+  screen,
+  userEvent,
+  waitFor,
+} from "@testing-library/react-native";
 
 import FeedScreen from "../../../app/(app)/(tabs)/index";
 import { listReports, type PaginatedReports } from "../../api/reports";
@@ -20,6 +25,13 @@ jest.mock("expo-location", () => ({
   getCurrentPositionAsync: jest.fn(),
 }));
 
+// Los iconos no son lo que se prueba acá, y `expo-font` —del que dependen— no
+// está instalado en este árbol de node_modules.
+jest.mock("@expo/vector-icons", () => {
+  const { View } = jest.requireActual("react-native");
+  return { Ionicons: View };
+});
+
 jest.mock("../../api/reports", () => ({ listReports: jest.fn() }));
 jest.mock("../../auth/AuthContext", () => ({ useAuth: jest.fn() }));
 
@@ -40,6 +52,9 @@ const CITIZEN: UserProfile = {
 
 const HERE = { latitude: -32.4103, longitude: -63.24 };
 
+/** La barra de filtros arranca vacía, y viaja igual en cada consulta. */
+const NO_FILTERS = { search: "", categories: [], statuses: [] };
+
 const REPORT = {
   id: 7,
   photo: "https://example.test/report.jpg",
@@ -54,6 +69,10 @@ const REPORT = {
   comment_count: 1,
   created_at: "2026-08-27T10:00:00Z",
 };
+
+function renderMobile() {
+  return render(<FeedScreen />);
+}
 
 function feedResponse(overrides: Partial<PaginatedReports> = {}): PaginatedReports {
   return { count: 0, next: null, previous: null, results: [], ...overrides };
@@ -98,9 +117,9 @@ beforeEach(() => {
 
 describe("feed acotado al municipio", () => {
   it("pide el feed con la ubicación del vecino", async () => {
-    render(<FeedScreen />);
+    renderMobile();
 
-    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE));
+    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
   });
 
   it("muestra los reportes y el municipio que los cubre", async () => {
@@ -115,7 +134,7 @@ describe("feed acotado al municipio", () => {
       }),
     );
 
-    render(<FeedScreen />);
+    renderMobile();
 
     expect(await screen.findByText("Reportes de Villa María")).toBeTruthy();
     expect(screen.getByText(REPORT.description)).toBeTruthy();
@@ -126,7 +145,7 @@ describe("feed acotado al municipio", () => {
       feedResponse({ coverage: { in_coverage: false, municipality: null } }),
     );
 
-    render(<FeedScreen />);
+    renderMobile();
 
     expect(await screen.findByText(/fuera del área de cobertura/i)).toBeTruthy();
     expect(screen.queryByText(REPORT.description)).toBeNull();
@@ -144,7 +163,7 @@ describe("feed acotado al municipio", () => {
       }),
     );
 
-    render(<FeedScreen />);
+    renderMobile();
 
     expect(await screen.findByText("Todavía no hay reportes en Villa María.")).toBeTruthy();
   });
@@ -152,7 +171,7 @@ describe("feed acotado al municipio", () => {
   it("sin permiso de ubicación no pide el feed y explica por qué", async () => {
     locationDenied();
 
-    render(<FeedScreen />);
+    renderMobile();
 
     expect(await screen.findByText(/necesitamos tu ubicación/i)).toBeTruthy();
     expect(mockedListReports).not.toHaveBeenCalled();
@@ -165,16 +184,16 @@ describe("feed acotado al municipio", () => {
       feedResponse({ count: 1, results: [REPORT] }),
     );
 
-    render(<FeedScreen />);
+    renderMobile();
 
-    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE));
+    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
     expect(mockedListReports).toHaveBeenCalledTimes(1);
   });
 
   it("un error de carga se muestra en pantalla, no en la consola", async () => {
     mockedListReports.mockRejectedValue({ status: 404, detail: "Página inválida." });
 
-    render(<FeedScreen />);
+    renderMobile();
 
     expect(await screen.findByText(/no pudimos cargar el feed/i)).toBeTruthy();
   });
@@ -184,17 +203,39 @@ describe("feed acotado al municipio", () => {
     // sería lo contrario de lo que pide la pantalla.
     signedInAs(null);
 
-    render(<FeedScreen />);
+    renderMobile();
 
-    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE));
+    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
+  });
+
+  it("buscar vuelve a pedir el feed con el término", async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+    renderMobile();
+    await waitFor(() => expect(mockedListReports).toHaveBeenCalled());
+    mockedListReports.mockClear();
+
+    await user.type(screen.getByPlaceholderText(/buscar/i), "bache");
+    // La búsqueda se retrasa: sin esto habría una petición por tecla.
+    jest.advanceTimersByTime(500);
+
+    await waitFor(() =>
+      expect(mockedListReports).toHaveBeenCalledWith(
+        1,
+        HERE,
+        expect.objectContaining({ search: "bache" }),
+      ),
+    );
+    jest.useRealTimers();
   });
 
   it("una cuenta de trabajo ve el feed sin acotar y no pide ubicación", async () => {
     signedInAs({ ...CITIZEN, role: "validador", municipality: { id: 4, name: "Villa María" } });
 
-    render(<FeedScreen />);
+    renderMobile();
 
-    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, null));
+    await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, null, NO_FILTERS));
     expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
   });
 });

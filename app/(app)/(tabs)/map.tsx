@@ -21,6 +21,12 @@ import {
 import { participatesAsCitizen } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import ReportFilterBar, {
+  EMPTY_FILTERS,
+  countActiveFilters,
+  type ReportFilterState,
+} from "../../../src/components/ReportFilterBar";
+import { useDebouncedValue } from "../../../src/hooks/useDebouncedValue";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 import {
   CATEGORY_LABEL,
@@ -105,6 +111,11 @@ export default function MapTab() {
     setSelected(marker);
   }
 
+  const [filters, setFilters] = useState<ReportFilterState>(EMPTY_FILTERS);
+  const search = useDebouncedValue(filters.search, 400);
+  const categoryKey = filters.categories.join(",");
+  const statusKey = filters.statuses.join(",");
+
   const [markers, setMarkers] = useState<ReportMarker[]>([]);
   const [coverage, setCoverage] = useState<FeedCoverage | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -125,9 +136,20 @@ export default function MapTab() {
     }
     setError(null);
     try {
-      const data = await listMapReports(scopeCoords);
+      const data = await listMapReports(scopeCoords, {
+        search,
+        categories: filters.categories,
+        statuses: filters.statuses,
+      });
       setMarkers(data.results);
       setCoverage(data.coverage ?? null);
+      // La ficha abierta puede ser de un marcador que el filtro nuevo ya no
+      // devuelve: quedaría flotando sobre un mapa donde ese punto no está.
+      setSelected((current) =>
+        current && data.results.some((marker) => marker.id === current.id)
+          ? current
+          : null,
+      );
       return data.results;
     } catch {
       setError("No pudimos cargar el mapa. Probá de nuevo.");
@@ -135,7 +157,8 @@ export default function MapTab() {
     } finally {
       setLoading(false);
     }
-  }, [canQuery, scopeCoords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canQuery, scopeCoords, search, categoryKey, statusKey]);
 
   useEffect(() => {
     if (permission === "checking") return;
@@ -223,168 +246,182 @@ export default function MapTab() {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        initialRegion={region}
-        // El punto azul del sistema: se dibuja con su halo de precisión y se
-        // mueve solo mientras la pantalla está abierta.
-        showsUserLocation={permission === "granted"}
-        // El botón nativo queda apagado a propósito: abajo hay uno con
-        // etiqueta, que además existe en las dos plataformas por igual.
-        showsMyLocationButton={false}
-        // Tocar el mapa cierra la tarjeta: es el gesto con el que uno vuelve a
-        // ver el mapa entero. Los toques que vienen de un marcador se ignoran
-        // —en Android llegan también acá, marcados— y con ellos el que llega
-        // justo después de elegir uno: en iOS el orden de los dos eventos no
-        // está garantizado, y cerrar por ese camino borraba la tarjeta apenas
-        // se abría.
-        onPress={(event) => {
-          if (event.nativeEvent.action === "marker-press") return;
-          if (Date.now() - selectedAt.current < SELECTION_GRACE_MS) return;
-          setSelected(null);
-        }}
-        // La contraparte de `Marker.onPress`, para el caso en que el toque lo
-        // resuelva el mapa y no el marcador. Los dos caminos terminan en el
-        // mismo `selectMarker`, así que da igual cuál gane.
-        onMarkerPress={(event) => selectMarker(event.nativeEvent.id)}
-      >
-        {markers.map((marker) => (
-          <Marker
-            key={marker.id}
-            identifier={String(marker.id)}
-            coordinate={{
-              latitude: Number(marker.latitude),
-              longitude: Number(marker.longitude),
-            }}
-            pinColor={STATUS_COLOR[marker.status]}
-            // El detalle no va en un `Callout`: en Android ese globo se dibuja
-            // como una imagen del sistema, no como vistas, así que el texto
-            // salía en blanco y los toques no llegaban a lo de adentro. La
-            // tarjeta de abajo es de la app y se comporta igual en las dos
-            // plataformas.
-            onPress={() => selectMarker(String(marker.id))}
-          />
-        ))}
-      </MapView>
-
-      {error && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{error}</Text>
-          <Pressable onPress={() => void load()}>
-            <Text style={styles.bannerAction}>Reintentar</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {!error && locationNotice && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{locationNotice}</Text>
-          {permission !== "blocked" && (
-            <Pressable onPress={() => void request()}>
-              <Text style={styles.bannerAction}>Permitir ubicación</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {!error && !locationNotice && isOutOfCoverage && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>{OUT_OF_COVERAGE}</Text>
-        </View>
-      )}
-
-      {!error && !locationNotice && !isOutOfCoverage && markers.length === 0 && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            {city
-              ? `Todavía no hay reportes geolocalizados en ${city}.`
-              : "Todavía no hay reportes geolocalizados para mostrar."}
-          </Text>
-        </View>
-      )}
-
-      <Pressable
-        style={[styles.myLocation, { bottom: tabBarInset }]}
-        onPress={() => void goToMyLocation()}
-        hitSlop={6}
-      >
-        {centering ? (
-          <ActivityIndicator size="small" color="#1a73e8" />
-        ) : (
-          <Ionicons name="locate" size={18} color="#1a73e8" />
-        )}
-        <Text style={styles.myLocationText}>Mi ubicación</Text>
-      </Pressable>
-
-      {/* La leyenda y la ficha comparten el borde inferior. Con una ficha
-          abierta, el estado de ese reporte ya está escrito con su color al
-          lado: la leyenda deja de aportar y se saca en vez de encimarse. */}
-      <View
-        testID="legend"
-        style={[
-          styles.legend,
-          { bottom: tabBarInset },
-          selected !== null && styles.hidden,
-        ]}
-        pointerEvents={selected === null ? "auto" : "none"}
-      >
-        {MAPPED_STATUSES.map((status) => (
-          <View key={status} style={styles.legendItem}>
-            <View style={[styles.dot, { backgroundColor: STATUS_COLOR[status] }]} />
-            <Text style={styles.legendText}>{STATUS_LABEL[status]}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Pressable style={styles.refresh} onPress={() => void load()} hitSlop={8}>
-        <Ionicons name="refresh" size={20} color="#1a73e8" />
-      </Pressable>
+      {/* El mismo componente que el feed: los dos tienen que ofrecer el mismo
+          criterio de filtrado, y duplicarlo era garantizar que divergieran. */}
+      <ReportFilterBar filters={filters} onChange={setFilters} />
 
       {/*
-        La ficha del reporte elegido. Vive en el árbol de la app y no en un
-        `Callout` del mapa: así el texto se dibuja siempre —en Android el globo
-        nativo es una captura de imagen y el contenido llegaba en blanco— y el
-        toque para abrir el detalle es un `Pressable` común.
-
-        Va última a propósito: se dibuja por encima de la leyenda y de los
-        botones, sin depender de que las medidas de cada uno no se toquen.
+        Todo lo que flota sobre el mapa cuelga de acá y no del contenedor de la
+        pantalla. Si no, el `top` de los avisos y del botón de recargar se mide
+        desde el borde superior de la pantalla —donde ahora está la barra de
+        filtros— y se les encima.
       */}
-      {selected && (
-        <Pressable
-          style={[styles.selectedCard, { bottom: tabBarInset + 52 }]}
-          onPress={() => router.push(`/(app)/(tabs)/report/${selected.id}`)}
+      <View style={styles.mapArea}>
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={region}
+          // El punto azul del sistema: se dibuja con su halo de precisión y se
+          // mueve solo mientras la pantalla está abierta.
+          showsUserLocation={permission === "granted"}
+          // El botón nativo queda apagado a propósito: abajo hay uno con
+          // etiqueta, que además existe en las dos plataformas por igual.
+          showsMyLocationButton={false}
+          // Tocar el mapa cierra la tarjeta: es el gesto con el que uno vuelve a
+          // ver el mapa entero. Los toques que vienen de un marcador se ignoran
+          // —en Android llegan también acá, marcados— y con ellos el que llega
+          // justo después de elegir uno: en iOS el orden de los dos eventos no
+          // está garantizado, y cerrar por ese camino borraba la tarjeta apenas
+          // se abría.
+          onPress={(event) => {
+            if (event.nativeEvent.action === "marker-press") return;
+            if (Date.now() - selectedAt.current < SELECTION_GRACE_MS) return;
+            setSelected(null);
+          }}
+          // La contraparte de `Marker.onPress`, para el caso en que el toque lo
+          // resuelva el mapa y no el marcador. Los dos caminos terminan en el
+          // mismo `selectMarker`, así que da igual cuál gane.
+          onMarkerPress={(event) => selectMarker(event.nativeEvent.id)}
         >
-          <Image source={imageSource(selected.photo)} style={styles.selectedPhoto} />
-          <View style={styles.selectedBody}>
-            <Text style={styles.selectedTitle} numberOfLines={1}>
-              {CATEGORY_LABEL[selected.category] ?? selected.category}
-            </Text>
-            <View style={styles.selectedStatusRow}>
-              <View
-                style={[styles.statusDot, { backgroundColor: STATUS_COLOR[selected.status] }]}
-              />
-              <Text style={styles.selectedStatus}>
-                {STATUS_LABEL[selected.status] ?? selected.status}
-              </Text>
-            </View>
-            {!!selected.address && (
-              <Text style={styles.selectedAddress} numberOfLines={1}>
-                {shortAddress(selected.address)}
-              </Text>
-            )}
-            <Text style={styles.selectedLink}>Ver detalle</Text>
+          {markers.map((marker) => (
+            <Marker
+              key={marker.id}
+              identifier={String(marker.id)}
+              coordinate={{
+                latitude: Number(marker.latitude),
+                longitude: Number(marker.longitude),
+              }}
+              pinColor={STATUS_COLOR[marker.status]}
+              // El detalle no va en un `Callout`: en Android ese globo se dibuja
+              // como una imagen del sistema, no como vistas, así que el texto
+              // salía en blanco y los toques no llegaban a lo de adentro. La
+              // tarjeta de abajo es de la app y se comporta igual en las dos
+              // plataformas.
+              onPress={() => selectMarker(String(marker.id))}
+            />
+          ))}
+        </MapView>
+
+        {error && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{error}</Text>
+            <Pressable onPress={() => void load()}>
+              <Text style={styles.bannerAction}>Reintentar</Text>
+            </Pressable>
           </View>
-          <Pressable
-            style={styles.selectedClose}
-            onPress={() => setSelected(null)}
-            hitSlop={8}
-            accessibilityLabel="Cerrar"
-          >
-            <Ionicons name="close" size={18} color="#9ca3af" />
-          </Pressable>
+        )}
+
+        {!error && locationNotice && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{locationNotice}</Text>
+            {permission !== "blocked" && (
+              <Pressable onPress={() => void request()}>
+                <Text style={styles.bannerAction}>Permitir ubicación</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {!error && !locationNotice && isOutOfCoverage && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{OUT_OF_COVERAGE}</Text>
+          </View>
+        )}
+
+        {!error && !locationNotice && !isOutOfCoverage && markers.length === 0 && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              {countActiveFilters(filters) > 0 || search.trim()
+                ? "Ningún reporte coincide con lo que buscaste."
+                : city
+                  ? `Todavía no hay reportes geolocalizados en ${city}.`
+                  : "Todavía no hay reportes geolocalizados para mostrar."}
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          style={[styles.myLocation, { bottom: tabBarInset }]}
+          onPress={() => void goToMyLocation()}
+          hitSlop={6}
+        >
+          {centering ? (
+            <ActivityIndicator size="small" color="#1a73e8" />
+          ) : (
+            <Ionicons name="locate" size={18} color="#1a73e8" />
+          )}
+          <Text style={styles.myLocationText}>Mi ubicación</Text>
         </Pressable>
-      )}
+
+        {/* La leyenda y la ficha comparten el borde inferior. Con una ficha
+            abierta, el estado de ese reporte ya está escrito con su color al
+            lado: la leyenda deja de aportar y se saca en vez de encimarse. */}
+        <View
+          testID="legend"
+          style={[
+            styles.legend,
+            { bottom: tabBarInset },
+            selected !== null && styles.hidden,
+          ]}
+          pointerEvents={selected === null ? "auto" : "none"}
+        >
+          {MAPPED_STATUSES.map((status) => (
+            <View key={status} style={styles.legendItem}>
+              <View style={[styles.dot, { backgroundColor: STATUS_COLOR[status] }]} />
+              <Text style={styles.legendText}>{STATUS_LABEL[status]}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Pressable style={styles.refresh} onPress={() => void load()} hitSlop={8}>
+          <Ionicons name="refresh" size={20} color="#1a73e8" />
+        </Pressable>
+
+        {/*
+          La ficha del reporte elegido. Vive en el árbol de la app y no en un
+          `Callout` del mapa: así el texto se dibuja siempre —en Android el globo
+          nativo es una captura de imagen y el contenido llegaba en blanco— y el
+          toque para abrir el detalle es un `Pressable` común.
+
+          Va última a propósito: se dibuja por encima de la leyenda y de los
+          botones, sin depender de que las medidas de cada uno no se toquen.
+        */}
+        {selected && (
+          <Pressable
+            style={[styles.selectedCard, { bottom: tabBarInset + 52 }]}
+            onPress={() => router.push(`/(app)/(tabs)/report/${selected.id}`)}
+          >
+            <Image source={imageSource(selected.photo)} style={styles.selectedPhoto} />
+            <View style={styles.selectedBody}>
+              <Text style={styles.selectedTitle} numberOfLines={1}>
+                {CATEGORY_LABEL[selected.category] ?? selected.category}
+              </Text>
+              <View style={styles.selectedStatusRow}>
+                <View
+                  style={[styles.statusDot, { backgroundColor: STATUS_COLOR[selected.status] }]}
+                />
+                <Text style={styles.selectedStatus}>
+                  {STATUS_LABEL[selected.status] ?? selected.status}
+                </Text>
+              </View>
+              {!!selected.address && (
+                <Text style={styles.selectedAddress} numberOfLines={1}>
+                  {shortAddress(selected.address)}
+                </Text>
+              )}
+              <Text style={styles.selectedLink}>Ver detalle</Text>
+            </View>
+            <Pressable
+              style={styles.selectedClose}
+              onPress={() => setSelected(null)}
+              hitSlop={8}
+              accessibilityLabel="Cerrar"
+            >
+              <Ionicons name="close" size={18} color="#9ca3af" />
+            </Pressable>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -392,6 +429,8 @@ export default function MapTab() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  /** Lo que queda debajo de la barra de filtros: el mapa y sus controles. */
+  mapArea: { flex: 1 },
   map: { flex: 1 },
   selectedCard: {
     position: "absolute",

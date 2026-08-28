@@ -3,9 +3,11 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +22,7 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState("");
 
   async function handleSubmit() {
+    Keyboard.dismiss();
     setError("");
     setLoading(true);
     try {
@@ -53,9 +56,16 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* El scroll es lo que permite bajar el teclado arrastrando o tocando
+          fuera de los campos. */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       <Image
         source={require("../../assets/urbancheck_logo.png")}
         style={styles.logo}
@@ -72,6 +82,8 @@ export default function ForgotPasswordScreen() {
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        returnKeyType="send"
+        onSubmitEditing={() => void handleSubmit()}
       />
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -90,12 +102,19 @@ export default function ForgotPasswordScreen() {
       <Link href="/(auth)/login" style={styles.link}>
         Volver al inicio de sesión
       </Link>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#fff", justifyContent: "center" },
+  flex: { flex: 1, backgroundColor: "#fff" },
+  container: {
+    flexGrow: 1,
+    padding: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+  },
   logo: {
     width: 150,
     height: 150,

@@ -9,6 +9,19 @@ export const CATEGORY_LABEL: Record<ReportCategory, string> = {
   otro: "Otro",
 };
 
+/** Ícono de cada categoría, para los chips del filtro y las tarjetas. */
+export const CATEGORY_ICON: Record<ReportCategory, string> = {
+  bache: "construct-outline",
+  alumbrado: "bulb-outline",
+  basura: "trash-outline",
+  semaforo: "stopwatch-outline",
+  vereda: "walk-outline",
+  otro: "ellipsis-horizontal-outline",
+};
+
+/** Orden en el que se ofrecen las categorías al filtrar. */
+export const CATEGORY_VALUES = Object.keys(CATEGORY_LABEL) as ReportCategory[];
+
 export const STATUS_LABEL: Record<ReportStatus, string> = {
   pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
@@ -34,6 +47,20 @@ export const STATUS_COLOR: Record<ReportStatus, string> = {
 };
 
 /** Estados que se dibujan en el mapa; el backend ya excluye el resto. */
+/**
+ * Estados que se ofrecen al filtrar.
+ *
+ * Son los mismos que se dibujan en el mapa: cancelado y archivado no aparecen
+ * en el feed público, así que ofrecerlos sería ofrecer un filtro que siempre
+ * devuelve vacío.
+ */
+export const FILTERABLE_STATUS_VALUES: ReportStatus[] = [
+  "pendiente_validacion",
+  "reportado",
+  "en_proceso",
+  "resuelto",
+];
+
 export const MAPPED_STATUSES: ReportStatus[] = [
   "pendiente_validacion",
   "reportado",

@@ -1,4 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import {
+  render,
+  screen,
+  userEvent,
+  waitFor,
+} from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import ProfileScreen from "../../../app/(app)/(tabs)/profile";
@@ -146,6 +151,28 @@ describe("perfil", () => {
     expect(await screen.findByText("Validador")).toBeTruthy();
     expect(screen.queryByText("Mis reportes")).toBeNull();
     await waitFor(() => expect(mockedListMyReports).not.toHaveBeenCalled());
+  });
+
+  it("«Mis reportes» se pliega y se despliega", async () => {
+    mockedListMyReports.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [report(1, "reportado")],
+    });
+    const user = userEvent.setup();
+
+    renderProfile();
+    // Arranca desplegada: el reporte se ve sin tocar nada.
+    expect(await screen.findByText("Reporte 1")).toBeTruthy();
+
+    await user.press(screen.getByText("Mis reportes"));
+    expect(screen.queryByText("Reporte 1")).toBeNull();
+    // Plegada tampoco aparece el vacío: la lista está guardada, no vacía.
+    expect(screen.queryByText("Todavía no reportaste nada")).toBeNull();
+
+    await user.press(screen.getByText("Mis reportes"));
+    expect(await screen.findByText("Reporte 1")).toBeTruthy();
   });
 
   it("las acciones son filas, no botones apretados en una línea", async () => {

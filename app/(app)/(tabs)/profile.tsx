@@ -1,8 +1,9 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Image,
   Pressable,
@@ -123,6 +124,10 @@ export default function ProfileScreen() {
   const isCitizen = participatesAsCitizen(user);
   const isMunicipalRole = user !== null && !isCitizen;
   const [reports, setReports] = useState<Report[]>([]);
+  // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
+  // se lee como que no hay reportes, y el contador no alcanza para desmentirlo.
+  const [reportsOpen, setReportsOpen] = useState(true);
+  const chevronSpin = useRef(new Animated.Value(1)).current;
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -143,6 +148,16 @@ export default function ProfileScreen() {
         .finally(() => setLoading(false));
     }, []),
   );
+
+  function toggleReports() {
+    const opening = !reportsOpen;
+    setReportsOpen(opening);
+    Animated.timing(chevronSpin, {
+      toValue: opening ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }
 
   async function handleLogout() {
     Alert.alert("Cerrar sesión", "¿Estás seguro que querés cerrar sesión?", [
@@ -245,14 +260,37 @@ export default function ProfileScreen() {
       </View>
 
       {isCitizen && (
-        <View style={styles.sectionHeader}>
+        <Pressable
+          style={styles.sectionHeader}
+          onPress={toggleReports}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: reportsOpen }}
+          accessibilityLabel={`Mis reportes, ${reports.length}`}
+        >
           <Text style={styles.sectionTitle}>Mis reportes</Text>
           {reports.length > 0 && (
             <View style={styles.countBadge}>
               <Text style={styles.countBadgeText}>{reports.length}</Text>
             </View>
           )}
-        </View>
+          {/* La flecha ocupa el resto de la fila: el área tocable es el
+              encabezado entero, no el ícono solo. */}
+          <Animated.View
+            style={{
+              marginLeft: "auto",
+              transform: [
+                {
+                  rotate: chevronSpin.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["-90deg", "0deg"],
+                  }),
+                },
+              ],
+            }}
+          >
+            <Ionicons name="chevron-down" size={18} color="#6b7280" />
+          </Animated.View>
+        </Pressable>
       )}
     </>
   );
@@ -263,7 +301,7 @@ export default function ProfileScreen() {
       // La pantalla entera scrollea: con el encabezado fijo, en un teléfono
       // chico las acciones se comían la lista.
       ListHeaderComponent={header}
-      data={isCitizen ? reports : []}
+      data={isCitizen && reportsOpen ? reports : []}
       keyExtractor={(r) => String(r.id)}
       contentContainerStyle={{ paddingBottom: tabBarInset }}
       renderItem={({ item }) => {
@@ -312,7 +350,8 @@ export default function ProfileScreen() {
         );
       }}
       ListEmptyComponent={
-        isCitizen ? (
+        // Plegada no hay vacío que mostrar: la lista está guardada, no vacía.
+        isCitizen && reportsOpen ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <Ionicons name="megaphone-outline" size={26} color="#1a73e8" />

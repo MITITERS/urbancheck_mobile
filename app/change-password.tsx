@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -40,6 +41,7 @@ export default function ChangePasswordScreen() {
   });
 
   async function handleSubmit() {
+    Keyboard.dismiss();
     setError(null);
     if (next.length < MIN_LENGTH) {
       setError(`La contraseña nueva debe tener al menos ${MIN_LENGTH} caracteres.`);
@@ -67,7 +69,11 @@ export default function ChangePasswordScreen() {
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <Ionicons name="lock-closed-outline" size={48} color="#1a73e8" />
         <Text style={styles.title}>Cambiá tu contraseña</Text>
         <Text style={styles.subtitle}>

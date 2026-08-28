@@ -76,6 +76,9 @@ const CITIZEN: UserProfile = {
 
 const HERE = { latitude: -32.4103, longitude: -63.24 };
 
+/** La barra de filtros arranca vacía, y viaja igual en cada consulta. */
+const NO_FILTERS = { search: "", categories: [], statuses: [] };
+
 /** Un dispositivo con home indicator: la barra flotante sube la leyenda. */
 const METRICS: Metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -127,7 +130,7 @@ describe("mapa acotado al municipio", () => {
   it("pide los marcadores con la ubicación del vecino", async () => {
     renderMap();
 
-    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalledWith(HERE));
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalledWith(HERE, NO_FILTERS));
   });
 
   it("fuera de cobertura no muestra marcadores y lo explica", async () => {
@@ -185,7 +188,7 @@ describe("mapa acotado al municipio", () => {
 
     // Sin coordenadas en la consulta: su jurisdicción ya la resuelve el
     // servidor. La ubicación se sigue usando para centrar la vista.
-    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalledWith(null));
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalledWith(null, NO_FILTERS));
     expect(Location.getCurrentPositionAsync).toHaveBeenCalled();
   });
 });

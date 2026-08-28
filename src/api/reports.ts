@@ -111,12 +111,34 @@ export interface PaginatedReports {
  * ninguno—, y sin ubicación devuelve el feed completo, que es lo que ven las
  * cuentas de trabajo.
  */
-export function listReports(page = 1, coords: Coordinates | null = null) {
+/** Búsqueda y filtros del feed y del mapa (US-006 y US-020). */
+export interface ReportFilters {
+  search?: string;
+  categories?: ReportCategory[];
+  statuses?: ReportStatus[];
+}
+
+/** Agrega los filtros a la consulta. Los vacíos no viajan. */
+function appendFilters(params: URLSearchParams, filters: ReportFilters) {
+  if (filters.categories?.length) {
+    params.set("category", filters.categories.join(","));
+  }
+  if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
+  const search = filters.search?.trim();
+  if (search) params.set("search", search);
+}
+
+export function listReports(
+  page = 1,
+  coords: Coordinates | null = null,
+  filters: ReportFilters = {},
+) {
   const params = new URLSearchParams({ page: String(page) });
   if (coords) {
     params.set("latitude", String(coords.latitude));
     params.set("longitude", String(coords.longitude));
   }
+  appendFilters(params, filters);
   return api.get<PaginatedReports>(`/api/reports/?${params}`);
 }
 
@@ -159,12 +181,16 @@ export interface MapReports {
  * mapa se puede desplazar y hacer zoom, pero lo que muestra sigue siendo el
  * municipio del vecino, no el del vecino de al lado.
  */
-export function listMapReports(coords: Coordinates | null = null) {
+export function listMapReports(
+  coords: Coordinates | null = null,
+  filters: ReportFilters = {},
+) {
   const params = new URLSearchParams();
   if (coords) {
     params.set("latitude", String(coords.latitude));
     params.set("longitude", String(coords.longitude));
   }
+  appendFilters(params, filters);
   const query = params.toString();
   return api.get<MapReports>(`/api/reports/map/${query ? `?${query}` : ""}`);
 }

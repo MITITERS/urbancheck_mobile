@@ -4,9 +4,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -28,6 +30,9 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleLogin() {
+    // El teclado no tiene nada más que hacer acá: si queda abierto, tapa el
+    // error que se va a mostrar justo debajo del campo.
+    Keyboard.dismiss();
     setErrors({});
     setLoading(true);
     try {
@@ -69,9 +74,20 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/*
+        El formulario va dentro de un scroll aunque entre en pantalla: es lo que
+        da las dos formas de cerrar el teclado que uno espera —arrastrar, y
+        tocar fuera de los campos—. Sin él, una vez abierto no había manera de
+        bajarlo.
+      */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       <Image
         source={require("../../assets/urbancheck_logo.png")}
         style={styles.logo}
@@ -94,6 +110,10 @@ export default function LoginScreen() {
           secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
+          // Último campo: la tecla del teclado envía el formulario, en vez de
+          // dejarlo abierto sin nada que hacer.
+          returnKeyType="go"
+          onSubmitEditing={() => void handleLogin()}
         />
         <Pressable
           style={styles.eyeButton}
@@ -133,13 +153,15 @@ export default function LoginScreen() {
       <Link href="/(auth)/register" style={styles.link}>
         Crear cuenta
       </Link>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: "#fff" },
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     justifyContent: "center",
     backgroundColor: "#fff",

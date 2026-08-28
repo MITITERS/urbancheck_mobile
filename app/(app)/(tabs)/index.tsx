@@ -19,6 +19,12 @@ import {
 } from "../../../src/api/reports";
 import { participatesAsCitizen } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
+import ReportFilterBar, {
+  EMPTY_FILTERS,
+  countActiveFilters,
+  type ReportFilterState,
+} from "../../../src/components/ReportFilterBar";
+import { useDebouncedValue } from "../../../src/hooks/useDebouncedValue";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -102,6 +108,13 @@ export default function FeedScreen() {
     enabled: scopedToLocation,
   });
 
+  const [filters, setFilters] = useState<ReportFilterState>(EMPTY_FILTERS);
+  // La búsqueda se retrasa para no disparar una petición por tecla; las
+  // categorías y los estados son un toque, así que van directo.
+  const search = useDebouncedValue(filters.search, 400);
+  const categoryKey = filters.categories.join(",");
+  const statusKey = filters.statuses.join(",");
+
   const [reports, setReports] = useState<Report[]>([]);
   const [coverage, setCoverage] = useState<FeedCoverage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,7 +131,11 @@ export default function FeedScreen() {
   const fetchPage = useCallback(
     async (p: number) => {
       try {
-        const data = await listReports(p, coords);
+        const data = await listReports(p, coords, {
+          search,
+          categories: filters.categories,
+          statuses: filters.statuses,
+        });
         setReports((prev) => (p === 1 ? data.results : [...prev, ...data.results]));
         setCoverage(data.coverage ?? null);
         setHasMore(!!data.next);
@@ -135,7 +152,10 @@ export default function FeedScreen() {
         setRefreshing(false);
       }
     },
-    [coords],
+    // `categoryKey` y `statusKey` son las listas serializadas: sin eso, un
+    // array nuevo en cada render volvería a crear la función y a pedir todo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [coords, search, categoryKey, statusKey],
   );
 
   useFocusEffect(
@@ -176,14 +196,6 @@ export default function FeedScreen() {
     void fetchPage(page + 1);
   }
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
   const locationNotice =
     permission === "denied" || permission === "blocked"
       ? reason
@@ -192,9 +204,14 @@ export default function FeedScreen() {
         : null;
   const isOutOfCoverage = coverage !== null && !coverage.in_coverage;
   const city = coverage?.municipality?.city ?? null;
+  const isFiltering = search.trim().length > 0 || countActiveFilters(filters) > 0;
 
   return (
     <View style={styles.container}>
+      {/* La barra vive fuera de la lista y no se esconde mientras carga: si
+          desapareciera con cada búsqueda, no habría dónde corregir el texto. */}
+      <ReportFilterBar filters={filters} onChange={setFilters} />
+
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
@@ -218,6 +235,11 @@ export default function FeedScreen() {
         </View>
       )}
 
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+        </View>
+      ) : (
       <FlatList
         data={reports}
         keyExtractor={(r) => String(r.id)}
@@ -246,6 +268,21 @@ export default function FeedScreen() {
             // El motivo ya está explicado arriba: repetirlo acá sería decir dos
             // veces lo mismo en la misma pantalla.
             <View style={styles.emptyBox} />
+          ) : isFiltering ? (
+            // No es lo mismo que no haya reportes: acá los hay, pero ninguno
+            // coincide. Y se ofrece salir del filtro, que es lo que uno quiere.
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>Sin resultados</Text>
+              <Text style={styles.emptyBody}>
+                Ningún reporte coincide con lo que buscaste.
+              </Text>
+              <Pressable
+                style={styles.clearFilters}
+                onPress={() => setFilters(EMPTY_FILTERS)}
+              >
+                <Text style={styles.clearFiltersText}>Limpiar la búsqueda</Text>
+              </Pressable>
+            </View>
           ) : (
             <Text style={styles.emptyText}>
               {city ? `Todavía no hay reportes en ${city}.` : "No hay reportes aún."}
@@ -253,6 +290,7 @@ export default function FeedScreen() {
           )
         }
       />
+      )}
     </View>
   );
 }
@@ -290,6 +328,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between" },
   meta: { fontSize: 12, color: "#888" },
   emptyText: { textAlign: "center", marginTop: 40, color: "#888" },
+  clearFilters: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#e8f0fe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearFiltersText: { color: "#1a73e8", fontWeight: "700", fontSize: 14 },
   emptyBox: { paddingHorizontal: 28, paddingTop: 56, alignItems: "center" },
   emptyTitle: {
     fontSize: 16,

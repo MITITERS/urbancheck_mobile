@@ -176,6 +176,25 @@ Al enfocar el campo, la lista se lleva al final: con el teclado abierto el alto
 útil es la mitad, y sin eso uno escribe mirando la foto en vez de la
 conversación que está respondiendo.
 
+### Teclado en los formularios de sesión
+
+Login, registro, olvidé mi contraseña, restablecer y cambiar contraseña siguen
+las mismas tres reglas, porque el teclado se quedaba arriba sin forma de
+bajarlo:
+
+1. **El formulario va dentro de un `ScrollView`**, aunque entre en pantalla. Es
+   lo que da las dos formas de cerrar el teclado que uno espera:
+   `keyboardDismissMode="on-drag"` para arrastrar, y
+   `keyboardShouldPersistTaps="handled"` para que un toque fuera de los campos
+   lo baje y aun así llegue al botón. Sin el scroll no hay dónde enganchar
+   ninguna de las dos.
+2. **`Keyboard.dismiss()` al enviar.** El teclado ya no tiene nada que hacer, y
+   si queda abierto tapa los errores de validación, que se muestran justo debajo
+   de cada campo.
+3. **El último campo envía**, con `returnKeyType` (`go`, `send`) y
+   `onSubmitEditing`: la tecla del teclado hace lo que promete en vez de dejarlo
+   abierto.
+
 ### Teclado en el detalle del reporte
 
 Dos intentos anteriores, anotados porque explican por qué el cajón terminó
@@ -253,6 +272,28 @@ La bandeja de validación es **solo una lista**, ordenada por cercanía. Tuvo un
 vista de mapa propia y se quitó: era ofrecer dos veces lo mismo, y la pestaña
 Mapa ya cumple ese rol para todos los roles por igual.
 
+### Búsqueda y filtros: un solo componente para el feed y el mapa
+
+`ReportFilterBar` la comparten las dos pantallas para que ofrezcan exactamente
+el mismo criterio: búsqueda por palabra o zona, y chips de categoría y estado.
+Los chips arrancan colapsados —ocupaban demasiado alto y la búsqueda es la
+acción frecuente— con un contador de filtros activos sobre el botón.
+
+La búsqueda va con `useDebouncedValue` (400 ms): sin eso habría una petición por
+tecla. Los chips no, porque son un toque.
+
+Todo se resuelve **en el servidor**, y se combina con el acotado por ubicación:
+la cobertura decide qué municipio se ve y el filtro achica dentro de eso.
+
+El vacío distingue los dos casos, que no significan lo mismo: «todavía no hay
+reportes acá» y «ninguno coincide con lo que buscaste» —este último con el atajo
+para limpiar la búsqueda—. En el mapa, además, filtrar cierra la ficha abierta
+si su marcador ya no está entre los resultados.
+
+> Estas dos pantallas se rehicieron sobre una versión anterior del feed que no
+> tenía la barra. El componente venía de la rama de Sprint 2 y se recuperó de
+> ahí; ver la nota sobre ramas divergentes al final de este archivo.
+
 ### El feed y el mapa muestran el municipio donde estás parado
 
 El vecino ve **solo los reportes de la municipalidad cuya área de cobertura
@@ -302,6 +343,19 @@ lugar de mostrar un perfil a medias sin explicación.
 
 El listado de reportes de un perfil **no se acota por ubicación**, a diferencia
 del feed: es la obra de esa persona, no lo que pasa en el barrio de quien mira.
+
+### Las secciones largas se pliegan
+
+Dos por ahora, con el mismo comportamiento: **«Comentarios»** en el detalle del
+reporte y **«Mis reportes»** en el perfil. Se toca el encabezado entero —no la
+flecha sola, que es chica— y la flecha gira para indicar el estado. El contador
+queda a la vista aunque esté plegada.
+
+**Arrancan desplegadas** a propósito: plegada por defecto se lee como que no hay
+nada, y el contador del encabezado no alcanza para desmentirlo. El desplegable
+existe para achicar la sección cuando la lista se hace larga, no para
+esconderla. Plegada tampoco se muestra el estado vacío: la lista está guardada,
+no vacía.
 
 ### La sección de comentarios se pliega
 
@@ -399,3 +453,30 @@ solo**, sin tocar el código de la app. Desactivar un tipo **suprime el push,
 no la bandeja**: el aviso igual queda para consultar, que es el comportamiento
 menos sorpresivo y el que menos riesgo tiene de que el vecino se pierda
 información de su propio reclamo.
+
+## Nota: `feature/sprint-3` no salió de `develop`
+
+Esta rama arranca de un punto **anterior** al merge de Sprint 2 en `develop`, así
+que hay trabajo que existe en `develop` y no acá. Se descubrió al notar que la
+barra de búsqueda del feed «había desaparecido»: nunca estuvo en esta rama.
+
+Lo que quedó del otro lado, en `origin/develop`:
+
+| Commit | Qué trae |
+| --- | --- |
+| `89104c0` | Búsqueda y filtros del feed y el mapa (`ReportFilterBar`) |
+| `ce3aefb` | Marcadores por categoría y ubicación actual en el mapa |
+| `e7fb9b1` | Editar y eliminar el reporte propio, y borrar comentarios |
+| `c53f8ed` | Perfil público de otro usuario y control de privacidad |
+| `1baeb4a` | Bandeja de avisos con badge de no leídos |
+| `2e949f1` | Reencuadrar el mapa sobre los resultados al filtrar |
+| `3215a09` | Cerrar el teclado al arrastrar la lista |
+| `9622628` | Alto fijo del botón Enviar en comentarios |
+
+Varias de esas funciones **se reimplementaron acá desde cero** sin saber que ya
+existían. La barra de filtros, en cambio, se recuperó de `89104c0` y se adaptó.
+
+Antes de seguir sumando trabajo a esta rama conviene decidir qué pasa con la
+otra: un merge de `develop` va a chocar en los mismos archivos, y cuanto más
+tiempo pase, peor. Comparar `git log --oneline origin/develop ^HEAD` da la lista
+completa.
