@@ -109,6 +109,16 @@ Dos detalles que no son evidentes:
 
 ### La barra de pestañas flota: el espacio se reserva a mano
 
+> **Android:** `BottomTabBar` trae `elevation: 8` en su propio estilo. La
+> elevación de Android dibuja la sombra con la forma del borde del elemento, y
+> ese elemento es un rectángulo: se veía una sombra recta cruzando las esquinas
+> redondeadas de la isla. Se apaga con `elevation: 0` en `tabBarStyle`, que se
+> aplica último y gana. En iOS no se notaba: ahí `elevation` no hace nada.
+>
+> Los márgenes laterales salen de `useWindowDimensions()` y no de
+> `Dimensions.get()`: aquel se lee una sola vez, así que al rotar o en pantalla
+> dividida la isla se quedaba con la medida vieja.
+
 La «isla» inferior está posicionada en absoluto sobre el contenido, así que no
 le quita alto a las pantallas: cada una tiene que reservarse ese espacio o su
 último elemento queda tapado. La isla y sus medidas viven juntas en
@@ -134,29 +144,103 @@ Los tests de `src/components/__tests__/floatingTabBar.test.tsx` miran el estilo
 efectivo de los contenedores, no si el badge está en el árbol: estando recortado
 igual aparece en el árbol, que es lo que hizo que el bug pasara desapercibido.
 
+### El cajón de comentarios va anclado abajo, fuera del scroll
+
+Es el patrón del compositor de cualquier chat, y acá resuelve un problema
+concreto: adentro del `ScrollView`, el teclado tapaba lo que se escribía, y
+**cuanto más largo era el comentario, peor** —iOS lleva el campo a la vista una
+sola vez, al enfocarlo, y después el campo crece hacia abajo con cada renglón—.
+Anclado abajo crece hacia arriba, así que el cursor nunca se va debajo del
+teclado.
+
+Cuánto se levanta sale de `useKeyboardOffset()`, y **no se decide por
+plataforma**. Ese fue el error de la primera versión: daba por sentado que
+Android achica la ventana sola con `adjustResize`, y con el modo *edge-to-edge*
+—el que Expo activa por defecto desde el SDK 54— eso dejó de ser cierto. La
+ventana queda del mismo alto, el teclado se dibuja encima, y el cajón volvía a
+quedar tapado.
+
+El hook lo **mide** en vez de deducirlo: compara el alto de la ventana con el
+teclado cerrado contra el actual, y descuenta lo que la ventana ya se achicó
+sola. Sirve para los tres casos sin un solo `Platform.OS`:
+
+| | La ventana | Se levanta |
+| --- | --- | --- |
+| iOS | no se achica | el alto del teclado |
+| Android *edge-to-edge* | no se achica | el alto del teclado |
+| Android `adjustResize` | se achica sola | nada |
+
+Sin teclado, lo que se esquiva es la barra de pestañas flotante.
+
+Al enfocar el campo, la lista se lleva al final: con el teclado abierto el alto
+útil es la mitad, y sin eso uno escribe mirando la foto en vez de la
+conversación que está respondiendo.
+
 ### Teclado en el detalle del reporte
 
-El cajón de comentarios está al final de un `ScrollView` con header arriba. Ahí
-`KeyboardAvoidingView` calcula de menos —mide su marco relativo al padre y lo
-compara contra coordenadas de pantalla, así que le falta el alto del header— y
-dejaba el cajón parcialmente debajo del teclado. Se reemplazó por
-`automaticallyAdjustKeyboardInsets` (iOS ajusta el inset solo, sin que haya que
-pasarle el alto del header); en Android lo resuelve el `adjustResize` de la
-ventana.
+Dos intentos anteriores, anotados porque explican por qué el cajón terminó
+anclado abajo (ver la sección anterior):
 
-Para que el teclado se cierre cuando corresponde: `keyboardDismissMode="on-drag"`
-—arrastrar la lista lo baja—, `keyboardShouldPersistTaps="handled"` —sin esto el
-primer toque sobre «Enviar» solo cierra el teclado y hay que tocar dos veces— y
-`Keyboard.dismiss()` después de publicar el comentario.
+1. **`KeyboardAvoidingView`** calculaba de menos: mide su marco relativo al
+   padre y lo compara contra coordenadas de pantalla, así que le faltaba el alto
+   del header y dejaba el cajón parcialmente debajo del teclado.
+2. **`automaticallyAdjustKeyboardInsets`** corregía eso, pero solo al enfocar el
+   campo: el cajón seguía dentro del scroll y, al crecer con cada renglón, se
+   iba metiendo debajo del teclado.
 
-Mientras el teclado está abierto el espacio de la barra deja de reservarse: la
-barra ya está tapada y, si se mantuviera, el cajón flotaría lejos del teclado.
+Lo que sí se conserva, para que el teclado se cierre cuando corresponde:
+`keyboardDismissMode="on-drag"` —arrastrar la lista lo baja— y
+`Keyboard.dismiss()` después de publicar el comentario. `keyboardShouldPersistTaps`
+dejó de ser necesario para «Enviar» —el botón ya no vive dentro del scroll— pero
+se mantiene para el resto del contenido tocable.
 
 ### Contraseña temporal
 
 Mientras el backend informe `must_change_password: true`, el guard del layout
 raíz deja accesible **solo** la pantalla de cambio de contraseña. Vive ahí y no
 en cada pantalla para que no se pueda saltear navegando a una ruta directa.
+
+### Las fotos y el túnel de desarrollo
+
+`imageSource()` (en `src/api/client.ts`) es lo que va en el `source` de toda
+imagen que sirve el backend. Existe por una trampa del túnel: **ngrok responde
+su página de aviso en lugar del archivo** cuando el `User-Agent` parece un
+navegador. La foto llega como HTML de 2 KB y no se ve, sin ningún error a la
+vista. El header `ngrok-skip-browser-warning` lo saltea.
+
+Solo se agrega cuando la URL de la API es de un túnel: en producción no hay
+intermediario que interpretar y el header no viaja.
+
+### La ficha del mapa no es un `Callout`
+
+Tocar un marcador abre una tarjeta propia de la app, abajo, con la foto, el
+estado, la dirección y el acceso al detalle. **No se usa el `Callout` de
+`react-native-maps`**: en Android ese globo se dibuja como una captura de imagen
+y no como vistas, así que el contenido salía en blanco y los toques no llegaban
+a lo de adentro —no se podía abrir el reporte—. La tarjeta se comporta igual en
+las dos plataformas, y de paso entra la foto, que en el globo no entraba.
+
+La ficha va **última en el árbol**, así se dibuja por encima de la leyenda y de
+los botones sin depender de que las medidas de cada uno no se toquen. Y mientras
+está abierta, **la leyenda se esconde**: comparten el borde inferior y se
+encimaban; con la ficha a la vista el estado del reporte ya está escrito al lado
+de su color, así que la leyenda no aporta.
+
+La dirección se muestra con `shortAddress()` —los tres primeros tramos—: el
+geocodificador devuelve la jerarquía entera y en una ficha de un renglón esa
+cola no informa y empuja el alto.
+
+Tocar el mapa la cierra, con dos resguardos: se ignora el toque que viene
+marcado como de un marcador —en Android el mismo gesto llega también al mapa— y
+el que llega dentro de los 400 ms de haber elegido uno, porque en iOS el orden
+de esos dos eventos no está garantizado y la ficha se abría y se cerraba en el
+mismo toque.
+
+Y la selección entra por **dos caminos**: el `onPress` del marcador y el
+`onMarkerPress` del mapa. Cuál de los dos dispara depende de la plataforma y de
+la versión de `react-native-maps` —en iOS la ficha no aparecía porque el primero
+no llegaba—, así que los dos terminan en el mismo `selectMarker()`, que es
+idempotente.
 
 ### El mapa vive en su propia pestaña
 
@@ -203,6 +287,73 @@ Dos cosas quedan **fuera** del acotado, a propósito:
 Sin permiso de ubicación no se muestran reportes: se explica para qué se
 necesita y se ofrece concederlo. Mostrar los de todos los municipios sería
 justamente lo contrario de lo que piden estas pantallas.
+
+### El perfil público de otra persona
+
+Tocar un nombre —el autor del reporte, o el de cualquier comentario— abre su
+perfil (`app/(app)/user/[id]`). El nombre va en el color de acción, sin
+subrayado: se nota que es tocable sin parecer un link de página web.
+
+Qué se ve lo decide el servidor, no la pantalla (US-027). Si la persona tiene el
+perfil **en privado**, `date_joined` y `report_count` vuelven nulos y su listado
+de reportes vuelve vacío para cualquiera que no sea ella. La pantalla no infiere
+nada de esa ausencia: mira `is_public` y lo dice —«Este perfil es privado»— en
+lugar de mostrar un perfil a medias sin explicación.
+
+El listado de reportes de un perfil **no se acota por ubicación**, a diferencia
+del feed: es la obra de esa persona, no lo que pasa en el barrio de quien mira.
+
+### La sección de comentarios se pliega
+
+El encabezado «Comentarios (N)» es un desplegable: se toca y la lista se guarda,
+con la flecha girando para indicar el estado. El área tocable es la fila
+completa, no la flecha sola.
+
+**Arranca desplegada** a propósito: plegada por defecto se lee como que no hay
+comentarios, y el contador del encabezado no alcanza para desmentirlo. El
+desplegable existe para achicar la sección cuando la conversación se hace larga,
+no para esconderla.
+
+Publicar un comentario con la sección plegada la abre sola: es justo donde el
+usuario lo está buscando.
+
+### Borrar un comentario: dos derechos distintos
+
+El tacho aparece en un comentario cuando el servidor manda `can_delete`, y eso
+es cierto en dos casos que no son el mismo:
+
+- **Lo escribiste vos**, esté donde esté. Uno se arrepiente de lo que escribió.
+- **Está colgado de tu publicación**, aunque lo haya escrito otro. Quien publicó
+  el reporte modera lo que le cuelgan.
+
+El municipio no entra: no participa como vecino, y darle la tijera sobre lo que
+dicen los vecinos en un reclamo que después va a resolver lo pondría de los dos
+lados del mismo caso.
+
+Al borrar, el comentario se saca de la lista en el momento y se descuenta del
+contador, sin volver a pedir el reporte entero: lo único que cambió es que ese
+comentario ya no está.
+
+### Editar y eliminar: del autor, y con fecha de vencimiento
+
+El detalle muestra **Editar** y **Eliminar** solo cuando el servidor manda
+`can_edit: true`, que es a la vez «sos el autor» y «el reporte todavía está en
+un estado editable». La app **no replica** esa regla de estados: la consulta.
+Cuando deja de ser editable —el municipio tomó el reporte— los botones no
+desaparecen sin más: al autor se le dice por qué.
+
+La pantalla de edición toca solo lo que el servidor acepta: descripción,
+categoría y foto. **La ubicación no se edita**, y se explica en la propia
+pantalla: cambiarla convertiría el reporte en otro distinto y dejaría
+inconsistente el historial de estados ya registrado. Si el lugar es otro, va un
+reporte nuevo.
+
+La foto solo viaja si se eligió una nueva; si no, no se re-sube el mismo archivo
+en cada guardado. Y como en el alta, se re-codifica a JPEG: iOS entrega HEIC
+desde la galería y el backend lo rechaza.
+
+Vive fuera de las pestañas (`app/(app)/edit-report/[id]`), como editar perfil: es
+una tarea que se abre, se termina y se cierra, no una sección de la app.
 
 ### Ubicación
 

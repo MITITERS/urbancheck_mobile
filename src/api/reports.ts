@@ -34,6 +34,16 @@ export interface Comment {
   author: ReportAuthor;
   text: string;
   created_at: string;
+  /** Si lo escribió quien está mirando. Sirve para distinguirlo a la vista. */
+  is_mine: boolean;
+  /**
+   * Si quien mira puede borrarlo: lo escribió, o es su reporte.
+   *
+   * Son dos derechos distintos —arrepentirse de lo propio, y moderar la propia
+   * publicación— y los decide el servidor. La app muestra el botón según esto
+   * en lugar de replicar la regla.
+   */
+  can_delete: boolean;
 }
 
 export interface Report {
@@ -55,6 +65,14 @@ export interface ReportDetail extends Report {
   is_liked: boolean;
   comments: Comment[];
   status_history: StatusHistoryEntry[];
+  /**
+   * Si quien mira puede editar y eliminar este reporte (US-018 y US-019).
+   *
+   * Lo decide el servidor: hay que ser el autor **y** el reporte todavía tiene
+   * que estar en un estado editable —una vez que el municipio lo toma, deja de
+   * serlo—. La app no replica esa regla, la consulta.
+   */
+  can_edit: boolean;
 }
 
 /** La municipalidad que cubre la ubicación del vecino, resumida. */
@@ -106,6 +124,17 @@ export function listMyReports(page = 1) {
   return api.get<PaginatedReports>(`/api/reports/?mine=true&page=${page}`);
 }
 
+/**
+ * Reportes de una persona, para su perfil público (US-027).
+ *
+ * No se acota por ubicación: es la obra de alguien, no el feed del barrio. Si
+ * esa persona tiene el perfil en privado, el servidor devuelve la lista vacía a
+ * cualquiera que no sea ella.
+ */
+export function listReportsByAuthor(authorId: number, page = 1) {
+  return api.get<PaginatedReports>(`/api/reports/?author=${authorId}&page=${page}`);
+}
+
 /** Marcadores geolocalizados, sin paginar: el mapa los necesita todos. */
 export interface ReportMarker {
   id: number;
@@ -148,6 +177,22 @@ export function createReport(data: FormData) {
   return api.post<Report>("/api/reports/", data);
 }
 
+/**
+ * Edita un reporte propio (US-018): descripción, categoría y foto.
+ *
+ * La ubicación no se edita: cambiarla convertiría el reporte en otro distinto y
+ * dejaría inconsistente el historial ya registrado. Va como `FormData` porque
+ * puede llevar una foto nueva.
+ */
+export function updateReport(id: number, data: FormData) {
+  return api.patch<ReportDetail>(`/api/reports/${id}/`, data);
+}
+
+/** Borra un reporte propio (US-019). Solo mientras el municipio no lo tomó. */
+export function deleteReport(id: number) {
+  return api.delete(`/api/reports/${id}/`);
+}
+
 export function likeReport(id: number) {
   return api.post(`/api/reports/${id}/like/`);
 }
@@ -162,6 +207,11 @@ export function getComments(id: number) {
 
 export function addComment(id: number, text: string) {
   return api.post<Comment>(`/api/reports/${id}/comments/`, { text });
+}
+
+/** Borra un comentario (US-009). Lo permite su autor o el dueño del reporte. */
+export function deleteComment(id: number) {
+  return api.delete(`/api/comments/${id}/`);
 }
 
 export interface GeocodeResult {

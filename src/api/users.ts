@@ -29,6 +29,26 @@ export function getMe() {
   return api.get<UserProfile>("/api/users/me/");
 }
 
+/**
+ * Perfil público de otra persona (US-027).
+ *
+ * Si tiene el perfil en privado, `date_joined` y `report_count` viajan nulos:
+ * el servidor lo dice así para que el cliente no tenga que inferirlo de la
+ * ausencia de los campos.
+ */
+export interface PublicProfile {
+  id: number;
+  name: string;
+  avatar: string | null;
+  is_public: boolean;
+  date_joined: string | null;
+  report_count: number | null;
+}
+
+export function getPublicProfile(id: number) {
+  return api.get<PublicProfile>(`/api/users/${id}/`);
+}
+
 export function patchMe(data: FormData) {
   return api.patch<UserProfile>("/api/users/me/", data);
 }

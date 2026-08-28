@@ -2,14 +2,18 @@ import { api } from "../client";
 import {
   addComment,
   createReport,
+  deleteComment,
+  deleteReport,
   geocodeAddress,
   getComments,
   getReport,
   likeReport,
   listMapReports,
+  listReportsByAuthor,
   listMyReports,
   listReports,
   unlikeReport,
+  updateReport,
 } from "../reports";
 
 jest.mock("../client", () => ({
@@ -61,6 +65,13 @@ describe("reports api", () => {
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/");
   });
 
+  it("listReportsByAuthor asks for that author's reports, unscoped", () => {
+    // Sin coordenadas: es la obra de alguien, no el feed del barrio.
+    listReportsByAuthor(5);
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?author=5&page=1");
+  });
+
   it("getReport requests the detail endpoint", () => {
     getReport(42);
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/42/");
@@ -70,6 +81,25 @@ describe("reports api", () => {
     const form = new FormData();
     createReport(form);
     expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/", form);
+  });
+
+  it("updateReport patches the report with its FormData", () => {
+    const form = new FormData();
+    updateReport(42, form);
+
+    expect(mockedApi.patch).toHaveBeenCalledWith("/api/reports/42/", form);
+  });
+
+  it("deleteReport deletes the report itself, not its like", () => {
+    deleteReport(42);
+
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/reports/42/");
+  });
+
+  it("deleteComment targets the comment resource, not the report", () => {
+    deleteComment(9);
+
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/comments/9/");
   });
 
   it("likeReport posts to the like endpoint", () => {

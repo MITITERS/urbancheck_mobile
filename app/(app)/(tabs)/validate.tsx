@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { imageSource } from "../../../src/api/client";
 import {
   formatDistance,
   listPendingValidation,
@@ -118,7 +119,7 @@ export default function ValidateTab() {
               style={styles.card}
               onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
             >
-              <Image source={{ uri: item.photo }} style={styles.thumb} />
+              <Image source={imageSource(item.photo)} style={styles.thumb} />
               <View style={styles.cardBody}>
                 <Text style={styles.cardCategory}>
                   {CATEGORY_LABEL[item.category] ?? item.category}

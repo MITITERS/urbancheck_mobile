@@ -38,6 +38,12 @@ export default function TabsLayout() {
           // El fondo y las esquinas redondeadas los pinta la isla: un fondo
           // opaco acá taparía esas esquinas con un rectángulo.
           backgroundColor: "transparent",
+          // `BottomTabBar` trae `elevation: 8` propio. En iOS no hace nada,
+          // pero en Android la elevación dibuja una sombra con la forma del
+          // borde del elemento —y este es un rectángulo—, así que aparecía una
+          // sombra recta atravesando las esquinas redondeadas de la isla. La
+          // sombra la pone la isla, que sí es redondeada.
+          elevation: 0,
           height: TAB_BAR_HEIGHT,
           paddingTop: 8,
         },

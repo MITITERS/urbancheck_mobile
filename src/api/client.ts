@@ -1,5 +1,8 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Si la API se alcanza por un túnel de desarrollo (ver `imageSource`). */
+const TUNNELED_API = /ngrok|trycloudflare|loca\.lt/.test(BASE_URL);
+
 let _sessionToken: string | null = null;
 let _onUnauthorized: (() => void) | null = null;
 
@@ -57,6 +60,24 @@ async function request<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+/**
+ * `source` para una imagen que sirve el backend.
+ *
+ * Existe por el túnel de desarrollo: **ngrok responde su página de aviso en
+ * lugar del archivo** cuando el `User-Agent` parece un navegador, y ahí la foto
+ * llega como HTML y no se ve. El header `ngrok-skip-browser-warning` lo saltea.
+ *
+ * Solo se agrega cuando la API apunta a un túnel: en producción no hay ningún
+ * intermediario que interpretar, y un header de más no tiene por qué viajar.
+ * Las imágenes locales (una foto recién elegida del carrete) no lo necesitan,
+ * pero tampoco les molesta.
+ */
+export function imageSource(uri: string) {
+  return TUNNELED_API
+    ? { uri, headers: { "ngrok-skip-browser-warning": "1" } }
+    : { uri };
 }
 
 export function uriToBlob(uri: string): Promise<Blob> {

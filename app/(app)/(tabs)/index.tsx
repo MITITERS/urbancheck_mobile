@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { imageSource } from "../../../src/api/client";
 import {
   type FeedCoverage,
   type Report,
@@ -60,7 +61,7 @@ function ReportCard({ item }: { item: Report }) {
       style={styles.card}
       onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
     >
-      <Image source={{ uri: item.photo }} style={styles.photo} />
+      <Image source={imageSource(item.photo)} style={styles.photo} />
       <View style={styles.cardBody}>
         <Text style={styles.category}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
         <Text style={styles.description} numberOfLines={2}>

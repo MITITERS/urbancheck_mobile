@@ -8,7 +8,6 @@ import {
   Image,
   Keyboard,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,17 +19,22 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 
+import { imageSource } from "../../../../src/api/client";
 import {
   addComment,
+  deleteComment,
+  deleteReport,
   getReport,
   likeReport,
+  type Comment,
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
+import { describeApiError } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
-import { useKeyboardVisible } from "../../../../src/components/useKeyboardVisible";
+import { useKeyboardOffset } from "../../../../src/components/useKeyboardVisible";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
 import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
@@ -51,9 +55,9 @@ const TIMELINE_STEPS = [
   "resuelto",
 ] as const;
 
-// Aire entre el cajón de comentarios y el teclado abierto. Con el teclado
-// cerrado el espacio lo define la barra de pestañas flotante.
-const COMMENT_BOX_KEYBOARD_MARGIN = 16;
+// Aire al final del contenido scrolleable. Con el cajón de comentarios fijo
+// abajo, el scroll termina donde empieza el cajón: alcanza con un respiro.
+const SCROLL_BOTTOM_PADDING = 16;
 
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
@@ -72,9 +76,9 @@ export default function ReportDetailScreen() {
   // La barra de pestañas flota sobre el contenido: sin este espacio reservado,
   // el cajón de comentarios queda debajo de ella y no se puede ni leer ni tocar.
   const tabBarInset = useFloatingTabBarInset();
-  // Con el teclado abierto la barra queda tapada, así que ese espacio deja de
-  // hacer falta: si se mantuviera, el cajón flotaría lejos del teclado.
-  const keyboardVisible = useKeyboardVisible();
+  // Cuánto tapa el teclado de lo que hay anclado abajo. Ya viene descontado lo
+  // que la ventana se achicó sola, si es que se achicó.
+  const keyboardOffset = useKeyboardOffset();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
@@ -83,8 +87,13 @@ export default function ReportDetailScreen() {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [isEnlarged, setIsEnlarged] = useState(false);
-  const [isPortrait, setIsPortrait] = useState(false);
+  // Los comentarios arrancan a la vista: esconderlos por defecto se lee como
+  // que no hay ninguno. El desplegable es para poder achicar la sección cuando
+  // la conversación se hace larga, no para ocultarla.
+  const [commentsOpen, setCommentsOpen] = useState(true);
+  const chevronSpin = useRef(new Animated.Value(1)).current;
   const containerHeight = useRef(new Animated.Value(240)).current;
 
   // Left-edge swipe-back gesture (bottom-tabs has no native back gesture).
@@ -101,6 +110,16 @@ export default function ReportDetailScreen() {
       },
     }),
   ).current;
+
+  function toggleComments() {
+    const opening = !commentsOpen;
+    setCommentsOpen(opening);
+    Animated.timing(chevronSpin, {
+      toValue: opening ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }
 
   function toggleEnlarged() {
     Animated.timing(containerHeight, {
@@ -121,18 +140,6 @@ export default function ReportDetailScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (report?.photo) {
-      Image.getSize(
-        report.photo,
-        (w, h) => {
-          setIsPortrait(h > w);
-        },
-        () => {
-          setIsPortrait(false);
-        },
-      );
-    }
-
     if (report?.latitude && report?.longitude) {
       mapRef.current?.animateToRegion(
         {
@@ -191,6 +198,9 @@ export default function ReportDetailScreen() {
           : r,
       );
       setCommentText("");
+      // Con la sección plegada, el comentario recién publicado no se vería: se
+      // despliega sola, que es donde el usuario lo está buscando.
+      if (!commentsOpen) toggleComments();
       // El comentario ya se fue: el teclado no tiene por qué seguir tapando la
       // lista donde el usuario quiere verlo aparecer.
       Keyboard.dismiss();
@@ -225,25 +235,98 @@ export default function ReportDetailScreen() {
   // Las cuentas de trabajo leen el reporte y los comentarios de los vecinos,
   // pero no aportan: se esconden los controles, no el contenido.
   const canParticipate = participatesAsCitizen(user);
+  /**
+   * Cuánto se levanta el cajón de comentarios.
+   *
+   * Con el teclado cerrado, lo que tiene que esquivar es la barra de pestañas,
+   * que flota sobre el contenido. Con el teclado abierto, lo que tapa el
+   * teclado: `useKeyboardOffset()` lo mide en lugar de deducirlo de la
+   * plataforma, que era lo que fallaba —en Android *edge-to-edge* la ventana no
+   * se achica, así que suponer que sí dejaba el cajón debajo del teclado—.
+   */
+  const composerBottom = keyboardOffset > 0 ? keyboardOffset : tabBarInset;
+  const isAuthor = user !== null && user.id === report.author.id;
+
+  function confirmDelete() {
+    Alert.alert(
+      "¿Eliminar el reporte?",
+      "Se borra para siempre, junto con sus comentarios y sus me gusta. No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: () => void handleDelete(),
+        },
+      ],
+    );
+  }
+
+  function confirmDeleteComment(comment: Comment) {
+    Alert.alert(
+      "¿Eliminar el comentario?",
+      comment.is_mine
+        ? "Se borra para siempre."
+        : `Se borra el comentario de ${comment.author.name}. No se puede deshacer.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: () => void handleDeleteComment(comment.id),
+        },
+      ],
+    );
+  }
+
+  async function handleDeleteComment(commentId: number) {
+    try {
+      await deleteComment(commentId);
+      // Se saca de la lista en el momento, sin volver a pedir el reporte: lo
+      // único que cambió es que ese comentario ya no está.
+      setReport((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              comments: prev.comments.filter((c) => c.id !== commentId),
+              comment_count: Math.max(0, prev.comment_count - 1),
+            },
+      );
+    } catch (err: unknown) {
+      const described = describeApiError(err, "No pudimos eliminar el comentario");
+      Alert.alert(described.title, described.message);
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await deleteReport(Number(id));
+      router.back();
+    } catch (err: unknown) {
+      // El servidor lo rechaza si el municipio lo tomó mientras la pantalla
+      // estaba abierta: se dice, en vez de quedar como promesa sin atrapar.
+      const described = describeApiError(err, "No pudimos eliminar el reporte");
+      Alert.alert(described.title, described.message);
+    }
+  }
 
   return (
     <View style={{ flex: 1 }} {...swipeBack.panHandlers}>
       <ScrollView
+        ref={scrollRef}
         style={styles.container}
-        // Reemplaza al `KeyboardAvoidingView` que había acá: con un header
-        // arriba, éste calcula de menos —mide su marco relativo al padre y lo
-        // compara contra coordenadas de pantalla— y dejaba el cajón de
-        // comentarios parcialmente debajo del teclado. iOS ajusta el inset solo
-        // y sin que haya que pasarle el alto del header; en Android lo resuelve
-        // el `adjustResize` de la ventana.
-        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        // Sin ajuste automático de insets: el cajón de comentarios ya no vive
+        // acá adentro, así que este scroll no tiene que esquivar el teclado.
+        // Lo esquiva el contenedor, que achica esta lista y sube el cajón.
         contentContainerStyle={{
-          paddingBottom: keyboardVisible
-            ? COMMENT_BOX_KEYBOARD_MARGIN
-            : tabBarInset,
+          // Sin cajón —una cuenta de trabajo no comenta— el contenido tiene que
+          // dejar libre la barra de pestañas flotante por su cuenta.
+          paddingBottom: canParticipate ? SCROLL_BOTTOM_PADDING : tabBarInset,
         }}
-        // Sin esto el primer toque sobre «Enviar» con el teclado abierto solo lo
-        // cierra y no llega al botón: hay que tocar dos veces para comentar.
+        // Con el teclado abierto, el primer toque sobre algo tocable de esta
+        // lista solo lo cerraría, sin llegar al elemento. («Enviar» ya no
+        // depende de esto: vive fuera del scroll.)
         keyboardShouldPersistTaps="handled"
         // Arrastrar la pantalla cierra el teclado, que es lo que el usuario
         // espera cuando quiere volver a leer los comentarios.
@@ -266,7 +349,7 @@ export default function ReportDetailScreen() {
             >
               <View style={{ width, height: "100%", position: "relative" }}>
                 <Image
-                  source={{ uri: report.photo }}
+                  source={imageSource(report.photo)}
                   style={{ width, height: "100%" }}
                   onLoadStart={() => setImgLoaded(false)}
                   onLoad={() => setImgLoaded(true)}
@@ -276,15 +359,20 @@ export default function ReportDetailScreen() {
                     <ActivityIndicator color="#bbb" />
                   </View>
                 )}
-                {isPortrait && (
-                  <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
-                    <Ionicons
-                      name={isEnlarged ? "contract-outline" : "resize-outline"}
-                      size={20}
-                      color="#333"
-                    />
-                  </Pressable>
-                )}
+                {/* Siempre disponible: antes solo aparecía si la foto era
+                    vertical, y con una apaisada —o si `Image.getSize` fallaba,
+                    que es fácil detrás de un túnel— no había forma de ampliarla. */}
+                <Pressable
+                  style={styles.resizeBtn}
+                  onPress={toggleEnlarged}
+                  accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
+                >
+                  <Ionicons
+                    name={isEnlarged ? "contract-outline" : "resize-outline"}
+                    size={20}
+                    color="#333"
+                  />
+                </Pressable>
               </View>
               <View style={{ width, height: "100%", position: "relative" }}>
                 <MapView
@@ -345,7 +433,7 @@ export default function ReportDetailScreen() {
         ) : (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
             <Image
-              source={{ uri: report.photo }}
+              source={imageSource(report.photo)}
               style={{ width, height: "100%" }}
               onLoadStart={() => setImgLoaded(false)}
               onLoad={() => setImgLoaded(true)}
@@ -355,15 +443,17 @@ export default function ReportDetailScreen() {
                 <ActivityIndicator color="#bbb" />
               </View>
             )}
-            {isPortrait && (
-              <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
-                <Ionicons
-                  name={isEnlarged ? "contract-outline" : "resize-outline"}
-                  size={20}
-                  color="#333"
-                />
-              </Pressable>
-            )}
+            <Pressable
+              style={styles.resizeBtn}
+              onPress={toggleEnlarged}
+              accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
+            >
+              <Ionicons
+                name={isEnlarged ? "contract-outline" : "resize-outline"}
+                size={20}
+                color="#333"
+              />
+            </Pressable>
           </Animated.View>
         )}
 
@@ -382,8 +472,15 @@ export default function ReportDetailScreen() {
           </View>
           <Text style={styles.description}>{report.description}</Text>
           <Text style={styles.meta}>
-            Por {report.author.name} •{" "}
-            {new Date(report.created_at).toLocaleDateString("es-AR")}
+            Por{" "}
+            <Text
+              style={styles.authorLink}
+              onPress={() => router.push(`/(app)/user/${report.author.id}`)}
+              suppressHighlighting
+            >
+              {report.author.name}
+            </Text>{" "}
+            • {new Date(report.created_at).toLocaleDateString("es-AR")}
           </Text>
           {(report.latitude || report.address) && (
             <Text style={styles.location}>
@@ -394,6 +491,37 @@ export default function ReportDetailScreen() {
             </Text>
           )}
         </View>
+
+        {/* Editar y eliminar son del autor, y solo mientras el municipio no
+            haya tomado el reporte. Quién y cuándo lo decide el servidor con
+            `can_edit`: la app no replica la regla de estados. */}
+        {report.can_edit && (
+          <View style={styles.ownerActions}>
+            <Pressable
+              style={styles.ownerBtn}
+              onPress={() => router.push(`/(app)/edit-report/${report.id}`)}
+            >
+              <Ionicons name="create-outline" size={17} color="#1a73e8" />
+              <Text style={styles.ownerBtnText}>Editar</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.ownerBtn, styles.ownerBtnDanger]}
+              onPress={confirmDelete}
+            >
+              <Ionicons name="trash-outline" size={17} color="#e53935" />
+              <Text style={[styles.ownerBtnText, { color: "#e53935" }]}>Eliminar</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Al autor se le explica por qué dejó de poder editarlo, en lugar de
+            que los botones desaparezcan sin motivo. */}
+        {isAuthor && !report.can_edit && (
+          <Text style={styles.ownerLocked}>
+            El municipio ya tomó este reporte, así que no se puede editar ni
+            eliminar.
+          </Text>
+        )}
 
         {canParticipate ? (
           <Pressable style={styles.likeBtn} onPress={handleLike}>
@@ -530,28 +658,93 @@ export default function ReportDetailScreen() {
 
         {/* Comments */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Comentarios ({report.comment_count})
-          </Text>
-          {report.comments.map((c) => (
-            <View key={c.id} style={styles.comment}>
-              <Text style={styles.commentAuthor}>{c.author.name}</Text>
-              <Text style={styles.commentText}>{c.text}</Text>
-              <Text style={styles.commentDate}>
-                {new Date(c.created_at).toLocaleDateString("es-AR")}
-              </Text>
-            </View>
-          ))}
+          {/* El encabezado entero es el control: tocar solo la flecha, que es
+              chica, obliga a apuntar. */}
+          <Pressable
+            style={styles.commentsHeader}
+            onPress={toggleComments}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: commentsOpen }}
+            accessibilityLabel={`Comentarios, ${report.comment_count}`}
+          >
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+              Comentarios ({report.comment_count})
+            </Text>
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    rotate: chevronSpin.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["-90deg", "0deg"],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Ionicons name="chevron-down" size={18} color="#6b7280" />
+            </Animated.View>
+          </Pressable>
+
+          {commentsOpen && report.comments.length === 0 && (
+            <Text style={styles.noComments}>Todavía no hay comentarios.</Text>
+          )}
+
+          {commentsOpen &&
+            report.comments.map((c) => (
+              <View key={c.id} style={styles.comment}>
+                <View style={styles.commentHeader}>
+                  <Text
+                    style={[styles.commentAuthor, styles.authorLink]}
+                    onPress={() => router.push(`/(app)/user/${c.author.id}`)}
+                    suppressHighlighting
+                  >
+                    {c.is_mine ? "Vos" : c.author.name}
+                  </Text>
+                  {/* Quién puede borrarlo lo decide el servidor con `can_delete`:
+                      el autor del comentario, o el dueño de la publicación. */}
+                  {c.can_delete && (
+                    <Pressable
+                      onPress={() => confirmDeleteComment(c)}
+                      hitSlop={10}
+                      accessibilityLabel="Eliminar comentario"
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#9ca3af" />
+                    </Pressable>
+                  )}
+                </View>
+                <Text style={styles.commentText}>{c.text}</Text>
+                <Text style={styles.commentDate}>
+                  {new Date(c.created_at).toLocaleDateString("es-AR")}
+                </Text>
+              </View>
+            ))}
         </View>
 
-        {canParticipate && (
-        <View style={styles.commentInput}>
+      </ScrollView>
+
+      {/*
+        El cajón vive fuera del scroll y anclado abajo, como el de cualquier
+        chat. Adentro, el teclado tapaba lo que se escribía: iOS lleva el campo
+        a la vista una sola vez, al enfocarlo, y después el campo crece hacia
+        abajo con cada renglón nuevo —por eso empeoraba cuanto más largo era el
+        comentario—. Anclado, crece hacia arriba y el cursor nunca se va abajo.
+      */}
+      {canParticipate && (
+        <View style={[styles.commentInput, { marginBottom: composerBottom }]}>
           <TextInput
             style={styles.commentField}
             placeholder="Escribí un comentario..."
             value={commentText}
             onChangeText={setCommentText}
             multiline
+            // Al enfocar, la lista se lleva al final: con el teclado abierto el
+            // alto útil es la mitad, y sin esto uno escribe mirando la foto en
+            // vez de la conversación que está respondiendo. El retraso deja que
+            // el teclado termine de subir y el layout ya esté achicado.
+            onFocus={() => {
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
+            }}
           />
           <Pressable
             style={[styles.sendBtn, submitting && { opacity: 0.6 }]}
@@ -565,13 +758,37 @@ export default function ReportDetailScreen() {
             )}
           </Pressable>
         </View>
-        )}
-      </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  ownerActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  ownerBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#e8f0fe",
+  },
+  ownerBtnDanger: { backgroundColor: "#fce8e6" },
+  ownerBtnText: { fontSize: 14, fontWeight: "700", color: "#1a73e8" },
+  ownerLocked: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    fontSize: 12.5,
+    color: "#9ca3af",
+    lineHeight: 17,
+  },
   container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   photo: { width: "100%", height: 240 },
@@ -637,6 +854,15 @@ const styles = StyleSheet.create({
   },
   likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 16 },
   sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
+  commentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    // El área tocable llega hasta los bordes de la sección, no solo al texto.
+    paddingVertical: 4,
+    marginTop: -4,
+  },
+  noComments: { fontSize: 13, color: "#9ca3af", marginBottom: 4 },
   timeline: { flexDirection: "row", marginTop: 6, paddingHorizontal: 4 },
   tlStep: { flex: 1, alignItems: "center" },
   tlLine: {
@@ -687,7 +913,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
   },
+  commentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   commentAuthor: { fontWeight: "600", fontSize: 13, marginBottom: 2 },
+  // El nombre lleva al perfil público: se marca en el color de acción para que
+  // se note que es tocable, sin subrayarlo como un link de web.
+  authorLink: { color: "#1a73e8", fontWeight: "600" },
   commentText: { fontSize: 14, color: "#333" },
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
   likeCount: {
@@ -698,13 +932,19 @@ const styles = StyleSheet.create({
   likeCountText: { fontSize: 16, color: "#6b7280" },
   commentInput: {
     flexDirection: "row",
+    // Se alinean abajo: cuando el campo crece con el texto, el botón queda a
+    // la altura del último renglón en vez de estirarse con él.
+    alignItems: "flex-end",
     padding: 12,
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: "#eee",
+    // Fuera del scroll, el cajón tiene que pintar su propio fondo.
+    backgroundColor: "#fff",
   },
   commentField: {
     flex: 1,
+    minHeight: 40,
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
@@ -717,6 +957,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     justifyContent: "center",
+    // Alto explícito: la fila ya no estira sus hijos —se alinean abajo— así
+    // que sin esto el botón se encogería al alto de su texto.
+    height: 40,
   },
   sendBtnText: { color: "#fff", fontWeight: "600" },
   mapTypeBtn: {

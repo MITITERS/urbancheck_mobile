@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { imageSource } from "../../src/api/client";
 import { describeApiError, type ApiErrorDescription } from "../../src/api/errors";
 import { getMe, patchMe, type UserProfile } from "../../src/api/users";
 import { Notice } from "../../src/components/Notice";
@@ -132,7 +133,7 @@ export default function EditProfileScreen() {
           <View style={styles.avatarSection}>
             <Pressable style={styles.avatarWrapper} onPress={pickAvatar}>
               {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                <Image source={imageSource(avatarUri)} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Text style={styles.avatarInitial}>

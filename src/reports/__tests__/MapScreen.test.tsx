@@ -1,4 +1,10 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import {
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+  waitFor,
+} from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import MapTab from "../../../app/(app)/(tabs)/map";
@@ -17,14 +23,18 @@ jest.mock("react-native-maps", () => {
   const MapView = React.forwardRef(
     (props: Record<string, unknown>, ref: unknown) => {
       React.useImperativeHandle(ref, () => ({ animateToRegion }));
-      return React.createElement(View, props);
+      return React.createElement(View, { testID: "map", ...props });
     },
   );
+  // El marcador se representa como un `Pressable` para poder tocarlo desde el
+  // test: es la interacción que reemplazó al `Callout` nativo.
+  const { Pressable } = jest.requireActual("react-native");
+  const Marker = ({ onPress, ...props }: Record<string, unknown>) =>
+    React.createElement(Pressable, { onPress, accessibilityLabel: "marcador", ...props });
   return {
     __esModule: true,
     default: MapView,
-    Marker: View,
-    Callout: View,
+    Marker,
     animateToRegion,
   };
 });
@@ -220,5 +230,96 @@ describe("botón de mi ubicación", () => {
     await waitFor(() =>
       expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalled(),
     );
+  });
+});
+
+describe("ficha del reporte elegido", () => {
+  it("tocar un marcador muestra su ficha y lleva al detalle", async () => {
+    const push = jest.fn();
+    jest.requireMock("expo-router").useRouter = () => ({ push });
+    mockedListMapReports.mockResolvedValue({ results: [MARKER] });
+    const user = userEvent.setup();
+
+    renderMap();
+    const marker = await screen.findByLabelText("marcador");
+
+    // En Android el globo nativo llegaba en blanco y no recibía toques: la
+    // ficha es de la app, así que su texto se dibuja siempre.
+    await user.press(marker);
+    expect(await screen.findByText("Ver detalle")).toBeTruthy();
+    expect(screen.getByText("Buenos Aires 100")).toBeTruthy();
+
+    await user.press(screen.getByText("Ver detalle"));
+    expect(push).toHaveBeenCalledWith(`/(app)/(tabs)/report/${MARKER.id}`);
+  });
+
+  it("también abre la ficha cuando el toque lo resuelve el mapa", async () => {
+    // En iOS el toque sobre un marcador puede llegar por `onMarkerPress` del
+    // mapa en vez de por el `onPress` del marcador: los dos caminos tienen que
+    // terminar en la misma ficha.
+    mockedListMapReports.mockResolvedValue({ results: [MARKER] });
+
+    renderMap();
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
+
+    fireEvent(screen.getByTestId("map"), "markerPress", {
+      nativeEvent: { id: String(MARKER.id) },
+    });
+
+    expect(await screen.findByText("Ver detalle")).toBeTruthy();
+  });
+
+  it("con la ficha abierta se esconde la leyenda", async () => {
+    // Comparten el borde inferior de la pantalla y se encimaban. Con la ficha
+    // a la vista, el estado del reporte ya está escrito al lado de su color.
+    mockedListMapReports.mockResolvedValue({ results: [MARKER] });
+
+    renderMap();
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
+    const legend = screen.getByTestId("legend");
+
+    fireEvent(screen.getByTestId("map"), "markerPress", {
+      nativeEvent: { id: String(MARKER.id) },
+    });
+    await screen.findByText("Ver detalle");
+
+    expect(legend).toHaveStyle({ opacity: 0 });
+  });
+
+  it("acorta la dirección del geocodificador", async () => {
+    mockedListMapReports.mockResolvedValue({
+      results: [
+        {
+          ...MARKER,
+          address:
+            "442, La Rioja, General Güemes, Villa María, Municipio de Villa María, Córdoba",
+        },
+      ],
+    });
+
+    renderMap();
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
+    fireEvent(screen.getByTestId("map"), "markerPress", {
+      nativeEvent: { id: String(MARKER.id) },
+    });
+
+    expect(await screen.findByText("442, La Rioja, General Güemes")).toBeTruthy();
+  });
+
+  it("un toque en el mapa no cierra la ficha recién abierta", async () => {
+    mockedListMapReports.mockResolvedValue({ results: [MARKER] });
+
+    renderMap();
+    await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
+    fireEvent(screen.getByTestId("map"), "markerPress", {
+      nativeEvent: { id: String(MARKER.id) },
+    });
+    await screen.findByText("Ver detalle");
+
+    // El mismo gesto llega como toque del mapa en algunas plataformas; sin la
+    // ventana de gracia, la ficha se abría y se cerraba de una.
+    fireEvent(screen.getByTestId("map"), "press", { nativeEvent: {} });
+
+    expect(screen.getByText("Ver detalle")).toBeTruthy();
   });
 });

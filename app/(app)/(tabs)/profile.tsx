@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { imageSource } from "../../../src/api/client";
 import { logout } from "../../../src/api/auth";
 import { listMyReports, type Report } from "../../../src/api/reports";
 import {
@@ -175,7 +176,7 @@ export default function ProfileScreen() {
       <View style={[styles.hero, { paddingTop: insets.top > 0 ? insets.top + 20 : 32 }]}>
         <View style={styles.avatarRing}>
           {user?.avatar ? (
-            <Image source={{ uri: user.avatar }} style={styles.avatar} />
+            <Image source={imageSource(user.avatar)} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
               <Text style={styles.avatarInitial}>

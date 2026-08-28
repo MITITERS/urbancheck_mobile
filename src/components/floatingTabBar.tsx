@@ -1,5 +1,5 @@
 import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Dimensions, StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
@@ -55,10 +55,22 @@ export function useFloatingTabBarInset(): number {
  *    del ícono, o sea deliberadamente fuera de su caja: recortar el contenedor
  *    lo borra. Las esquinas redondeadas las da este contenedor, que es el que
  *    pinta el fondo; la barra va transparente encima (`tabBarStyle`).
+ *
+ * Y una tercera, que solo se ve en Android: `BottomTabBar` trae `elevation: 8`
+ * en su propio estilo. La elevación de Android dibuja la sombra con la forma
+ * del borde del elemento, y ese elemento es un rectángulo: aparecía una sombra
+ * recta cruzando las esquinas redondeadas de la isla. Se apaga desde
+ * `tabBarStyle` —que se aplica último y gana—; la sombra la pone esta isla, que
+ * sí es redondeada. En iOS no se notaba porque `elevation` no hace nada ahí.
  */
 export function FloatingTabBar(props: BottomTabBarProps) {
   const bottom = useFloatingTabBarBottom();
-  const horizontalMargin = Dimensions.get("window").width * 0.05;
+  // `useWindowDimensions` y no `Dimensions.get()`: aquel se lee una sola vez y
+  // no vuelve a mirar. Al rotar, en pantalla dividida o en un plegable, la isla
+  // se quedaba con los márgenes de la medida vieja y terminaba descentrada o
+  // saliéndose de la pantalla.
+  const { width } = useWindowDimensions();
+  const horizontalMargin = width * 0.05;
 
   return (
     <View

@@ -40,3 +40,23 @@ export const MAPPED_STATUSES: ReportStatus[] = [
   "en_proceso",
   "resuelto",
 ];
+
+/**
+ * Cuántos tramos de la dirección se muestran cuando hay que acortarla.
+ *
+ * Tres alcanzan para ubicar el reporte —«442, La Rioja, General Güemes»— y el
+ * resto es lo que agrega el geocodificador: municipio, pedanía, departamento,
+ * provincia, país y código postal. En una ficha de dos renglones esa cola no
+ * informa y empuja el alto.
+ */
+const ADDRESS_PARTS = 3;
+
+/** La dirección, sin la cola administrativa del geocodificador. */
+export function shortAddress(value: string | null | undefined): string {
+  if (!value) return "";
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.slice(0, ADDRESS_PARTS).join(", ");
+}
