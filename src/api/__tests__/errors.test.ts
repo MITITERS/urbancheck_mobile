@@ -50,6 +50,18 @@ describe("describeApiError", () => {
     expect(described.title).toBe("No pudimos enviar el reporte");
   });
 
+  it("el servidor caído no se reporta como credenciales incorrectas", () => {
+    // Es el caso que hacía revisar la contraseña durante media hora: sin
+    // conexión, el login decía «email o contraseña incorrectos».
+    const described = describeApiError(
+      new Error("Network request failed"),
+      "No pudimos iniciar sesión",
+    );
+
+    expect(described.title).toBe("Sin conexión");
+    expect(described.message).toMatch(/servidor/i);
+  });
+
   it("un fallo de red se explica como tal y no con el texto de fetch", () => {
     const described = describeApiError(new Error("Network request failed"));
 
