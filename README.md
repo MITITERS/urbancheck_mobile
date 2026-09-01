@@ -176,6 +176,18 @@ Al enfocar el campo, la lista se lleva al final: con el teclado abierto el alto
 útil es la mitad, y sin eso uno escribe mirando la foto en vez de la
 conversación que está respondiendo.
 
+### «Email o contraseña incorrectos» solo cuando lo son
+
+El login mostraba ese mensaje en **todos** los caminos de error: servidor
+caído, túnel de desarrollo sin levantar, teléfono sin datos. Mandaba a revisar
+la contraseña un problema que no tenía nada que ver.
+
+Ahora se distingue: si el servidor contestó y rechazó las credenciales —el
+sobre `errors` de allauth—, se dice eso. Cualquier otra cosa pasa por
+`describeApiError()`, que responde «Sin conexión» cuando no se pudo llegar al
+servidor. Lo mismo en el alta de cuenta, que además volcaba el error crudo con
+`JSON.stringify`.
+
 ### Teclado en los formularios de sesión
 
 Login, registro, olvidé mi contraseña, restablecer y cambiar contraseña siguen

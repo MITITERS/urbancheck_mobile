@@ -18,6 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { login, logout } from "../../src/api/auth";
+import { describeApiError } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
 
 export default function LoginScreen() {
@@ -55,6 +56,8 @@ export default function LoginScreen() {
       }
       const data2 = currentErr as Record<string, unknown>;
       if (data2?.errors) {
+        // El servidor contestó y rechazó las credenciales: eso sí es un
+        // usuario o una contraseña que no coinciden.
         const mapped: Record<string, string> = {};
         for (const e of data2.errors as Array<{ param?: string; message: string }>) {
           if (e.param) mapped[e.param] = e.message;
@@ -65,7 +68,11 @@ export default function LoginScreen() {
           Alert.alert("Error", "Email o contraseña incorrectos.");
         }
       } else {
-        Alert.alert("Error", "Email o contraseña incorrectos.");
+        // Cualquier otra cosa —el servidor caído, el túnel de desarrollo sin
+        // levantar, el teléfono sin datos— no es una credencial equivocada.
+        // Decirlo así mandaba a revisar la contraseña durante media hora.
+        const described = describeApiError(currentErr, "No pudimos iniciar sesión");
+        Alert.alert(described.title, described.message);
       }
     } finally {
       setLoading(false);
