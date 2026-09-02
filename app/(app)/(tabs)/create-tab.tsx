@@ -7,8 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,6 +26,8 @@ import {
   type ReportCategory,
 } from "../../../src/api/reports";
 import { Notice } from "../../../src/components/Notice";
+import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 
 const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
   { value: "bache", label: "Bache", icon: "construct-outline" },
@@ -37,6 +38,9 @@ const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
   { value: "otro", label: "Otro", icon: "ellipsis-horizontal-outline" },
 ];
 
+/** Aire de abajo con el teclado cerrado: lo que ocupa la barra flotante. */
+const SCROLL_BOTTOM_PADDING = 120;
+
 export default function CreateReportTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,6 +50,35 @@ export default function CreateReportTab() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [address, setAddress] = useState("");
+  // El único campo que sigue adentro del scroll y puede quedar tapado: la
+  // dirección se mudó a la barra anclada.
+  const descriptionField = useRef<TextInput>(null);
+  const keyboard = useKeyboardAwareScroll();
+  const tabBarInset = useFloatingTabBarInset();
+  /**
+   * Cuánto se levanta la barra de dirección.
+   *
+   * Con el teclado cerrado esquiva la barra de pestañas, que flota sobre el
+   * contenido. Con el teclado abierto, al teclado. Es el mismo cálculo que el
+   * cajón de comentarios del detalle.
+   */
+  const addressDockBottom = keyboard.keyboardOffset > 0 ? keyboard.keyboardOffset : tabBarInset;
+  // La barra flota sobre el contenido, así que el scroll tiene que reservarle
+  // su alto o el botón de enviar queda debajo. Se mide en vez de estimarse: la
+  // barra crece con las sugerencias.
+  const [addressDockHeight, setAddressDockHeight] = useState(0);
+  /**
+   * Si el buscador de dirección está en uso.
+   *
+   * En el formulario hay un campo de mentira —un `Pressable` con la pinta del
+   * input— que se mueve con el scroll como cualquier otro. Al tocarlo se monta
+   * el input de verdad, ya enfocado, anclado sobre el teclado. Al cerrarse el
+   * teclado vuelve a su lugar.
+   *
+   * Son dos elementos y no uno que se mueve: mover un `TextInput` de lugar en
+   * el árbol lo desmonta y le hace perder el foco a mitad de la palabra.
+   */
+  const [addressActive, setAddressActive] = useState(false);
   const [locationMode, setLocationMode] = useState<"gps" | "manual">("gps");
   const [locationFromPhoto, setLocationFromPhoto] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -247,6 +280,9 @@ export default function CreateReportTab() {
     setSuggestions([]);
     setLocationFromPhoto(false);
     setErrors((prev) => ({ ...prev, location: "" }));
+    // El teclado ya no tiene nada que hacer, y si queda abierto tapa la
+    // confirmación de la ubicación, que se muestra arriba en el formulario.
+    Keyboard.dismiss();
   }
 
   async function handleSubmit() {
@@ -309,10 +345,7 @@ export default function CreateReportTab() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#f8f9fa" }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={{ flex: 1, backgroundColor: "#f8f9fa" }}>
       <Notice
         visible={notice !== null}
         tone={notice?.tone}
@@ -326,8 +359,18 @@ export default function CreateReportTab() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        {...keyboard.scrollViewProps}
+        // El teclado se suma al espacio de abajo: sin eso el scroll no tiene a
+        // dónde ir y el último campo no puede subir por encima de él.
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingBottom:
+              SCROLL_BOTTOM_PADDING +
+              keyboard.keyboardOffset +
+              (addressActive ? addressDockHeight : 0),
+          },
+        ]}
       >
         <View style={styles.card}>
           {/* PHOTO SELECTOR */}
@@ -360,6 +403,8 @@ export default function CreateReportTab() {
           {/* DESCRIPTION */}
           <Text style={[styles.label, { marginTop: 20 }]}>Descripción *</Text>
           <TextInput
+            ref={descriptionField}
+            onFocus={() => keyboard.focusField(descriptionField)}
             style={[styles.input, styles.multiline, errors.description && styles.inputError]}
             placeholder="Describí brevemente cuál es el problema..."
             placeholderTextColor="#9ca3af"
@@ -487,56 +532,27 @@ export default function CreateReportTab() {
             </View>
           ) : (
             <View style={styles.locationContainer}>
-              <View style={styles.addressInputWrapper}>
+              {/* El campo tal como se ve mientras no se escribe: parte del
+                  formulario, y scrollea con él. Tocarlo abre el de verdad.
+
+                  Mientras el anclado está abierto, éste queda vacío: el texto
+                  vive en uno solo de los dos a la vez. Repetirlo hacía ver el
+                  mismo campo dos veces, uno detrás del otro. La caja se
+                  mantiene igual para que el formulario no salte al abrirlo. */}
+              <Pressable
+                style={[styles.addressInputWrapper, addressActive && styles.addressFieldBusy]}
+                onPress={() => setAddressActive(true)}
+              >
                 <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
-                  placeholder="Ej: Av. Corrientes 1234, CABA"
-                  placeholderTextColor="#9ca3af"
-                  value={address}
-                  onChangeText={(t) => {
-                    setAddress(t);
-                    // El texto ya no corresponde a la sugerencia elegida: descartamos
-                    // las coordenadas hasta que el usuario seleccione otra (o el backend
-                    // geocodifique la dirección al enviar).
-                    setLatitude(null);
-                    setLongitude(null);
-                    setErrors((prev) => ({ ...prev, location: "" }));
-                  }}
-                />
-              </View>
-
-              {searchingAddress && (
-                <View style={styles.addressStatusRow}>
-                  <ActivityIndicator size="small" color="#6b7280" />
-                  <Text style={styles.addressStatusText}>Buscando dirección…</Text>
+                <View style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}>
+                  <Text
+                    style={address.trim() ? styles.addressFieldValue : styles.addressFieldPlaceholder}
+                    numberOfLines={1}
+                  >
+                    {addressActive ? " " : address.trim() || "Ej: Av. Corrientes 1234, CABA"}
+                  </Text>
                 </View>
-              )}
-
-              {suggestions.length > 0 && (
-                <View style={styles.suggestionsBox}>
-                  {suggestions.map((item, i) => (
-                    <Pressable
-                      key={`${item.latitude},${item.longitude},${i}`}
-                      style={[
-                        styles.suggestionItem,
-                        i < suggestions.length - 1 && styles.suggestionItemBorder,
-                      ]}
-                      onPress={() => selectSuggestion(item)}
-                    >
-                      <Ionicons
-                        name="location-outline"
-                        size={16}
-                        color="#1a73e8"
-                        style={{ marginRight: 8, marginTop: 1 }}
-                      />
-                      <Text style={styles.suggestionText} numberOfLines={2}>
-                        {item.display_name}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+              </Pressable>
 
               {latitude != null && longitude != null && (
                 <View style={styles.photoLocationHint}>
@@ -569,7 +585,81 @@ export default function CreateReportTab() {
           </Pressable>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+
+      {/*
+        La búsqueda de dirección va anclada abajo y fuera del scroll, con el
+        mismo patrón que el cajón de comentarios del detalle.
+
+        Adentro del formulario, escribir obligaba a arrastrar el contenido para
+        seguir viendo el campo, y cada sugerencia que aparecía o desaparecía
+        movía todo lo de atrás. Anclada, el campo no se mueve nunca y la lista
+        crece hacia arriba, así que ni el campo ni las sugerencias pueden
+        quedar debajo del teclado.
+      */}
+      {locationMode === "manual" && addressActive && (
+        <View
+          style={[styles.addressDock, { bottom: addressDockBottom }]}
+          onLayout={(event) => setAddressDockHeight(event.nativeEvent.layout.height)}
+        >
+          {suggestions.length > 0 && (
+            <View style={styles.suggestionsBox}>
+              {suggestions.map((item, i) => (
+                <Pressable
+                  key={`${item.latitude},${item.longitude},${i}`}
+                  style={[
+                    styles.suggestionItem,
+                    i < suggestions.length - 1 && styles.suggestionItemBorder,
+                  ]}
+                  onPress={() => selectSuggestion(item)}
+                >
+                  <Ionicons
+                    name="location-outline"
+                    size={16}
+                    color="#1a73e8"
+                    style={{ marginRight: 8, marginTop: 1 }}
+                  />
+                  <Text style={styles.suggestionText} numberOfLines={2}>
+                    {item.display_name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {searchingAddress && (
+            <View style={styles.addressStatusRow}>
+              <ActivityIndicator size="small" color="#6b7280" />
+              <Text style={styles.addressStatusText}>Buscando dirección…</Text>
+            </View>
+          )}
+
+          <View style={styles.addressInputWrapper}>
+            <Ionicons name="map-outline" size={18} color="#9ca3af" style={styles.inputIcon} />
+            <TextInput
+              // Nace enfocado: el usuario ya tocó el campo del formulario, y
+              // pedirle un segundo toque para escribir sería absurdo.
+              autoFocus
+              // El teclado se cierra —terminó de escribir, tocó fuera, o el
+              // botón atrás de Android— y el buscador vuelve al formulario.
+              onBlur={() => setAddressActive(false)}
+              style={[styles.input, styles.inputWithIcon, errors.location && styles.inputError]}
+              placeholder="Ej: Av. Corrientes 1234, CABA"
+              placeholderTextColor="#9ca3af"
+              value={address}
+              onChangeText={(t) => {
+                setAddress(t);
+                // El texto ya no corresponde a la sugerencia elegida: descartamos
+                // las coordenadas hasta que el usuario seleccione otra (o el backend
+                // geocodifique la dirección al enviar).
+                setLatitude(null);
+                setLongitude(null);
+                setErrors((prev) => ({ ...prev, location: "" }));
+              }}
+            />
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -583,7 +673,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: "bold", color: "#1f2937" },
   subtitle: { fontSize: 13, color: "#6b7280", marginTop: 4, lineHeight: 18 },
-  scrollContent: { padding: 16, paddingBottom: 120 },
+  scrollContent: { padding: 16, paddingBottom: SCROLL_BOTTOM_PADDING },
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -756,6 +846,27 @@ const styles = StyleSheet.create({
   },
   segmentText: { fontSize: 13, color: "#6b7280", fontWeight: "600" },
   segmentTextActive: { color: "#1a73e8", fontWeight: "700" },
+  addressDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 6,
+    backgroundColor: "#f8f9fa",
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  // El campo de mentira imita al input: misma caja, mismo alto, mismo texto.
+  // Lo único que cambia es que no se puede escribir en él.
+  // Mismo tamaño de letra que el input real (14): con otro, la caja del
+  // formulario y la anclada tenían alturas distintas y el cambio se notaba.
+  addressFieldValue: { fontSize: 14, color: "#1f2937" },
+  addressFieldPlaceholder: { fontSize: 14, color: "#9ca3af" },
+  // Mientras se escribe en el anclado, el del formulario queda como una caja
+  // vacía y apagada: se ve que ese campo está en uso en otro lado.
+  addressFieldBusy: { opacity: 0.4 },
   addressInputWrapper: { position: "relative", justifyContent: "center" },
   inputIcon: { position: "absolute", left: 14, zIndex: 1 },
   inputWithIcon: { paddingLeft: 42 },

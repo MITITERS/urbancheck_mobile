@@ -1,12 +1,10 @@
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +23,7 @@ import {
   type ReportDetail,
 } from "../../../src/api/reports";
 import { Notice } from "../../../src/components/Notice";
+import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 
 const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
   { value: "bache", label: "Bache", icon: "construct-outline" },
@@ -39,7 +38,7 @@ const NOT_EDITABLE = {
   tone: "warning" as const,
   title: "Ya no se puede editar",
   message:
-    "El municipio tomó este reporte, así que dejó de ser modificable. Podés seguir su avance desde el detalle.",
+    "Un validador ya revisó este reporte, así que dejó de ser modificable. Podés seguir su avance desde el detalle.",
 };
 
 type NewPhoto = { uri: string; name: string; type: string };
@@ -54,11 +53,16 @@ type NewPhoto = { uri: string; name: string; type: string };
  * Vive fuera de las pestañas, como editar perfil: es una tarea que se abre,
  * se termina y se cierra, no una sección de la app.
  */
+/** Aire de abajo con el teclado cerrado. */
+const CONTENT_BOTTOM_PADDING = 40;
+
 export default function EditReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [description, setDescription] = useState("");
+  const descriptionField = useRef<TextInput>(null);
+  const keyboard = useKeyboardAwareScroll();
   const [category, setCategory] = useState<ReportCategory>("bache");
   const [photo, setPhoto] = useState<NewPhoto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,10 +185,7 @@ export default function EditReportScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.container}>
       <Notice
         visible={notice !== null}
         tone={notice?.tone}
@@ -193,7 +194,15 @@ export default function EditReportScreen() {
         onClose={() => setNotice(null)}
       />
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        {...keyboard.scrollViewProps}
+        // El teclado se suma al espacio de abajo: sin eso el scroll no tiene a
+        // dónde ir y el campo enfocado no puede subir por encima de él.
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: CONTENT_BOTTOM_PADDING + keyboard.keyboardOffset },
+        ]}
+      >
         <Text style={styles.label}>Foto</Text>
         <View style={styles.photoBox}>
           <Image
@@ -277,14 +286,14 @@ export default function EditReportScreen() {
           )}
         </Pressable>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa" },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: CONTENT_BOTTOM_PADDING },
   label: { fontSize: 13, fontWeight: "700", color: "#374151", marginBottom: 8 },
   photoBox: {
     borderRadius: 12,

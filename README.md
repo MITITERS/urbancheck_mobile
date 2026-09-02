@@ -188,6 +188,67 @@ sobre `errors` de allauth—, se dice eso. Cualquier otra cosa pasa por
 servidor. Lo mismo en el alta de cuenta, que además volcaba el error crudo con
 `JSON.stringify`.
 
+### La búsqueda de dirección se ancla solo mientras se escribe
+
+En reposo, el campo de dirección es uno más del formulario y **scrollea con
+él**. Al tocarlo se ancla sobre el teclado, se escribe ahí, y al cerrarse el
+teclado vuelve a su lugar.
+
+Anclarlo siempre —como el cajón de comentarios— tenía el problema opuesto al
+que resolvía: un campo pegado abajo que nunca acompaña al formulario se lee
+como si no fuera parte de él.
+
+**Son dos elementos, no uno que se mueve.** En el formulario hay un `Pressable`
+con la pinta exacta del input, que muestra la dirección elegida o el
+placeholder; el `TextInput` de verdad solo existe mientras se escribe, anclado,
+y nace con `autoFocus`. Mover un `TextInput` de lugar en el árbol lo desmonta y
+le hace perder el foco a mitad de la palabra, así que no se lo mueve: se lo
+reemplaza.
+
+Mientras el anclado está abierto, el del formulario **queda vacío** —una caja
+apagada, sin texto—. El valor vive en uno solo de los dos a la vez: repetirlo
+hacía ver el mismo campo dos veces, uno detrás del otro. La caja se conserva
+aunque esté vacía para que el formulario no salte de alto al abrir y cerrar.
+
+El cierre lo maneja el `onBlur` del anclado, que cubre los tres caminos:
+terminar de escribir, tocar afuera y el botón atrás de Android. Elegir una
+sugerencia llama a `Keyboard.dismiss()`, así que cae por el mismo lado.
+
+Dos detalles:
+
+- **La lista de sugerencias va arriba del input** y crece hacia arriba: debajo
+  quedaría tapada por el teclado.
+- **El scroll le reserva el alto al anclado mientras está abierto**, medido con
+  `onLayout` y no estimado, porque crece con las sugerencias.
+
+### Teclado en los formularios largos: crear y editar reporte
+
+Los formularios de reporte no entran en pantalla, y sus campos de texto están
+abajo. Al abrirse el teclado quedaban tapados y uno escribía a ciegas. Aplica a
+la descripción de crear y de editar; la dirección se resolvió anclándola (arriba).
+
+`KeyboardAvoidingView` no lo resuelve, y era lo que había: hace lugar, pero **no
+mueve el scroll hasta el campo enfocado**, así que el campo sigue debajo del
+teclado. Encima estaba con `behavior={Platform.OS === "ios" ? "padding" :
+undefined}`, o sea que en Android no hacía nada.
+
+Lo reemplaza `useKeyboardAwareScroll()` (`src/components/`), que hace dos cosas:
+
+1. **Le suma al `paddingBottom` del contenido lo que ocupa el teclado.** Sin ese
+   espacio el scroll no tiene a dónde ir y el último campo no puede subir.
+2. **Mide dónde quedó el campo enfocado y scrollea solo lo que falta.** Si ya se
+   ve por encima del teclado, no lo mueve.
+
+No tiene ninguna rama por plataforma: se apoya en `useKeyboardOffset()`, que
+**mide** cuánto tapa el teclado en lugar de deducirlo de `Platform.OS`. Eso es
+lo que hace que funcione igual en iOS y en Android, incluido el modo
+*edge-to-edge* que Expo activa por defecto desde el SDK 54, donde la ventana no
+se achica y suponer que sí dejaba el campo debajo del teclado.
+
+La corrección se dispara cuando cambia el alto del teclado, no al enfocar: al
+momento del `focus` el teclado todavía no ocupa nada. El salto de un campo a
+otro con el teclado ya abierto se corrige aparte, porque ahí el alto no cambia.
+
 ### Teclado en los formularios de sesión
 
 Login, registro, olvidé mi contraseña, restablecer y cambiar contraseña siguen
