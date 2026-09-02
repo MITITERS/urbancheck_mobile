@@ -492,9 +492,10 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
-        {/* Editar y eliminar son del autor, y solo mientras el municipio no
-            haya tomado el reporte. Quién y cuándo lo decide el servidor con
-            `can_edit`: la app no replica la regla de estados. */}
+        {/* Editar y eliminar son del autor, y solo mientras nadie más miró el
+            reporte: hasta que un validador lo confirma en terreno. Quién y
+            cuándo lo decide el servidor con `can_edit`: la app no replica la
+            regla de estados. */}
         {report.can_edit && (
           <View style={styles.ownerActions}>
             <Pressable
@@ -518,7 +519,7 @@ export default function ReportDetailScreen() {
             que los botones desaparezcan sin motivo. */}
         {isAuthor && !report.can_edit && (
           <Text style={styles.ownerLocked}>
-            El municipio ya tomó este reporte, así que no se puede editar ni
+            Este reporte ya pasó por un validador, así que no se puede editar ni
             eliminar.
           </Text>
         )}
