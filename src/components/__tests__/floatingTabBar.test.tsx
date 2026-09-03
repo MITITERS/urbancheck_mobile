@@ -1,5 +1,5 @@
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { NavigationContainer } from "@react-navigation/native";
+import { createBottomTabNavigator } from "expo-router/js-tabs";
+import { NavigationContainer } from "expo-router/react-navigation";
 import { render, renderHook, screen } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";

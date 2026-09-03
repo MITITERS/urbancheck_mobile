@@ -13,6 +13,20 @@ npx expo start
 
 `EXPO_PUBLIC_API_URL` define el backend (por defecto `http://localhost:8000`).
 
+### Abrir con Expo Go
+
+Expo Go 57 exige que **el CLI y la app estén logueados con la misma cuenta**;
+si no, muestra "You need to be signed in to Expo Go and Expo CLI". No depende
+del proyecto: pasa igual con uno recién creado.
+
+```bash
+npx expo login          # en la Mac
+```
+
+Y en Expo Go, iniciar sesión con esa misma cuenta. Como `expo-dev-client` está
+instalado, `expo start` arranca en modo development build; `s` pasa a Expo Go, o
+`npm run go` lo fuerza y agrega el túnel.
+
 ```bash
 npm test          # jest-expo
 npx tsc --noEmit  # typecheck

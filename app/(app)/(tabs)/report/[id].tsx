@@ -377,7 +377,7 @@ export default function ReportDetailScreen() {
               <View style={{ width, height: "100%", position: "relative" }}>
                 <MapView
                   ref={mapRef}
-                  style={StyleSheet.absoluteFillObject}
+                  style={StyleSheet.absoluteFill}
                   initialRegion={{
                     latitude: Number(report.latitude),
                     longitude: Number(report.longitude),
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     height: 240,
   },
   photoSkeleton: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#e9edf2",
     justifyContent: "center",
     alignItems: "center",
