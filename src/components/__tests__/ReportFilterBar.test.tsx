@@ -1,170 +1,208 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
-import React from "react";
+import { render, screen, userEvent } from "@testing-library/react-native";
 
 import ReportFilterBar, {
   EMPTY_FILTERS,
   countActiveFilters,
   type ReportFilterState,
 } from "../ReportFilterBar";
+import {
+  CATEGORY_LABEL,
+  FILTERABLE_STATUS_VALUES,
+  STATUS_LABEL,
+} from "../../reports/labels";
 
-// Los íconos son decorativos y arrastran expo-font, que necesita el runtime nativo.
-// Lo que se prueba acá es el comportamiento de los filtros, no el glifo.
+/**
+ * Barra de búsqueda y filtros compartida por el feed y el mapa (US-006, US-020).
+ *
+ * Es una prueba de regresión: el componente lo comparten las dos pantallas, así
+ * que un cambio acá se lleva puestas ambas. El estado vive afuera —el
+ * componente solo emite el próximo estado completo—, y eso es lo que se afirma.
+ */
+
 jest.mock("@expo/vector-icons", () => {
-  const { View } = require("react-native");
+  const { View } = jest.requireActual("react-native");
   return { Ionicons: View };
 });
 
-/**
- * US-006 y US-020: la barra la comparten el feed y el mapa, así que un cambio de
- * comportamiento acá afecta a las dos pantallas a la vez.
- */
-
-const SEARCH_PLACEHOLDER = "Buscar por palabra clave o zona…";
-
-function setup(filters: ReportFilterState = EMPTY_FILTERS, resultLabel?: string) {
+function renderBar(filters: Partial<ReportFilterState> = {}, resultLabel?: string) {
   const onChange = jest.fn();
   render(
-    <ReportFilterBar filters={filters} onChange={onChange} resultLabel={resultLabel} />,
+    <ReportFilterBar
+      filters={{ ...EMPTY_FILTERS, ...filters }}
+      onChange={onChange}
+      resultLabel={resultLabel}
+    />,
   );
-  return { onChange };
+  return { onChange, user: userEvent.setup() };
+}
+
+/** Despliega el panel de chips, que arranca colapsado. */
+async function expand(user: ReturnType<typeof userEvent.setup>) {
+  await user.press(screen.getByLabelText("Mostrar filtros"));
 }
 
 describe("countActiveFilters", () => {
-  it("counts nothing when no chip is selected", () => {
+  it("sin filtros cuenta cero", () => {
     expect(countActiveFilters(EMPTY_FILTERS)).toBe(0);
   });
 
-  it("adds categories and statuses together", () => {
+  it("la búsqueda no cuenta como filtro", () => {
+    // Tiene su propio campo visible: sumarla al contador del botón haría creer
+    // que hay un chip activo que no está.
+    expect(countActiveFilters({ ...EMPTY_FILTERS, search: "bache" })).toBe(0);
+  });
+
+  it("suma categorías y estados", () => {
     expect(
       countActiveFilters({
-        search: "bache",
+        search: "",
         categories: ["bache", "basura"],
-        statuses: ["resuelto"],
+        statuses: ["reportado"],
       }),
     ).toBe(3);
   });
-
-  it("ignores the search term", () => {
-    expect(countActiveFilters({ ...EMPTY_FILTERS, search: "bache" })).toBe(0);
-  });
 });
 
-describe("ReportFilterBar search", () => {
-  it("reports each keystroke upwards", () => {
-    const { onChange } = setup();
-    fireEvent.changeText(screen.getByPlaceholderText(SEARCH_PLACEHOLDER), "bache");
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, search: "bache" });
+describe("ReportFilterBar, búsqueda", () => {
+  it("emite el término escrito conservando el resto del estado", async () => {
+    const { onChange, user } = renderBar({ categories: ["bache"] });
+
+    await user.type(screen.getByPlaceholderText(/Buscar por palabra clave/), "vereda");
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ categories: ["bache"] }),
+    );
   });
 
-  it("keeps the chips when the term changes", () => {
-    const filters: ReportFilterState = {
-      search: "",
-      categories: ["bache"],
-      statuses: ["resuelto"],
-    };
-    const { onChange } = setup(filters);
-    fireEvent.changeText(screen.getByPlaceholderText(SEARCH_PLACEHOLDER), "sabattini");
-    expect(onChange).toHaveBeenCalledWith({ ...filters, search: "sabattini" });
-  });
+  it("sin texto no ofrece limpiar la búsqueda", () => {
+    renderBar();
 
-  it("hides the clear button when the box is empty", () => {
-    setup();
     expect(screen.queryByLabelText("Limpiar búsqueda")).toBeNull();
   });
 
-  it("clears the term with the X (US-020: volver a ver todo)", () => {
-    const { onChange } = setup({ ...EMPTY_FILTERS, search: "bache" });
-    fireEvent.press(screen.getByLabelText("Limpiar búsqueda"));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, search: "" });
+  it("con texto, limpiar deja la búsqueda vacía sin tocar los chips", async () => {
+    const { onChange, user } = renderBar({ search: "bache", statuses: ["reportado"] });
+
+    await user.press(screen.getByLabelText("Limpiar búsqueda"));
+
+    expect(onChange).toHaveBeenCalledWith({
+      search: "",
+      categories: [],
+      statuses: ["reportado"],
+    });
+  });
+
+  it("muestra el texto de resultados cuando la pantalla se lo pasa", () => {
+    renderBar({}, "12 reportes");
+
+    expect(screen.getByText("12 reportes")).toBeTruthy();
   });
 });
 
-describe("ReportFilterBar chips", () => {
-  it("starts collapsed so the search box gets the room", () => {
-    setup();
+describe("ReportFilterBar, panel de chips", () => {
+  it("arranca colapsado: la búsqueda es lo frecuente", () => {
+    renderBar();
+
     expect(screen.queryByText("Categoría")).toBeNull();
   });
 
-  it("opens the panel with the filters button", () => {
-    setup();
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
+  it("se despliega desde el botón de filtros", async () => {
+    const { user } = renderBar();
+
+    await expand(user);
+
     expect(screen.getByText("Categoría")).toBeTruthy();
     expect(screen.getByText("Estado")).toBeTruthy();
   });
 
-  it("selects a category (US-006)", () => {
-    const { onChange } = setup();
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    fireEvent.press(screen.getByText("Bache"));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, categories: ["bache"] });
+  it("ofrece las seis categorías", async () => {
+    const { user } = renderBar();
+
+    await expand(user);
+
+    for (const label of Object.values(CATEGORY_LABEL)) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
   });
 
-  it("deselects a category that was already active", () => {
-    const { onChange } = setup({ ...EMPTY_FILTERS, categories: ["bache"] });
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    fireEvent.press(screen.getByText("Bache"));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, categories: [] });
+  it("no ofrece filtrar por estados que el feed nunca muestra", async () => {
+    // Cancelado y archivado no viajan en el feed público: ofrecerlos sería
+    // ofrecer un filtro que siempre devuelve vacío.
+    const { user } = renderBar();
+
+    await expand(user);
+
+    expect(screen.queryByText(STATUS_LABEL.cancelado)).toBeNull();
+    expect(screen.queryByText(STATUS_LABEL.archivado)).toBeNull();
+    for (const status of FILTERABLE_STATUS_VALUES) {
+      expect(screen.getByText(STATUS_LABEL[status])).toBeTruthy();
+    }
   });
 
-  it("accumulates several categories", () => {
-    const { onChange } = setup({ ...EMPTY_FILTERS, categories: ["bache"] });
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    fireEvent.press(screen.getByText("Basura"));
+  it("tocar una categoría la agrega a las ya elegidas", async () => {
+    const { onChange, user } = renderBar({ categories: ["bache"] });
+    await expand(user);
+
+    await user.press(screen.getByText(CATEGORY_LABEL.basura));
+
     expect(onChange).toHaveBeenCalledWith({
-      ...EMPTY_FILTERS,
+      search: "",
       categories: ["bache", "basura"],
-    });
-  });
-
-  it("selects a status", () => {
-    const { onChange } = setup();
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    fireEvent.press(screen.getByText("Resuelto"));
-    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_FILTERS, statuses: ["resuelto"] });
-  });
-
-  it("does not offer cancelado or archivado", () => {
-    setup();
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    expect(screen.queryByText("Cancelado")).toBeNull();
-    expect(screen.queryByText("Archivado")).toBeNull();
-  });
-
-  it("shows how many filters are active", () => {
-    setup({ search: "", categories: ["bache", "basura"], statuses: ["resuelto"] });
-    expect(screen.getByText("3")).toBeTruthy();
-  });
-
-  it("clears every chip but keeps the search term", () => {
-    const { onChange } = setup({
-      search: "bache",
-      categories: ["bache"],
-      statuses: ["resuelto"],
-    });
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    fireEvent.press(screen.getByText("Limpiar filtros"));
-    expect(onChange).toHaveBeenCalledWith({
-      search: "bache",
-      categories: [],
       statuses: [],
     });
   });
 
-  it("hides the clear button when nothing is selected", () => {
-    setup();
-    fireEvent.press(screen.getByLabelText("Mostrar filtros"));
-    expect(screen.queryByText("Limpiar filtros")).toBeNull();
+  it("volver a tocarla la quita", async () => {
+    const { onChange, user } = renderBar({ categories: ["bache", "basura"] });
+    await expand(user);
+
+    await user.press(screen.getByText(CATEGORY_LABEL.bache));
+
+    expect(onChange).toHaveBeenCalledWith({
+      search: "",
+      categories: ["basura"],
+      statuses: [],
+    });
+  });
+
+  it("tocar un estado lo agrega", async () => {
+    const { onChange, user } = renderBar();
+    await expand(user);
+
+    await user.press(screen.getByText(STATUS_LABEL.en_proceso));
+
+    expect(onChange).toHaveBeenCalledWith({
+      search: "",
+      categories: [],
+      statuses: ["en_proceso"],
+    });
   });
 });
 
-describe("ReportFilterBar result label", () => {
-  it("shows the result count the map passes in", () => {
-    setup(EMPTY_FILTERS, "3 reportes encontrados");
-    expect(screen.getByText("3 reportes encontrados")).toBeTruthy();
+describe("ReportFilterBar, limpiar filtros", () => {
+  it("sin filtros activos no ofrece limpiarlos", async () => {
+    const { user } = renderBar();
+    await expand(user);
+
+    expect(screen.queryByText("Limpiar filtros")).toBeNull();
   });
 
-  it("shows nothing when the screen does not pass one", () => {
-    setup();
-    expect(screen.queryByText(/reportes encontrados/)).toBeNull();
+  it("limpiar descarta chips pero conserva la búsqueda escrita", async () => {
+    // Son dos cosas distintas: quien buscó «Corrientes» y filtró por bache
+    // espera que limpiar los chips no le borre lo que escribió.
+    const { onChange, user } = renderBar({
+      search: "Corrientes",
+      categories: ["bache"],
+      statuses: ["reportado"],
+    });
+    await expand(user);
+
+    await user.press(screen.getByText("Limpiar filtros"));
+
+    expect(onChange).toHaveBeenCalledWith({
+      search: "Corrientes",
+      categories: [],
+      statuses: [],
+    });
   });
 });

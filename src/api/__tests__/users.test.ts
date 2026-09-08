@@ -1,57 +1,67 @@
 import { api } from "../client";
-import { getMe, getPublicProfile, patchMe } from "../users";
+import { canValidate, getMe, getPublicProfile, participatesAsCitizen, patchMe } from "../users";
+import type { UserProfile } from "../users";
 
 jest.mock("../client", () => ({
-  api: {
-    get: jest.fn(),
-    post: jest.fn(),
-    patch: jest.fn(),
-    delete: jest.fn(),
-  },
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
 
+const CITIZEN: UserProfile = {
+  id: 1,
+  name: "Vecina",
+  email: "vecina@test.com",
+  avatar: null,
+  role: "ciudadano",
+  municipality: null,
+  must_change_password: false,
+  is_public: true,
+  url: "/api/users/1/",
+};
+
 describe("users api", () => {
-  it("getMe requests the own-profile endpoint", () => {
+  it("getMe asks for the authenticated user", () => {
     getMe();
+
     expect(mockedApi.get).toHaveBeenCalledWith("/api/users/me/");
   });
 
-  it("getPublicProfile requests the detail of another user (US-027)", () => {
+  it("getPublicProfile asks for that user's detail", () => {
     getPublicProfile(7);
+
     expect(mockedApi.get).toHaveBeenCalledWith("/api/users/7/");
   });
 
-  it("patchMe sends the privacy switch as JSON", () => {
-    patchMe({ is_public: false });
-    expect(mockedApi.patch).toHaveBeenCalledWith("/api/users/me/", { is_public: false });
-  });
-
-  it("patchMe sends the name", () => {
-    patchMe({ name: "Ana Pérez" });
-    expect(mockedApi.patch).toHaveBeenCalledWith("/api/users/me/", { name: "Ana Pérez" });
-  });
-
-  it("patchMe forwards FormData as-is so the avatar keeps its multipart body", () => {
+  it("patchMe manda el FormData al propio perfil", () => {
+    // Va como FormData y no como JSON porque el avatar viaja en el mismo
+    // request que el nombre.
     const form = new FormData();
-    form.append("name", "Ana");
+    form.append("name", "Vecina");
+
     patchMe(form);
+
     expect(mockedApi.patch).toHaveBeenCalledWith("/api/users/me/", form);
   });
 
-  it("getPublicProfile of a private user resolves with nulls, not an error", async () => {
-    mockedApi.get.mockResolvedValueOnce({
-      id: 9,
-      name: "Vecino",
-      avatar: null,
-      is_public: false,
-      date_joined: null,
-      report_count: null,
-    });
-    const profile = await getPublicProfile(9);
-    expect(profile.is_public).toBe(false);
-    expect(profile.date_joined).toBeNull();
-    expect(profile.report_count).toBeNull();
+  it("participatesAsCitizen deja afuera a las cuentas de trabajo", () => {
+    expect(participatesAsCitizen(CITIZEN)).toBe(true);
+    expect(participatesAsCitizen({ ...CITIZEN, role: "validador" })).toBe(false);
+    expect(participatesAsCitizen({ ...CITIZEN, role: "agente_municipal" })).toBe(false);
+    expect(participatesAsCitizen(null)).toBe(false);
+  });
+
+  it("canValidate pide rol y contraseña ya cambiada", () => {
+    const validator: UserProfile = { ...CITIZEN, role: "validador" };
+    expect(canValidate(validator)).toBe(true);
+    // La contraseña temporal bloquea la validación hasta que se cambie: es la
+    // misma regla que aplica el backend (US-035).
+    expect(canValidate({ ...validator, must_change_password: true })).toBe(false);
+    expect(canValidate(CITIZEN)).toBe(false);
+    expect(canValidate(null)).toBe(false);
+  });
+
+  it("el administrador de plataforma tampoco participa como vecino", () => {
+    expect(participatesAsCitizen({ ...CITIZEN, role: "admin_plataforma" })).toBe(false);
   });
 });

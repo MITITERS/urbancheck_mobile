@@ -51,3 +51,17 @@ export async function resetPassword(key: string, password: string): Promise<void
   }
   throw data;
 }
+
+/**
+ * Cambio de contraseña del propio usuario (US-017 y US-035).
+ *
+ * allauth exige la contraseña actual y aplica sus validadores. Al completarse,
+ * el backend baja el flag ``must_change_password``, así que después hay que
+ * releer el perfil.
+ */
+export function changePassword(currentPassword: string, newPassword: string) {
+  return api.post("/_allauth/app/v1/account/password/change", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}

@@ -8,10 +8,10 @@ import {
   getComments,
   getReport,
   likeReport,
-  listMapMarkers,
+  listMapReports,
+  listReportsByAuthor,
   listMyReports,
   listReports,
-  listUserReports,
   unlikeReport,
   updateReport,
 } from "../reports";
@@ -38,63 +38,38 @@ describe("reports api", () => {
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=3");
   });
 
+  it("listReports sends the location so the feed is scoped to the municipality", () => {
+    listReports(1, { latitude: -32.4103, longitude: -63.24 });
+
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      "/api/reports/?page=1&latitude=-32.4103&longitude=-63.24",
+    );
+  });
+
   it("listMyReports adds mine=true filter", () => {
     listMyReports(2);
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=2&mine=true");
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?mine=true&page=2");
   });
 
-  it("listReports joins several categories and statuses with commas", () => {
-    listReports(1, {
-      categories: ["bache", "basura"],
-      statuses: ["reportado"],
-    });
+  it("listMapReports scopes the markers to the citizen location", () => {
+    listMapReports({ latitude: -32.4103, longitude: -63.24 });
+
     expect(mockedApi.get).toHaveBeenCalledWith(
-      "/api/reports/?page=1&category=bache%2Cbasura&status=reportado",
+      "/api/reports/map/?latitude=-32.4103&longitude=-63.24",
     );
   });
 
-  it("listReports URL-encodes and trims the search term", () => {
-    listReports(1, { search: "  Av. Rivadavia  " });
-    expect(mockedApi.get).toHaveBeenCalledWith(
-      "/api/reports/?page=1&search=Av.%20Rivadavia",
-    );
-  });
+  it("listMapReports without location asks for every marker", () => {
+    listMapReports();
 
-  it("listReports omits empty filters", () => {
-    listReports(1, { search: "   ", categories: [], statuses: [] });
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=1");
-  });
-
-  it("listUserReports filters by author", () => {
-    listUserReports(9, 2);
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?page=2&author=9");
-  });
-
-  it("listMapMarkers hits the map endpoint without pagination", () => {
-    listMapMarkers({ categories: ["bache"] });
-    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/?category=bache");
-  });
-
-  it("listMapMarkers without filters has no query string", () => {
-    listMapMarkers();
     expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/map/");
   });
 
-  it("updateReport patches the detail endpoint", () => {
-    updateReport(5, { description: "Corregido" });
-    expect(mockedApi.patch).toHaveBeenCalledWith("/api/reports/5/", {
-      description: "Corregido",
-    });
-  });
+  it("listReportsByAuthor asks for that author's reports, unscoped", () => {
+    // Sin coordenadas: es la obra de alguien, no el feed del barrio.
+    listReportsByAuthor(5);
 
-  it("deleteReport deletes the detail endpoint", () => {
-    deleteReport(5);
-    expect(mockedApi.delete).toHaveBeenCalledWith("/api/reports/5/");
-  });
-
-  it("deleteComment targets the standalone comment resource", () => {
-    deleteComment(12);
-    expect(mockedApi.delete).toHaveBeenCalledWith("/api/comments/12/");
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/?author=5&page=1");
   });
 
   it("getReport requests the detail endpoint", () => {
@@ -106,6 +81,25 @@ describe("reports api", () => {
     const form = new FormData();
     createReport(form);
     expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/", form);
+  });
+
+  it("updateReport patches the report with its FormData", () => {
+    const form = new FormData();
+    updateReport(42, form);
+
+    expect(mockedApi.patch).toHaveBeenCalledWith("/api/reports/42/", form);
+  });
+
+  it("deleteReport deletes the report itself, not its like", () => {
+    deleteReport(42);
+
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/reports/42/");
+  });
+
+  it("deleteComment targets the comment resource, not the report", () => {
+    deleteComment(9);
+
+    expect(mockedApi.delete).toHaveBeenCalledWith("/api/comments/9/");
   });
 
   it("likeReport posts to the like endpoint", () => {

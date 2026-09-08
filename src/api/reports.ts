@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { Coordinates } from "../location/coordinates";
 
 export type ReportCategory =
   | "bache"
@@ -33,8 +34,16 @@ export interface Comment {
   author: ReportAuthor;
   text: string;
   created_at: string;
-  /** El backend marca los comentarios propios para habilitar Eliminar. */
+  /** Si lo escribió quien está mirando. Sirve para distinguirlo a la vista. */
   is_mine: boolean;
+  /**
+   * Si quien mira puede borrarlo: lo escribió, o es su reporte.
+   *
+   * Son dos derechos distintos —arrepentirse de lo propio, y moderar la propia
+   * publicación— y los decide el servidor. La app muestra el botón según esto
+   * en lugar de replicar la regla.
+   */
+  can_delete: boolean;
 }
 
 export interface Report {
@@ -42,26 +51,113 @@ export interface Report {
   photo: string;
   description: string;
   category: ReportCategory;
+  latitude: string | null;
+  longitude: string | null;
+  address: string;
   status: ReportStatus;
   author: ReportAuthor;
   like_count: number;
   comment_count: number;
-  is_liked: boolean;
   created_at: string;
-  edited_at: string | null;
 }
 
 export interface ReportDetail extends Report {
-  latitude: string | null;
-  longitude: string | null;
-  address: string;
+  is_liked: boolean;
   comments: Comment[];
   status_history: StatusHistoryEntry[];
-  /** True solo si soy el autor y el reporte todavía admite cambios. */
+  /**
+   * Si quien mira puede editar y eliminar este reporte (US-018 y US-019).
+   *
+   * Lo decide el servidor: hay que ser el autor **y** el reporte todavía tiene
+   * que estar en un estado editable —una vez que el municipio lo toma, deja de
+   * serlo—. La app no replica esa regla, la consulta.
+   */
   can_edit: boolean;
 }
 
-/** Marcador del mapa: payload mínimo para pintar el pin y su popup. */
+/** La municipalidad que cubre la ubicación del vecino, resumida. */
+export interface CoverageMunicipality {
+  id: number;
+  city: string;
+  province: string;
+}
+
+/**
+ * Resultado de ubicar al vecino dentro de las áreas de cobertura.
+ *
+ * Solo viaja cuando el feed se pidió con coordenadas. Es lo que separa dos
+ * respuestas que llegan igual de vacías: `in_coverage: true` es "todavía no hay
+ * reportes en tu municipio" y `false` es "no estás dentro del radio de ninguna
+ * municipalidad adherida", que se le explican al vecino de forma distinta.
+ */
+export interface FeedCoverage {
+  in_coverage: boolean;
+  municipality: CoverageMunicipality | null;
+}
+
+export interface PaginatedReports {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: Report[];
+  coverage?: FeedCoverage;
+}
+
+/**
+ * Feed público, acotado al municipio donde está parado el vecino.
+ *
+ * Las coordenadas son opcionales y el servidor decide: con ubicación devuelve
+ * únicamente los reportes del municipio que la cubre —ninguno si no la cubre
+ * ninguno—, y sin ubicación devuelve el feed completo, que es lo que ven las
+ * cuentas de trabajo.
+ */
+/** Búsqueda y filtros del feed y del mapa (US-006 y US-020). */
+export interface ReportFilters {
+  search?: string;
+  categories?: ReportCategory[];
+  statuses?: ReportStatus[];
+}
+
+/** Agrega los filtros a la consulta. Los vacíos no viajan. */
+function appendFilters(params: URLSearchParams, filters: ReportFilters) {
+  if (filters.categories?.length) {
+    params.set("category", filters.categories.join(","));
+  }
+  if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
+  const search = filters.search?.trim();
+  if (search) params.set("search", search);
+}
+
+export function listReports(
+  page = 1,
+  coords: Coordinates | null = null,
+  filters: ReportFilters = {},
+) {
+  const params = new URLSearchParams({ page: String(page) });
+  if (coords) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+  appendFilters(params, filters);
+  return api.get<PaginatedReports>(`/api/reports/?${params}`);
+}
+
+export function listMyReports(page = 1) {
+  return api.get<PaginatedReports>(`/api/reports/?mine=true&page=${page}`);
+}
+
+/**
+ * Reportes de una persona, para su perfil público (US-027).
+ *
+ * No se acota por ubicación: es la obra de alguien, no el feed del barrio. Si
+ * esa persona tiene el perfil en privado, el servidor devuelve la lista vacía a
+ * cualquiera que no sea ella.
+ */
+export function listReportsByAuthor(authorId: number, page = 1) {
+  return api.get<PaginatedReports>(`/api/reports/?author=${authorId}&page=${page}`);
+}
+
+/** Marcadores geolocalizados, sin paginar: el mapa los necesita todos. */
 export interface ReportMarker {
   id: number;
   photo: string;
@@ -73,53 +169,30 @@ export interface ReportMarker {
   like_count: number;
 }
 
-export interface PaginatedReports {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: Report[];
+export interface MapReports {
+  results: ReportMarker[];
+  coverage?: FeedCoverage;
 }
 
-export interface ReportFilters {
-  categories?: ReportCategory[];
-  statuses?: ReportStatus[];
-  search?: string;
-  mine?: boolean;
-  author?: number;
-}
-
-// Se arma a mano en vez de con URLSearchParams: el polyfill de React Native es
-// parcial y no garantiza toString() en todas las versiones.
-function buildQuery(filters: ReportFilters = {}, page?: number): string {
-  const parts: string[] = [];
-  const add = (key: string, value: string) =>
-    parts.push(`${key}=${encodeURIComponent(value)}`);
-
-  if (page != null) add("page", String(page));
-  if (filters.categories?.length) add("category", filters.categories.join(","));
-  if (filters.statuses?.length) add("status", filters.statuses.join(","));
-  if (filters.search?.trim()) add("search", filters.search.trim());
-  if (filters.mine) add("mine", "true");
-  if (filters.author != null) add("author", String(filters.author));
-
-  return parts.length ? `?${parts.join("&")}` : "";
-}
-
-export function listReports(page = 1, filters: ReportFilters = {}) {
-  return api.get<PaginatedReports>(`/api/reports/${buildQuery(filters, page)}`);
-}
-
-export function listMyReports(page = 1) {
-  return api.get<PaginatedReports>(`/api/reports/${buildQuery({ mine: true }, page)}`);
-}
-
-export function listUserReports(userId: number, page = 1) {
-  return api.get<PaginatedReports>(`/api/reports/${buildQuery({ author: userId }, page)}`);
-}
-
-/** Marcadores del mapa. No está paginado: devuelve todos los reportes activos. */
-export function listMapMarkers(filters: ReportFilters = {}) {
-  return api.get<{ results: ReportMarker[] }>(`/api/reports/map/${buildQuery(filters)}`);
+/**
+ * Marcadores del mapa, acotados igual que el feed.
+ *
+ * Con ubicación el servidor devuelve solo los del municipio que la cubre: el
+ * mapa se puede desplazar y hacer zoom, pero lo que muestra sigue siendo el
+ * municipio del vecino, no el del vecino de al lado.
+ */
+export function listMapReports(
+  coords: Coordinates | null = null,
+  filters: ReportFilters = {},
+) {
+  const params = new URLSearchParams();
+  if (coords) {
+    params.set("latitude", String(coords.latitude));
+    params.set("longitude", String(coords.longitude));
+  }
+  appendFilters(params, filters);
+  const query = params.toString();
+  return api.get<MapReports>(`/api/reports/map/${query ? `?${query}` : ""}`);
 }
 
 export function getReport(id: number) {
@@ -130,29 +203,28 @@ export function createReport(data: FormData) {
   return api.post<Report>("/api/reports/", data);
 }
 
-/** Edición del autor (US-018). Acepta FormData cuando se reemplaza la foto. */
-export function updateReport(
-  id: number,
-  data: FormData | { description?: string; category?: ReportCategory },
-) {
+/**
+ * Edita un reporte propio (US-018): descripción, categoría y foto.
+ *
+ * La ubicación no se edita: cambiarla convertiría el reporte en otro distinto y
+ * dejaría inconsistente el historial ya registrado. Va como `FormData` porque
+ * puede llevar una foto nueva.
+ */
+export function updateReport(id: number, data: FormData) {
   return api.patch<ReportDetail>(`/api/reports/${id}/`, data);
 }
 
+/** Borra un reporte propio (US-019). Solo mientras el municipio no lo tomó. */
 export function deleteReport(id: number) {
-  return api.delete<void>(`/api/reports/${id}/`);
-}
-
-export interface LikeResponse {
-  liked: boolean;
-  like_count: number;
+  return api.delete(`/api/reports/${id}/`);
 }
 
 export function likeReport(id: number) {
-  return api.post<LikeResponse>(`/api/reports/${id}/like/`);
+  return api.post(`/api/reports/${id}/like/`);
 }
 
 export function unlikeReport(id: number) {
-  return api.delete<LikeResponse>(`/api/reports/${id}/like/`);
+  return api.delete(`/api/reports/${id}/like/`);
 }
 
 export function getComments(id: number) {
@@ -163,8 +235,9 @@ export function addComment(id: number, text: string) {
   return api.post<Comment>(`/api/reports/${id}/comments/`, { text });
 }
 
-export function deleteComment(commentId: number) {
-  return api.delete<void>(`/api/comments/${commentId}/`);
+/** Borra un comentario (US-009). Lo permite su autor o el dueño del reporte. */
+export function deleteComment(id: number) {
+  return api.delete(`/api/comments/${id}/`);
 }
 
 export interface GeocodeResult {

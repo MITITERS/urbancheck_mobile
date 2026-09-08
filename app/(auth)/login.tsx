@@ -4,9 +4,11 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
@@ -16,6 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { login, logout } from "../../src/api/auth";
+import { describeApiError } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
 
 export default function LoginScreen() {
@@ -28,6 +31,9 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleLogin() {
+    // El teclado no tiene nada más que hacer acá: si queda abierto, tapa el
+    // error que se va a mostrar justo debajo del campo.
+    Keyboard.dismiss();
     setErrors({});
     setLoading(true);
     try {
@@ -50,6 +56,8 @@ export default function LoginScreen() {
       }
       const data2 = currentErr as Record<string, unknown>;
       if (data2?.errors) {
+        // El servidor contestó y rechazó las credenciales: eso sí es un
+        // usuario o una contraseña que no coinciden.
         const mapped: Record<string, string> = {};
         for (const e of data2.errors as Array<{ param?: string; message: string }>) {
           if (e.param) mapped[e.param] = e.message;
@@ -60,7 +68,11 @@ export default function LoginScreen() {
           Alert.alert("Error", "Email o contraseña incorrectos.");
         }
       } else {
-        Alert.alert("Error", "Email o contraseña incorrectos.");
+        // Cualquier otra cosa —el servidor caído, el túnel de desarrollo sin
+        // levantar, el teléfono sin datos— no es una credencial equivocada.
+        // Decirlo así mandaba a revisar la contraseña durante media hora.
+        const described = describeApiError(currentErr, "No pudimos iniciar sesión");
+        Alert.alert(described.title, described.message);
       }
     } finally {
       setLoading(false);
@@ -69,9 +81,20 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/*
+        El formulario va dentro de un scroll aunque entre en pantalla: es lo que
+        da las dos formas de cerrar el teclado que uno espera —arrastrar, y
+        tocar fuera de los campos—. Sin él, una vez abierto no había manera de
+        bajarlo.
+      */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
       <Image
         source={require("../../assets/urbancheck_logo.png")}
         style={styles.logo}
@@ -94,6 +117,10 @@ export default function LoginScreen() {
           secureTextEntry={!showPassword}
           value={password}
           onChangeText={setPassword}
+          // Último campo: la tecla del teclado envía el formulario, en vez de
+          // dejarlo abierto sin nada que hacer.
+          returnKeyType="go"
+          onSubmitEditing={() => void handleLogin()}
         />
         <Pressable
           style={styles.eyeButton}
@@ -133,13 +160,15 @@ export default function LoginScreen() {
       <Link href="/(auth)/register" style={styles.link}>
         Crear cuenta
       </Link>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: "#fff" },
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 24,
     justifyContent: "center",
     backgroundColor: "#fff",

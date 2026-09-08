@@ -1,49 +1,84 @@
-import { errorDetail, isSessionExpired } from "../errors";
+import { describeApiError } from "../errors";
 
-describe("isSessionExpired", () => {
-  it("recognises the error that client.ts throws on 401", () => {
-    expect(isSessionExpired(new Error("SESSION_EXPIRED"))).toBe(true);
-  });
+describe("describeApiError", () => {
+  it("saca el mensaje del campo, no el objeto entero", () => {
+    // Es la respuesta real del backend cuando el reporte cae fuera de toda
+    // cobertura: antes se mostraba con llaves, comillas y el 400 incluido.
+    const described = describeApiError({
+      location:
+        "El lugar que marcaste no está dentro del área de cobertura de ninguna municipalidad adherida a UrbanCheck.",
+      status: 400,
+    });
 
-  it("does not confuse it with another Error", () => {
-    expect(isSessionExpired(new Error("Network request failed"))).toBe(false);
-  });
-
-  it("does not match a plain object carrying the same text", () => {
-    expect(isSessionExpired({ message: "SESSION_EXPIRED" })).toBe(false);
-  });
-
-  it("tolerates null and undefined", () => {
-    expect(isSessionExpired(null)).toBe(false);
-    expect(isSessionExpired(undefined)).toBe(false);
-  });
-});
-
-describe("errorDetail", () => {
-  it("returns the detail that DRF sends", () => {
-    const blocked = {
-      detail: "Este reporte ya está siendo gestionado por el municipio.",
-    };
-    expect(errorDetail(blocked, "fallback")).toBe(
-      "Este reporte ya está siendo gestionado por el municipio.",
+    expect(described.field).toBe("location");
+    expect(described.title).toBe("Revisá la ubicación");
+    expect(described.message).toBe(
+      "El lugar que marcaste no está dentro del área de cobertura de ninguna municipalidad adherida a UrbanCheck.",
     );
+    // Un error de validación se puede corregir: no se pinta como una falla.
+    expect(described.tone).toBe("warning");
   });
 
-  it("falls back when there is no detail", () => {
-    expect(errorDetail({ description: ["obligatorio"] }, "No se pudo guardar")).toBe(
-      "No se pudo guardar",
+  it("nunca deja escapar el código de estado al mensaje", () => {
+    const described = describeApiError({ description: ["Requerido."], status: 400 });
+
+    expect(described.message).toBe("Requerido.");
+    expect(described.field).toBe("description");
+  });
+
+  it("desenvuelve la lista con la que DRF manda los errores de campo", () => {
+    const described = describeApiError({ photo: ["El archivo es muy grande."] });
+
+    expect(described.message).toBe("El archivo es muy grande.");
+    expect(described.title).toBe("Revisá la foto");
+  });
+
+  it("detail habla de la operación entera, así que no marca ningún campo", () => {
+    const described = describeApiError({ detail: "No encontrado.", status: 404 });
+
+    expect(described.field).toBeUndefined();
+    expect(described.message).toBe("No encontrado.");
+    expect(described.tone).toBe("error");
+  });
+
+  it("usa el título que le pasa la pantalla cuando el error no es de un campo", () => {
+    const described = describeApiError(
+      { non_field_errors: ["Algo no cierra."] },
+      "No pudimos enviar el reporte",
     );
+
+    expect(described.title).toBe("No pudimos enviar el reporte");
   });
 
-  it("falls back when detail is not a string", () => {
-    expect(errorDetail({ detail: { code: 403 } }, "fallback")).toBe("fallback");
+  it("el servidor caído no se reporta como credenciales incorrectas", () => {
+    // Es el caso que hacía revisar la contraseña durante media hora: sin
+    // conexión, el login decía «email o contraseña incorrectos».
+    const described = describeApiError(
+      new Error("Network request failed"),
+      "No pudimos iniciar sesión",
+    );
+
+    expect(described.title).toBe("Sin conexión");
+    expect(described.message).toMatch(/servidor/i);
   });
 
-  it("falls back for an Error instance", () => {
-    expect(errorDetail(new Error("boom"), "fallback")).toBe("fallback");
+  it("un fallo de red se explica como tal y no con el texto de fetch", () => {
+    const described = describeApiError(new Error("Network request failed"));
+
+    expect(described.title).toBe("Sin conexión");
+    expect(described.message).not.toContain("Network request failed");
   });
 
-  it("falls back for null", () => {
-    expect(errorDetail(null, "fallback")).toBe("fallback");
+  it("la sesión vencida tiene su propio mensaje", () => {
+    const described = describeApiError(new Error("SESSION_EXPIRED"));
+
+    expect(described.title).toBe("Tu sesión expiró");
+  });
+
+  it("ante un error irreconocible dice algo legible igual", () => {
+    const described = describeApiError({ status: 500 }, "No pudimos guardar");
+
+    expect(described.title).toBe("No pudimos guardar");
+    expect(described.message).toMatch(/probá de nuevo/i);
   });
 });

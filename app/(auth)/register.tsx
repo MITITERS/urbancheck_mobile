@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { signup, logout } from "../../src/api/auth";
+import { describeApiError } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
 
 export default function RegisterScreen() {
@@ -30,6 +32,9 @@ export default function RegisterScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleRegister() {
+    // Si queda abierto, tapa los errores de validación que se muestran debajo
+    // de cada campo.
+    Keyboard.dismiss();
     const tempErrors: Record<string, string> = {};
 
     // Validate Name
@@ -94,12 +99,15 @@ export default function RegisterScreen() {
         if (Object.keys(mapped).length > 0) {
           setErrors(mapped);
         } else {
-          Alert.alert("Error registro", JSON.stringify(data2.errors));
+          const described = describeApiError(currentErr, "No pudimos crear la cuenta");
+          Alert.alert(described.title, described.message);
         }
-      } else if (currentErr instanceof Error) {
-        Alert.alert("Error de red", currentErr.message);
       } else {
-        Alert.alert("Error inesperado", JSON.stringify(currentErr).slice(0, 300));
+        // Sin volcar el error crudo: el servidor caído y el túnel sin levantar
+        // se ven igual desde acá, y ninguno de los dos es culpa de lo que se
+        // escribió en el formulario.
+        const described = describeApiError(currentErr, "No pudimos crear la cuenta");
+        Alert.alert(described.title, described.message);
       }
     } finally {
       setLoading(false);
@@ -136,7 +144,10 @@ export default function RegisterScreen() {
     >
       <ScrollView
         contentContainerStyle={styles.container}
+        // Toca fuera de los campos y el toque llega igual al botón; arrastrá y
+        // el teclado se baja. Sin lo segundo quedaba arriba para siempre.
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <Image
           source={require("../../assets/urbancheck_logo.png")}

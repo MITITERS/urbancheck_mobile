@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +16,7 @@ import {
   CATEGORY_VALUES,
   FILTERABLE_STATUS_VALUES,
   STATUS_LABEL,
-} from "../constants/reports";
+} from "../reports/labels";
 
 export interface ReportFilterState {
   search: string;
@@ -84,11 +83,7 @@ export default function ReportFilterBar({ filters, onChange, resultLabel }: Prop
 
         <Pressable
           style={[styles.filterBtn, (expanded || activeCount > 0) && styles.filterBtnActive]}
-          onPress={() => {
-            // El panel se abre debajo del campo: con el teclado arriba quedaba tapado.
-            Keyboard.dismiss();
-            setExpanded((e) => !e);
-          }}
+          onPress={() => setExpanded((e) => !e)}
           accessibilityLabel="Mostrar filtros"
         >
           <Ionicons
@@ -123,7 +118,7 @@ export default function ReportFilterBar({ filters, onChange, resultLabel }: Prop
                   }
                 >
                   <Ionicons
-                    name={CATEGORY_ICON[value] as any}
+                    name={CATEGORY_ICON[value] as never}
                     size={14}
                     color={active ? "#1a73e8" : "#4b5563"}
                     style={{ marginRight: 5 }}

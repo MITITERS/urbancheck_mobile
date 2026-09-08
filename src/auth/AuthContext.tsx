@@ -9,7 +9,7 @@ import React, {
 
 import { getSession } from "../api/auth";
 import { setSessionToken, setUnauthorizedHandler } from "../api/client";
-import type { UserProfile } from "../api/users";
+import { getMe, type UserProfile } from "../api/users";
 
 const SECURE_STORE_KEY = "urbancheck_session_token";
 
@@ -23,6 +23,7 @@ interface AuthContextValue extends AuthState {
   signIn: (token: string, rememberMe: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (user: UserProfile) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -57,7 +58,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const session = await getSession();
         const token = session.meta.session_token ?? storedToken;
         setSessionToken(token);
-        setState({ token, user: null, isLoading: false });
+        // El perfil se carga acá y no en cada pantalla: el rol y el flag de
+        // contraseña temporal deciden qué se muestra desde el primer render.
+        const user = await getMe().catch(() => null);
+        setState({ token, user, isLoading: false });
       } catch {
         setSessionToken(null);
         await SecureStore.deleteItemAsync(SECURE_STORE_KEY).catch(() => {});
@@ -72,15 +76,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (rememberMe) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, token);
     }
-    setState({ token, user: null, isLoading: false });
+    const user = await getMe().catch(() => null);
+    setState({ token, user, isLoading: false });
   }, []);
 
   const setUser = useCallback((user: UserProfile) => {
     setState((s) => ({ ...s, user }));
   }, []);
 
+  /** Vuelve a leer el perfil: se usa tras cambiar la contraseña temporal. */
+  const refreshUser = useCallback(async () => {
+    const user = await getMe().catch(() => null);
+    if (user) setState((s) => ({ ...s, user }));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut, setUser }}>
+    <AuthContext.Provider
+      value={{ ...state, signIn, signOut, setUser, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

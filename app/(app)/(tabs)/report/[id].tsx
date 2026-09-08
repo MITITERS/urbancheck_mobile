@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -6,10 +6,8 @@ import {
   Animated,
   FlatList,
   Image,
-  KeyboardAvoidingView,
-  Modal,
+  Keyboard,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,31 +18,36 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
-import { useHeaderHeight } from "@react-navigation/elements";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { tabBarClearance } from "../../../../src/constants/layout";
-
-import { errorDetail, isSessionExpired } from "../../../../src/api/errors";
+import { imageSource } from "../../../../src/api/client";
 import {
   addComment,
   deleteComment,
   deleteReport,
   getReport,
   likeReport,
+  type Comment,
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
-import {
-  STATUS_LABEL,
-  categoryLabel,
-  statusLabel,
-} from "../../../../src/constants/reports";
+import { describeApiError } from "../../../../src/api/errors";
+import { participatesAsCitizen } from "../../../../src/api/users";
+import { useAuth } from "../../../../src/auth/AuthContext";
+import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
+import { useKeyboardOffset } from "../../../../src/components/useKeyboardVisible";
+import { canValidateReport } from "../../../../src/validation/canValidateReport";
+import { ValidationActions } from "../../../../src/validation/ValidationActions";
+
+const STATUS_LABEL: Record<string, string> = {
+  pendiente_validacion: "Pendiente de validación",
+  reportado: "Reportado",
+  en_proceso: "En proceso",
+  resuelto: "Resuelto",
+  cancelado: "Cancelado",
+  archivado: "Archivado",
+};
 
 // Pasos del flujo principal (happy path) que se van desbloqueando.
-// Alto de una línea del campo de comentario, y alto fijo del botón Enviar.
-const COMMENT_ROW_HEIGHT = 42;
-
 const TIMELINE_STEPS = [
   "pendiente_validacion",
   "reportado",
@@ -52,26 +55,45 @@ const TIMELINE_STEPS = [
   "resuelto",
 ] as const;
 
+// Aire al final del contenido scrolleable. Con el cajón de comentarios fijo
+// abajo, el scroll termina donde empieza el cajón: alcanza con un respiro.
+const SCROLL_BOTTOM_PADDING = 16;
+
+const CATEGORY_LABEL: Record<string, string> = {
+  bache: "Bache",
+  alumbrado: "Alumbrado",
+  basura: "Basura",
+  semaforo: "Semáforo",
+  vereda: "Vereda",
+  otro: "Otro",
+};
+
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const navigation = useNavigation();
   const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
-  const scrollRef = useRef<ScrollView>(null);
+  const { user } = useAuth();
+  // La barra de pestañas flota sobre el contenido: sin este espacio reservado,
+  // el cajón de comentarios queda debajo de ella y no se puede ni leer ni tocar.
+  const tabBarInset = useFloatingTabBarInset();
+  // Cuánto tapa el teclado de lo que hay anclado abajo. Ya viene descontado lo
+  // que la ventana se achicó sola, si es que se achicó.
+  const keyboardOffset = useKeyboardOffset();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState(0);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [isEnlarged, setIsEnlarged] = useState(false);
-  const [isPortrait, setIsPortrait] = useState(false);
+  // Los comentarios arrancan a la vista: esconderlos por defecto se lee como
+  // que no hay ninguno. El desplegable es para poder achicar la sección cuando
+  // la conversación se hace larga, no para ocultarla.
+  const [commentsOpen, setCommentsOpen] = useState(true);
+  const chevronSpin = useRef(new Animated.Value(1)).current;
   const containerHeight = useRef(new Animated.Value(240)).current;
 
   // Left-edge swipe-back gesture (bottom-tabs has no native back gesture).
@@ -88,6 +110,16 @@ export default function ReportDetailScreen() {
       },
     }),
   ).current;
+
+  function toggleComments() {
+    const opening = !commentsOpen;
+    setCommentsOpen(opening);
+    Animated.timing(chevronSpin, {
+      toValue: opening ? 1 : 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }
 
   function toggleEnlarged() {
     Animated.timing(containerHeight, {
@@ -108,18 +140,6 @@ export default function ReportDetailScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (report?.photo) {
-      Image.getSize(
-        report.photo,
-        (w, h) => {
-          setIsPortrait(h > w);
-        },
-        () => {
-          setIsPortrait(false);
-        },
-      );
-    }
-
     if (report?.latitude && report?.longitude) {
       mapRef.current?.animateToRegion(
         {
@@ -132,31 +152,6 @@ export default function ReportDetailScreen() {
       );
     }
   }, [report]);
-
-  // US-018 / US-019: las acciones del autor viven en el menú del header, no en
-  // el cuerpo del detalle. El header lo define el layout de tabs, así que se
-  // inyecta el botón desde acá donde vive el estado del reporte.
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: report?.can_edit
-        ? () => (
-            <Pressable
-              onPress={() => setMenuOpen(true)}
-              hitSlop={12}
-              style={{ paddingHorizontal: 12 }}
-              accessibilityLabel="Acciones del reporte"
-              accessibilityRole="button"
-            >
-              {deleting ? (
-                <ActivityIndicator size="small" color="#1a73e8" />
-              ) : (
-                <Ionicons name="ellipsis-vertical" size={22} color="#1a73e8" />
-              )}
-            </Pressable>
-          )
-        : undefined,
-    });
-  }, [navigation, report?.can_edit, deleting]);
 
   async function fetchReport() {
     try {
@@ -171,95 +166,21 @@ export default function ReportDetailScreen() {
 
   async function handleLike() {
     if (!report) return;
-    // Optimista: el ícono responde al toque y se revierte si el backend falla.
-    const rollback = { is_liked: report.is_liked, like_count: report.like_count };
-    setReport((r) =>
-      r
-        ? {
-            ...r,
-            is_liked: !r.is_liked,
-            like_count: r.like_count + (r.is_liked ? -1 : 1),
-          }
-        : r,
-    );
     try {
-      const result = rollback.is_liked
-        ? await unlikeReport(report.id)
-        : await likeReport(report.id);
-      setReport((r) =>
-        r ? { ...r, is_liked: result.liked, like_count: result.like_count } : r,
-      );
-    } catch (err) {
-      setReport((r) => (r ? { ...r, ...rollback } : r));
-      if (isSessionExpired(err)) {
-        Alert.alert("Sesión expirada", "Iniciá sesión de nuevo para dar like.");
+      if (report.is_liked) {
+        await unlikeReport(report.id);
+        setReport((r) =>
+          r ? { ...r, is_liked: false, like_count: r.like_count - 1 } : r,
+        );
       } else {
-        Alert.alert("Error", "No se pudo procesar el like.");
+        await likeReport(report.id);
+        setReport((r) =>
+          r ? { ...r, is_liked: true, like_count: r.like_count + 1 } : r,
+        );
       }
+    } catch {
+      Alert.alert("Error", "No se pudo procesar el like.");
     }
-  }
-
-  /** US-019: el borrado es definitivo, así que se avisa antes de confirmar. */
-  function handleDeleteReport() {
-    if (!report) return;
-    Alert.alert(
-      "Eliminar reporte",
-      "Esta acción es permanente: el reporte desaparecerá del feed, del mapa y de tu historial, y no se puede recuperar.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await deleteReport(report.id);
-              router.replace("/(app)/(tabs)");
-            } catch (err) {
-              if (!isSessionExpired(err)) {
-                Alert.alert(
-                  "No se pudo eliminar",
-                  errorDetail(
-                    err,
-                    "Este reporte ya está siendo gestionado y no puede eliminarse.",
-                  ),
-                );
-              }
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  function handleDeleteComment(commentId: number) {
-    Alert.alert("Eliminar comentario", "¿Querés borrar tu comentario?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Eliminar",
-        style: "destructive",
-        onPress: async () => {
-          const previous = report;
-          setReport((r) =>
-            r
-              ? {
-                  ...r,
-                  comments: r.comments.filter((c) => c.id !== commentId),
-                  comment_count: Math.max(0, r.comment_count - 1),
-                }
-              : r,
-          );
-          try {
-            await deleteComment(commentId);
-          } catch {
-            setReport(previous);
-            Alert.alert("Error", "No se pudo eliminar el comentario.");
-          }
-        },
-      },
-    ]);
   }
 
   async function handleComment() {
@@ -277,6 +198,12 @@ export default function ReportDetailScreen() {
           : r,
       );
       setCommentText("");
+      // Con la sección plegada, el comentario recién publicado no se vería: se
+      // despliega sola, que es donde el usuario lo está buscando.
+      if (!commentsOpen) toggleComments();
+      // El comentario ya se fue: el teclado no tiene por qué seguir tapando la
+      // lista donde el usuario quiere verlo aparecer.
+      Keyboard.dismiss();
     } catch {
       Alert.alert("Error", "No se pudo enviar el comentario.");
     } finally {
@@ -300,24 +227,110 @@ export default function ReportDetailScreen() {
     );
   }
 
+  // US-036: validar, rechazar, o nada. La regla vive en un solo lugar.
+  const showValidationActions = canValidateReport({
+    user,
+    status: report.status,
+  });
+  // Las cuentas de trabajo leen el reporte y los comentarios de los vecinos,
+  // pero no aportan: se esconden los controles, no el contenido.
+  const canParticipate = participatesAsCitizen(user);
+  /**
+   * Cuánto se levanta el cajón de comentarios.
+   *
+   * Con el teclado cerrado, lo que tiene que esquivar es la barra de pestañas,
+   * que flota sobre el contenido. Con el teclado abierto, lo que tapa el
+   * teclado: `useKeyboardOffset()` lo mide en lugar de deducirlo de la
+   * plataforma, que era lo que fallaba —en Android *edge-to-edge* la ventana no
+   * se achica, así que suponer que sí dejaba el cajón debajo del teclado—.
+   */
+  const composerBottom = keyboardOffset > 0 ? keyboardOffset : tabBarInset;
+  const isAuthor = user !== null && user.id === report.author.id;
+
+  function confirmDelete() {
+    Alert.alert(
+      "¿Eliminar el reporte?",
+      "Se borra para siempre, junto con sus comentarios y sus me gusta. No se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: () => void handleDelete(),
+        },
+      ],
+    );
+  }
+
+  function confirmDeleteComment(comment: Comment) {
+    Alert.alert(
+      "¿Eliminar el comentario?",
+      comment.is_mine
+        ? "Se borra para siempre."
+        : `Se borra el comentario de ${comment.author.name}. No se puede deshacer.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: () => void handleDeleteComment(comment.id),
+        },
+      ],
+    );
+  }
+
+  async function handleDeleteComment(commentId: number) {
+    try {
+      await deleteComment(commentId);
+      // Se saca de la lista en el momento, sin volver a pedir el reporte: lo
+      // único que cambió es que ese comentario ya no está.
+      setReport((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              comments: prev.comments.filter((c) => c.id !== commentId),
+              comment_count: Math.max(0, prev.comment_count - 1),
+            },
+      );
+    } catch (err: unknown) {
+      const described = describeApiError(err, "No pudimos eliminar el comentario");
+      Alert.alert(described.title, described.message);
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await deleteReport(Number(id));
+      router.back();
+    } catch (err: unknown) {
+      // El servidor lo rechaza si el municipio lo tomó mientras la pantalla
+      // estaba abierta: se dice, en vez de quedar como promesa sin atrapar.
+      const described = describeApiError(err, "No pudimos eliminar el reporte");
+      Alert.alert(described.title, described.message);
+    }
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      // Sin compensar el alto del header, iOS levanta el contenido de menos y el
-      // campo de comentario queda tapado por el teclado.
-      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-      {...swipeBack.panHandlers}
-    >
+    <View style={{ flex: 1 }} {...swipeBack.panHandlers}>
       <ScrollView
         ref={scrollRef}
         style={styles.container}
-        // La barra de pestañas flota en absoluto sobre el contenido: sin esta
-        // reserva, el campo de comentario queda debajo y no se puede tocar.
-        contentContainerStyle={{ paddingBottom: tabBarClearance(insets.bottom) }}
-        // Permite tocar "Enviar" con el teclado abierto; si no, el primer toque
-        // se consume cerrando el teclado en vez de mandar el comentario.
+        // Sin ajuste automático de insets: el cajón de comentarios ya no vive
+        // acá adentro, así que este scroll no tiene que esquivar el teclado.
+        // Lo esquiva el contenedor, que achica esta lista y sube el cajón.
+        contentContainerStyle={{
+          // Sin cajón —una cuenta de trabajo no comenta— el contenido tiene que
+          // dejar libre la barra de pestañas flotante por su cuenta.
+          paddingBottom: canParticipate ? SCROLL_BOTTOM_PADDING : tabBarInset,
+        }}
+        // Con el teclado abierto, el primer toque sobre algo tocable de esta
+        // lista solo lo cerraría, sin llegar al elemento. («Enviar» ya no
+        // depende de esto: vive fuera del scroll.)
         keyboardShouldPersistTaps="handled"
+        // Arrastrar la pantalla cierra el teclado, que es lo que el usuario
+        // espera cuando quiere volver a leer los comentarios.
+        keyboardDismissMode="on-drag"
       >
         {report.latitude && report.longitude ? (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
@@ -336,7 +349,7 @@ export default function ReportDetailScreen() {
             >
               <View style={{ width, height: "100%", position: "relative" }}>
                 <Image
-                  source={{ uri: report.photo }}
+                  source={imageSource(report.photo)}
                   style={{ width, height: "100%" }}
                   onLoadStart={() => setImgLoaded(false)}
                   onLoad={() => setImgLoaded(true)}
@@ -346,20 +359,25 @@ export default function ReportDetailScreen() {
                     <ActivityIndicator color="#bbb" />
                   </View>
                 )}
-                {isPortrait && (
-                  <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
-                    <Ionicons
-                      name={isEnlarged ? "contract-outline" : "resize-outline"}
-                      size={20}
-                      color="#333"
-                    />
-                  </Pressable>
-                )}
+                {/* Siempre disponible: antes solo aparecía si la foto era
+                    vertical, y con una apaisada —o si `Image.getSize` fallaba,
+                    que es fácil detrás de un túnel— no había forma de ampliarla. */}
+                <Pressable
+                  style={styles.resizeBtn}
+                  onPress={toggleEnlarged}
+                  accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
+                >
+                  <Ionicons
+                    name={isEnlarged ? "contract-outline" : "resize-outline"}
+                    size={20}
+                    color="#333"
+                  />
+                </Pressable>
               </View>
               <View style={{ width, height: "100%", position: "relative" }}>
                 <MapView
                   ref={mapRef}
-                  style={StyleSheet.absoluteFillObject}
+                  style={StyleSheet.absoluteFill}
                   initialRegion={{
                     latitude: Number(report.latitude),
                     longitude: Number(report.longitude),
@@ -415,7 +433,7 @@ export default function ReportDetailScreen() {
         ) : (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
             <Image
-              source={{ uri: report.photo }}
+              source={imageSource(report.photo)}
               style={{ width, height: "100%" }}
               onLoadStart={() => setImgLoaded(false)}
               onLoad={() => setImgLoaded(true)}
@@ -425,44 +443,45 @@ export default function ReportDetailScreen() {
                 <ActivityIndicator color="#bbb" />
               </View>
             )}
-            {isPortrait && (
-              <Pressable style={styles.resizeBtn} onPress={toggleEnlarged}>
-                <Ionicons
-                  name={isEnlarged ? "contract-outline" : "resize-outline"}
-                  size={20}
-                  color="#333"
-                />
-              </Pressable>
-            )}
+            <Pressable
+              style={styles.resizeBtn}
+              onPress={toggleEnlarged}
+              accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
+            >
+              <Ionicons
+                name={isEnlarged ? "contract-outline" : "resize-outline"}
+                size={20}
+                color="#333"
+              />
+            </Pressable>
           </Animated.View>
+        )}
+
+        {showValidationActions && (
+          <ValidationActions reportId={report.id} onCompleted={() => void fetchReport()} />
         )}
 
         <View style={styles.section}>
           <View style={styles.row}>
-            <Text style={styles.category}>{categoryLabel(report.category)}</Text>
-            <Text style={styles.status}>{statusLabel(report.status)}</Text>
+            <Text style={styles.category}>
+              {CATEGORY_LABEL[report.category] ?? report.category}
+            </Text>
+            <Text style={styles.status}>
+              {STATUS_LABEL[report.status] ?? report.status}
+            </Text>
           </View>
           <Text style={styles.description}>{report.description}</Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.meta}>Por </Text>
-            <Pressable
+          <Text style={styles.meta}>
+            Por{" "}
+            <Text
+              style={styles.authorLink}
               onPress={() => router.push(`/(app)/user/${report.author.id}`)}
-              hitSlop={6}
-              accessibilityLabel={`Ver perfil de ${report.author.name}`}
+              suppressHighlighting
             >
-              <Text style={styles.authorLink}>{report.author.name}</Text>
-            </Pressable>
-            <Text style={styles.meta}>
-              {" • "}
-              {new Date(report.created_at).toLocaleDateString("es-AR")}
-            </Text>
-          </View>
-          {/* US-018: la fecha de última modificación es visible en el detalle. */}
-          {report.edited_at && (
-            <Text style={styles.editedNote}>
-              Editado el {new Date(report.edited_at).toLocaleDateString("es-AR")}
-            </Text>
-          )}
+              {report.author.name}
+            </Text>{" "}
+            • {new Date(report.created_at).toLocaleDateString("es-AR")}
+          </Text>
           {(report.latitude || report.address) && (
             <Text style={styles.location}>
               📍{" "}
@@ -473,17 +492,51 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
-        <View style={styles.actionsRow}>
+        {/* Editar y eliminar son del autor, y solo mientras nadie más miró el
+            reporte: hasta que un validador lo confirma en terreno. Quién y
+            cuándo lo decide el servidor con `can_edit`: la app no replica la
+            regla de estados. */}
+        {report.can_edit && (
+          <View style={styles.ownerActions}>
+            <Pressable
+              style={styles.ownerBtn}
+              onPress={() => router.push(`/(app)/edit-report/${report.id}`)}
+            >
+              <Ionicons name="create-outline" size={17} color="#1a73e8" />
+              <Text style={styles.ownerBtnText}>Editar</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.ownerBtn, styles.ownerBtnDanger]}
+              onPress={confirmDelete}
+            >
+              <Ionicons name="trash-outline" size={17} color="#e53935" />
+              <Text style={[styles.ownerBtnText, { color: "#e53935" }]}>Eliminar</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Al autor se le explica por qué dejó de poder editarlo, en lugar de
+            que los botones desaparezcan sin motivo. */}
+        {isAuthor && !report.can_edit && (
+          <Text style={styles.ownerLocked}>
+            Este reporte ya pasó por un validador, así que no se puede editar ni
+            eliminar.
+          </Text>
+        )}
+
+        {canParticipate ? (
           <Pressable style={styles.likeBtn} onPress={handleLike}>
-            <Ionicons
-              name={report.is_liked ? "heart" : "heart-outline"}
-              size={18}
-              color="#e53935"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.likeBtnText}>{report.like_count}</Text>
+            <Text style={styles.likeBtnText}>
+              {report.is_liked ? "♥" : "♡"} {report.like_count}
+            </Text>
           </Pressable>
-        </View>
+        ) : (
+          // El contador se sigue viendo: es información del reporte. Lo que se
+          // saca es poder tocarlo.
+          <View style={styles.likeCount}>
+            <Text style={styles.likeCountText}>♡ {report.like_count}</Text>
+          </View>
+        )}
 
         {/* Status timeline */}
         <View style={styles.section}>
@@ -606,53 +659,92 @@ export default function ReportDetailScreen() {
 
         {/* Comments */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Comentarios ({report.comment_count})
-          </Text>
-          {report.comments.length === 0 && (
-            <Text style={styles.noComments}>
-              Todavía no hay comentarios. Sé el primero en aportar información.
+          {/* El encabezado entero es el control: tocar solo la flecha, que es
+              chica, obliga a apuntar. */}
+          <Pressable
+            style={styles.commentsHeader}
+            onPress={toggleComments}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: commentsOpen }}
+            accessibilityLabel={`Comentarios, ${report.comment_count}`}
+          >
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+              Comentarios ({report.comment_count})
             </Text>
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    rotate: chevronSpin.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["-90deg", "0deg"],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Ionicons name="chevron-down" size={18} color="#6b7280" />
+            </Animated.View>
+          </Pressable>
+
+          {commentsOpen && report.comments.length === 0 && (
+            <Text style={styles.noComments}>Todavía no hay comentarios.</Text>
           )}
-          {report.comments.map((c) => (
-            <View key={c.id} style={styles.comment}>
-              <View style={styles.commentHeader}>
-                <Pressable
-                  onPress={() => router.push(`/(app)/user/${c.author.id}`)}
-                  hitSlop={6}
-                  accessibilityLabel={`Ver perfil de ${c.author.name}`}
-                >
-                  <Text style={styles.commentAuthor}>{c.author.name}</Text>
-                </Pressable>
-                {c.is_mine && (
-                  <Pressable
-                    onPress={() => handleDeleteComment(c.id)}
-                    hitSlop={10}
-                    accessibilityLabel="Eliminar mi comentario"
+
+          {commentsOpen &&
+            report.comments.map((c) => (
+              <View key={c.id} style={styles.comment}>
+                <View style={styles.commentHeader}>
+                  <Text
+                    style={[styles.commentAuthor, styles.authorLink]}
+                    onPress={() => router.push(`/(app)/user/${c.author.id}`)}
+                    suppressHighlighting
                   >
-                    <Ionicons name="trash-outline" size={16} color="#c0c4cc" />
-                  </Pressable>
-                )}
+                    {c.is_mine ? "Vos" : c.author.name}
+                  </Text>
+                  {/* Quién puede borrarlo lo decide el servidor con `can_delete`:
+                      el autor del comentario, o el dueño de la publicación. */}
+                  {c.can_delete && (
+                    <Pressable
+                      onPress={() => confirmDeleteComment(c)}
+                      hitSlop={10}
+                      accessibilityLabel="Eliminar comentario"
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#9ca3af" />
+                    </Pressable>
+                  )}
+                </View>
+                <Text style={styles.commentText}>{c.text}</Text>
+                <Text style={styles.commentDate}>
+                  {new Date(c.created_at).toLocaleDateString("es-AR")}
+                </Text>
               </View>
-              <Text style={styles.commentText}>{c.text}</Text>
-              <Text style={styles.commentDate}>
-                {new Date(c.created_at).toLocaleDateString("es-AR")}
-              </Text>
-            </View>
-          ))}
+            ))}
         </View>
 
-        <View style={styles.commentInput}>
+      </ScrollView>
+
+      {/*
+        El cajón vive fuera del scroll y anclado abajo, como el de cualquier
+        chat. Adentro, el teclado tapaba lo que se escribía: iOS lleva el campo
+        a la vista una sola vez, al enfocarlo, y después el campo crece hacia
+        abajo con cada renglón nuevo —por eso empeoraba cuanto más largo era el
+        comentario—. Anclado, crece hacia arriba y el cursor nunca se va abajo.
+      */}
+      {canParticipate && (
+        <View style={[styles.commentInput, { marginBottom: composerBottom }]}>
           <TextInput
             style={styles.commentField}
             placeholder="Escribí un comentario..."
             value={commentText}
             onChangeText={setCommentText}
             multiline
-            // El campo vive al final de una pantalla larga: al enfocarlo lo
-            // traemos a la vista en vez de obligar a deslizar hasta el fondo.
+            // Al enfocar, la lista se lleva al final: con el teclado abierto el
+            // alto útil es la mitad, y sin esto uno escribe mirando la foto en
+            // vez de la conversación que está respondiendo. El retraso deja que
+            // el teclado termine de subir y el layout ya esté achicado.
             onFocus={() => {
-              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
             }}
           />
           <Pressable
@@ -667,50 +759,37 @@ export default function ReportDetailScreen() {
             )}
           </Pressable>
         </View>
-      </ScrollView>
-
-      {/* Menú de acciones del autor, anclado bajo el ícono del header. */}
-      <Modal
-        visible={menuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuOpen(false)}
-      >
-        <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
-          <View style={[styles.menu, { top: headerHeight - 6 }]}>
-            <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuOpen(false);
-                router.push(`/(app)/edit-report/${report.id}`);
-              }}
-            >
-              <Ionicons name="pencil-outline" size={18} color="#1a73e8" />
-              <Text style={styles.menuItemText}>Editar</Text>
-            </Pressable>
-            <View style={styles.menuDivider} />
-            <Pressable
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuOpen(false);
-                // El Alert se pisa con el cierre del modal en iOS si se abre
-                // en el mismo frame.
-                setTimeout(handleDeleteReport, 250);
-              }}
-            >
-              <Ionicons name="trash-outline" size={18} color="#e53935" />
-              <Text style={[styles.menuItemText, { color: "#e53935" }]}>
-                Eliminar
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-    </KeyboardAvoidingView>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  ownerActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  ownerBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#e8f0fe",
+  },
+  ownerBtnDanger: { backgroundColor: "#fce8e6" },
+  ownerBtnText: { fontSize: 14, fontWeight: "700", color: "#1a73e8" },
+  ownerLocked: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    fontSize: 12.5,
+    color: "#9ca3af",
+    lineHeight: 17,
+  },
   container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   photo: { width: "100%", height: 240 },
@@ -724,7 +803,7 @@ const styles = StyleSheet.create({
     height: 240,
   },
   photoSkeleton: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#e9edf2",
     justifyContent: "center",
     alignItems: "center",
@@ -763,52 +842,28 @@ const styles = StyleSheet.create({
     color: "#1a73e8",
   },
   description: { fontSize: 15, color: "#333", marginBottom: 8, lineHeight: 22 },
-  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
   meta: { fontSize: 12, color: "#888" },
-  authorLink: { fontSize: 12, color: "#1a73e8", fontWeight: "600" },
-  editedNote: { fontSize: 11, color: "#9ca3af", fontStyle: "italic", marginTop: 4 },
   location: { fontSize: 13, color: "#666", marginTop: 6 },
-  actionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
-    margin: 16,
-  },
   likeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 18,
+    margin: 16,
+    alignSelf: "flex-start",
+    paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#e53935",
   },
-  likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 15 },
-  menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.15)" },
-  menu: {
-    position: "absolute",
-    right: 10,
-    minWidth: 170,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  menuItem: {
+  likeBtnText: { color: "#e53935", fontWeight: "600", fontSize: 16 },
+  sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
+  commentsHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    justifyContent: "space-between",
+    // El área tocable llega hasta los bordes de la sección, no solo al texto.
+    paddingVertical: 4,
+    marginTop: -4,
   },
-  menuItemText: { fontSize: 15, color: "#1a73e8", fontWeight: "600" },
-  menuDivider: { height: 1, backgroundColor: "#f0f0f0", marginHorizontal: 10 },
-  sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 10 },
+  noComments: { fontSize: 13, color: "#9ca3af", marginBottom: 4 },
   timeline: { flexDirection: "row", marginTop: 6, paddingHorizontal: 4 },
   tlStep: { flex: 1, alignItems: "center" },
   tlLine: {
@@ -861,43 +916,51 @@ const styles = StyleSheet.create({
   },
   commentHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 2,
+    justifyContent: "space-between",
   },
-  commentAuthor: { fontWeight: "600", fontSize: 13, color: "#1a73e8" },
-  noComments: { fontSize: 13, color: "#9ca3af", lineHeight: 18 },
+  commentAuthor: { fontWeight: "600", fontSize: 13, marginBottom: 2 },
+  // El nombre lleva al perfil público: se marca en el color de acción para que
+  // se note que es tocable, sin subrayarlo como un link de web.
+  authorLink: { color: "#1a73e8", fontWeight: "600" },
   commentText: { fontSize: 14, color: "#333" },
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
+  likeCount: {
+    margin: 16,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  likeCountText: { fontSize: 16, color: "#6b7280" },
   commentInput: {
     flexDirection: "row",
-    // El campo crece al escribir varias líneas; sin esto la fila estira al botón
-    // para igualarlo. Anclado arriba, el botón queda quieto mientras el campo
-    // crece hacia abajo.
-    alignItems: "flex-start",
+    // Se alinean abajo: cuando el campo crece con el texto, el botón queda a
+    // la altura del último renglón en vez de estirarse con él.
+    alignItems: "flex-end",
     padding: 12,
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: "#eee",
+    // Fuera del scroll, el cajón tiene que pintar su propio fondo.
+    backgroundColor: "#fff",
   },
   commentField: {
     flex: 1,
+    minHeight: 40,
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
     padding: 10,
     fontSize: 14,
-    minHeight: COMMENT_ROW_HEIGHT,
     maxHeight: 80,
   },
   sendBtn: {
     backgroundColor: "#1a73e8",
     paddingHorizontal: 16,
     borderRadius: 8,
-    alignItems: "center",
     justifyContent: "center",
-    // Alto fijo: el botón no debe crecer con el texto del comentario.
-    height: COMMENT_ROW_HEIGHT,
+    // Alto explícito: la fila ya no estira sus hijos —se alinean abajo— así
+    // que sin esto el botón se encogería al alto de su texto.
+    height: 40,
   },
   sendBtnText: { color: "#fff", fontWeight: "600" },
   mapTypeBtn: {
