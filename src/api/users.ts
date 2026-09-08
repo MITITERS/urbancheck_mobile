@@ -22,6 +22,8 @@ export interface UserProfile {
   municipality: Municipality | null;
   /** Mientras sea true, el usuario debe cambiar la contraseña temporal. */
   must_change_password: boolean;
+  /** US-027: si es false, el perfil público solo muestra nombre y avatar. */
+  is_public: boolean;
   url: string;
 }
 
