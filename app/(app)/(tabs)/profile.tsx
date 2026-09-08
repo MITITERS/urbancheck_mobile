@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,24 +16,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { imageSource } from "../../../src/api/client";
 import { logout } from "../../../src/api/auth";
+import { listResolvedWork } from "../../../src/api/operator";
 import { listMyReports, type Report } from "../../../src/api/reports";
 import {
   getMe,
+  isOperator,
   participatesAsCitizen,
   type UserProfile,
   type UserRole,
 } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
-
-const STATUS_LABEL: Record<string, string> = {
-  pendiente_validacion: "Pendiente de validación",
-  reportado: "Reportado",
-  en_proceso: "En proceso",
-  resuelto: "Resuelto",
-  cancelado: "Cancelado",
-  archivado: "Archivado",
-};
+import { reportStatusLabel } from "../../../src/reports/labels";
 
 const CATEGORY_LABEL: Record<string, string> = {
   bache: "Bache",
@@ -48,6 +42,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pendiente_validacion: { bg: "#fff3e0", text: "#ef6c00" },
   reportado: { bg: "#e3f2fd", text: "#1565c0" },
   en_proceso: { bg: "#fffde7", text: "#f57f17" },
+  resuelto_pendiente_confirmacion: { bg: "#f1f8e9", text: "#558b2f" },
   resuelto: { bg: "#e8f5e9", text: "#2e7d32" },
   cancelado: { bg: "#ffebee", text: "#c62828" },
   archivado: { bg: "#eceff1", text: "#546e7a" },
@@ -71,13 +66,25 @@ function formatDate(isoString: string) {
   }
 }
 
-// Etiquetas de los cuatro roles de la plataforma (US-017).
+// Etiquetas de los cinco roles de la plataforma (US-017, ampliado por US-044).
 const ROLE_LABEL: Record<UserRole, string> = {
   ciudadano: "Ciudadano",
   validador: "Validador",
+  operario: "Operario",
   agente_municipal: "Agente Municipal",
   admin_plataforma: "Administrador de la plataforma",
 };
+
+/**
+ * Una fila del historial del perfil.
+ *
+ * Vecino y operario miran dos listas distintas —lo que reportó uno, lo que
+ * cerró el otro— pero la fila es la misma tarjeta, y la única diferencia de
+ * datos es `resolved_at`, que solo trae el historial del operario. Un tipo con
+ * ese campo opcional deja que la tarjeta se escriba una vez en lugar de
+ * duplicarla por rol.
+ */
+type ProfileReport = Report & { resolved_at?: string };
 
 /** Una fila de acción: ícono, etiqueta y el chevron que anticipa que abre algo. */
 function ActionRow({
@@ -123,7 +130,13 @@ export default function ProfileScreen() {
   // mostrarles la sección vacía es prometerles algo que no van a poder llenar.
   const isCitizen = participatesAsCitizen(user);
   const isMunicipalRole = user !== null && !isCitizen;
-  const [reports, setReports] = useState<Report[]>([]);
+  // El operario sí tiene obra propia que mostrar, aunque no reporte: los
+  // trabajos que cerró (US-046). Es la misma idea que «Mis reportes» del
+  // vecino —el registro de lo que hizo esta persona— y por eso comparte la
+  // sección, el resumen y la tarjeta en lugar de tener una pantalla aparte.
+  const operator = isOperator(user);
+  const hasHistory = isCitizen || operator;
+  const [reports, setReports] = useState<ProfileReport[]>([]);
   // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
   // se lee como que no hay reportes, y el contador no alcanza para desmentirlo.
   const [reportsOpen, setReportsOpen] = useState(true);
@@ -136,8 +149,13 @@ export default function ProfileScreen() {
       void getMe()
         .then(async (profile) => {
           setUser(profile);
+          if (isOperator(profile)) {
+            const { results } = await listResolvedWork();
+            setReports(results);
+            return;
+          }
           // No se piden si no van a mostrarse: una request menos en cada
-          // entrada al perfil del personal municipal.
+          // entrada al perfil del resto del personal municipal.
           if (!participatesAsCitizen(profile)) {
             setReports([]);
             return;
@@ -185,6 +203,28 @@ export default function ProfileScreen() {
   // dice el resumen y lo que se ve al scrollear no pueden discrepar.
   const inProgress = reports.filter((r) => r.status === "en_proceso").length;
   const resolved = reports.filter((r) => r.status === "resuelto").length;
+  const awaitingConfirmation = reports.filter(
+    (r) => r.status === "resuelto_pendiente_confirmacion",
+  ).length;
+
+  // Cada rol mide lo suyo, pero con la misma tarjeta de tres cifras. Las del
+  // operario cuentan **cierres**, no reportes: el total es cuántos trabajos
+  // cerró, y las otras dos en qué quedó cada uno. Un cierre objetado (US-048)
+  // volvió a *En proceso* y solo suma en el total: la acción sobre ese trabajo
+  // está en la bandeja, que es de donde se lo retoma, y no acá.
+  const stats = operator
+    ? [
+        { value: reports.length, label: "Cerrados", color: "#1f2937" },
+        { value: awaitingConfirmation, label: "A confirmar", color: "#558b2f" },
+        { value: resolved, label: "Confirmados", color: "#2e7d32" },
+      ]
+    : [
+        { value: reports.length, label: "Reportes", color: "#1f2937" },
+        { value: inProgress, label: "En proceso", color: "#f57f17" },
+        { value: resolved, label: "Resueltos", color: "#2e7d32" },
+      ];
+
+  const sectionTitle = operator ? "Trabajos resueltos" : "Mis reportes";
 
   const header = (
     <>
@@ -216,26 +256,25 @@ export default function ProfileScreen() {
 
       {/* El resumen monta sobre el borde del encabezado: ata las dos zonas en
           lugar de dejar una franja de color y una lista sueltas. */}
-      {isCitizen && (
+      {hasHistory && (
         <View style={styles.statsCard}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{reports.length}</Text>
-            <Text style={styles.statLabel}>Reportes</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: "#f57f17" }]}>{inProgress}</Text>
-            <Text style={styles.statLabel}>En proceso</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: "#2e7d32" }]}>{resolved}</Text>
-            <Text style={styles.statLabel}>Resueltos</Text>
-          </View>
+          {stats.map((stat, index) => (
+            <Fragment key={stat.label}>
+              {index > 0 && <View style={styles.statDivider} />}
+              <View style={styles.stat}>
+                <Text style={[styles.statValue, { color: stat.color }]}>
+                  {stat.value}
+                </Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
+            </Fragment>
+          ))}
         </View>
       )}
 
-      <View style={[styles.card, !isCitizen && { marginTop: -28 }]}>
+      {/* Sin tarjeta de cifras no hay nada montado sobre el borde del
+          encabezado, así que las acciones suben a ocupar ese hueco. */}
+      <View style={[styles.card, !hasHistory && { marginTop: -28 }]}>
         <ActionRow
           icon="person-circle-outline"
           label="Editar perfil"
@@ -259,15 +298,15 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {isCitizen && (
+      {hasHistory && (
         <Pressable
           style={styles.sectionHeader}
           onPress={toggleReports}
           accessibilityRole="button"
           accessibilityState={{ expanded: reportsOpen }}
-          accessibilityLabel={`Mis reportes, ${reports.length}`}
+          accessibilityLabel={`${sectionTitle}, ${reports.length}`}
         >
-          <Text style={styles.sectionTitle}>Mis reportes</Text>
+          <Text style={styles.sectionTitle}>{sectionTitle}</Text>
           {reports.length > 0 && (
             <View style={styles.countBadge}>
               <Text style={styles.countBadgeText}>{reports.length}</Text>
@@ -301,7 +340,7 @@ export default function ProfileScreen() {
       // La pantalla entera scrollea: con el encabezado fijo, en un teléfono
       // chico las acciones se comían la lista.
       ListHeaderComponent={header}
-      data={isCitizen && reportsOpen ? reports : []}
+      data={hasHistory && reportsOpen ? reports : []}
       keyExtractor={(r) => String(r.id)}
       contentContainerStyle={{ paddingBottom: tabBarInset }}
       renderItem={({ item }) => {
@@ -309,7 +348,16 @@ export default function ProfileScreen() {
         return (
           <Pressable
             style={({ pressed }) => [styles.reportCard, pressed && styles.reportCardPressed]}
-            onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
+            // El detalle del feed no existe para el operario —la navegación lo
+            // deja afuera por rol—, así que su fila abre la pantalla de trabajo,
+            // que además es la que muestra el parte de cierre ya registrado.
+            onPress={() =>
+              router.push(
+                operator
+                  ? `/(app)/work-report/${item.id}`
+                  : `/(app)/(tabs)/report/${item.id}`,
+              )
+            }
           >
             <View style={styles.reportRow}>
               <View style={styles.reportTitle}>
@@ -324,7 +372,13 @@ export default function ProfileScreen() {
                   {CATEGORY_LABEL[item.category] ?? item.category}
                 </Text>
               </View>
-              <Text style={styles.reportDate}>{formatDate(item.created_at)}</Text>
+              {/* Al vecino le importa cuándo lo reportó; al operario, cuándo lo
+                  cerró. Es la fecha con la que el servidor ordena cada lista. */}
+              <Text style={styles.reportDate}>
+                {operator && item.resolved_at
+                  ? `Cerrado ${formatDate(item.resolved_at)}`
+                  : formatDate(item.created_at)}
+              </Text>
             </View>
             <Text style={styles.reportDesc} numberOfLines={2}>
               {item.description}
@@ -332,41 +386,67 @@ export default function ProfileScreen() {
             <View style={styles.reportFooter}>
               <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                 <Text style={[styles.statusBadgeText, { color: colors.text }]}>
-                  {STATUS_LABEL[item.status] ?? item.status}
+                  {reportStatusLabel(item)}
+                  {/* Un reporte archivado sale del feed y del mapa, así que
+                      este listado es el único lugar donde el autor lo vuelve a
+                      encontrar: la fecha explica desde cuándo (US-031). */}
+                  {item.archived_at ? ` · ${formatDate(item.archived_at)}` : ""}
                 </Text>
               </View>
-              <View style={styles.reportStats}>
-                <View style={styles.reportStat}>
-                  <Ionicons name="heart-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.statText}>{item.like_count}</Text>
+              {/* Los me gusta y los comentarios son la repercusión entre
+                  vecinos: al operario no le dicen nada sobre su trabajo y en su
+                  fila serían ruido. */}
+              {!operator && (
+                <View style={styles.reportStats}>
+                  <View style={styles.reportStat}>
+                    <Ionicons name="heart-outline" size={14} color="#9ca3af" />
+                    <Text style={styles.statText}>{item.like_count}</Text>
+                  </View>
+                  <View style={styles.reportStat}>
+                    <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
+                    <Text style={styles.statText}>{item.comment_count}</Text>
+                  </View>
                 </View>
-                <View style={styles.reportStat}>
-                  <Ionicons name="chatbubble-outline" size={14} color="#9ca3af" />
-                  <Text style={styles.statText}>{item.comment_count}</Text>
-                </View>
-              </View>
+              )}
             </View>
           </Pressable>
         );
       }}
       ListEmptyComponent={
         // Plegada no hay vacío que mostrar: la lista está guardada, no vacía.
-        isCitizen && reportsOpen ? (
+        hasHistory && reportsOpen ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="megaphone-outline" size={26} color="#1a73e8" />
+              <Ionicons
+                name={operator ? "hammer-outline" : "megaphone-outline"}
+                size={26}
+                color="#1a73e8"
+              />
             </View>
-            <Text style={styles.emptyTitle}>Todavía no reportaste nada</Text>
-            <Text style={styles.emptyText}>
-              Cuando cargues un problema de la vía pública, vas a poder seguir su
-              estado desde acá.
+            <Text style={styles.emptyTitle}>
+              {operator
+                ? "Todavía no cerraste ningún trabajo"
+                : "Todavía no reportaste nada"}
             </Text>
+            <Text style={styles.emptyText}>
+              {operator
+                ? "Cuando registres la resolución de un trabajo de tu área, te queda acá."
+                : "Cuando cargues un problema de la vía pública, vas a poder seguir su estado desde acá."}
+            </Text>
+            {/* La salida es a donde está el trabajo por hacer: el vecino carga
+                un reporte, el operario abre su bandeja. */}
             <Pressable
               style={styles.emptyAction}
-              onPress={() => router.push("/(app)/(tabs)/create-tab")}
+              onPress={() =>
+                router.push(
+                  operator ? "/(app)/(tabs)/work" : "/(app)/(tabs)/create-tab",
+                )
+              }
             >
-              <Ionicons name="add" size={18} color="#fff" />
-              <Text style={styles.emptyActionText}>Crear mi primer reporte</Text>
+              <Ionicons name={operator ? "hammer" : "add"} size={18} color="#fff" />
+              <Text style={styles.emptyActionText}>
+                {operator ? "Ver mis trabajos" : "Crear mi primer reporte"}
+              </Text>
             </Pressable>
           </View>
         ) : null

@@ -1,10 +1,26 @@
 import { api } from "./client";
 import type { ReportAuthor, ReportStatus } from "./reports";
 
+/**
+ * Los tipos de aviso que emite el backend, espejo de `Notification.Kind`.
+ *
+ * **Si allá se agrega uno, hay que agregarlo acá.** No por el tipo en sí —el
+ * `string` llega igual— sino porque la bandeja los rotula con un ícono por
+ * tipo, y hasta que existió el respaldo de `KIND_STYLE` un tipo desconocido
+ * rompía la pantalla entera.
+ */
 export type NotificationKind =
   | "nuevo_comentario"
   | "nuevo_like"
-  | "cambio_estado";
+  | "cambio_estado"
+  // Comunicación institucional del municipio sobre el reporte (US-024).
+  | "respuesta_oficial"
+  // Aviso previo al archivado por inactividad (US-031).
+  | "proximo_archivado"
+  // Aviso previo a que venza el plazo para objetar un cierre (US-047).
+  | "proxima_confirmacion"
+  // Le llega al agente y al operario cuando el vecino objeta (US-048).
+  | "apelacion_cierre";
 
 export interface Notification {
   id: number;

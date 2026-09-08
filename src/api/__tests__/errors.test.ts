@@ -82,3 +82,31 @@ describe("describeApiError", () => {
     expect(described.message).toMatch(/probá de nuevo/i);
   });
 });
+
+describe("errores que no son de red", () => {
+  it("una falla de red de verdad se reporta como tal", () => {
+    // Es el mensaje que lanza `fetch` de React Native cuando no llega.
+    const described = describeApiError(new Error("Network request failed"));
+
+    expect(described.title).toBe("Sin conexión");
+  });
+
+  it("la sesión vencida tiene su propio mensaje", () => {
+    const described = describeApiError(new Error("SESSION_EXPIRED"));
+
+    expect(described.title).toBe("Tu sesión expiró");
+  });
+
+  it("un error del dispositivo dice lo que pasó, no 'sin conexión'", () => {
+    // Antes cualquier Error se reportaba como problema de red, y eso mandaba a
+    // buscar la causa donde no estaba: el usuario cambiaba de red y volvía a
+    // fallar. Una foto ilegible o un permiso caído no son un problema de red.
+    const described = describeApiError(
+      new Error("No pudimos leer la foto seleccionada."),
+      "No pudimos registrar el cierre",
+    );
+
+    expect(described.title).toBe("No pudimos registrar el cierre");
+    expect(described.message).toBe("No pudimos leer la foto seleccionada.");
+  });
+});

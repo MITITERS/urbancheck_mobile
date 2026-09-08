@@ -16,7 +16,11 @@ import { describeApiError } from "../../../src/api/errors";
 import { listReportsByAuthor, type Report } from "../../../src/api/reports";
 import { getPublicProfile, type PublicProfile } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
-import { CATEGORY_LABEL, STATUS_COLOR, STATUS_LABEL } from "../../../src/reports/labels";
+import {
+  CATEGORY_LABEL,
+  STATUS_COLOR,
+  reportStatusLabel,
+} from "../../../src/reports/labels";
 
 function formatMonth(isoString: string) {
   const date = new Date(isoString);
@@ -159,7 +163,7 @@ export default function PublicProfileScreen() {
             <View style={styles.cardFooter}>
               <View style={[styles.dot, { backgroundColor: STATUS_COLOR[item.status] }]} />
               <Text style={styles.cardStatus}>
-                {STATUS_LABEL[item.status] ?? item.status}
+                {reportStatusLabel(item)}
               </Text>
             </View>
           </View>

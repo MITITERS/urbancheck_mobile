@@ -26,6 +26,7 @@ export const STATUS_LABEL: Record<ReportStatus, string> = {
   pendiente_validacion: "Pendiente de validación",
   reportado: "Reportado",
   en_proceso: "En proceso",
+  resuelto_pendiente_confirmacion: "Resuelto, a confirmar",
   resuelto: "Resuelto",
   cancelado: "Cancelado",
   archivado: "Archivado",
@@ -41,6 +42,9 @@ export const STATUS_COLOR: Record<ReportStatus, string> = {
   pendiente_validacion: "#f59e0b",
   reportado: "#1a73e8",
   en_proceso: "#7c3aed",
+  // El mismo verde del estado final, apagado: se lee como "casi resuelto", que
+  // es exactamente lo que la ventana de objeción existe para sostener.
+  resuelto_pendiente_confirmacion: "#6ee7b7",
   resuelto: "#16a34a",
   cancelado: "#dc2626",
   archivado: "#9ca3af",
@@ -58,6 +62,7 @@ export const FILTERABLE_STATUS_VALUES: ReportStatus[] = [
   "pendiente_validacion",
   "reportado",
   "en_proceso",
+  "resuelto_pendiente_confirmacion",
   "resuelto",
 ];
 
@@ -65,8 +70,38 @@ export const MAPPED_STATUSES: ReportStatus[] = [
   "pendiente_validacion",
   "reportado",
   "en_proceso",
+  // Escenario 9 de US-047: durante la ventana de objeción el reporte **no** se
+  // oculta. Se ve con su estado diferenciado y con la evidencia publicada.
+  "resuelto_pendiente_confirmacion",
   "resuelto",
 ];
+
+/** Lo mínimo que hace falta para rotular el estado de un reporte. */
+type StatusBearing = { status: ReportStatus; appeal_count?: number };
+
+/**
+ * Cómo se nombra el estado de **este** reporte.
+ *
+ * `STATUS_LABEL` nombra un estado en abstracto —sirve para la leyenda del mapa,
+ * los pasos de la línea de tiempo y los filtros—; esto nombra el de un reporte
+ * concreto, que a veces necesita una aclaración.
+ *
+ * Hoy la aclaración es una sola: un reporte *En proceso* que ya fue objetado
+ * volvió a gestión porque el vecino no aceptó la resolución. **No es un estado
+ * nuevo** —la máquina de estados sigue teniendo siete— sino el motivo por el
+ * que está donde está, que sin esto se pierde: en el feed se ve igual que uno
+ * que nunca se cerró.
+ *
+ * Vive acá y no en cada pantalla porque son seis las que pintan el estado de un
+ * reporte, y repartida terminaría aclarándolo en unas y en otras no.
+ */
+export function reportStatusLabel(report: StatusBearing): string {
+  const label = STATUS_LABEL[report.status] ?? report.status;
+  if (report.status === "en_proceso" && (report.appeal_count ?? 0) > 0) {
+    return `${label} (objetado)`;
+  }
+  return label;
+}
 
 /**
  * Cuántos tramos de la dirección se muestran cuando hay que acortarla.

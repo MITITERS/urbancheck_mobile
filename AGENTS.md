@@ -36,6 +36,54 @@ los errores:
   de la suite no tipan.
 - **`jest-expo` ya no trae el preset de React Native**: viene de
   `@react-native/jest-preset`, que está como devDependency.
+- **El `fetch` global es el de Expo, y no puede subir archivos.** Ver abajo.
+
+## Subir archivos va por `XMLHttpRequest`, no por `fetch`
+
+Síntoma si alguien lo revierte: **`Unsupported FormDataPart implementation`** al
+crear un reporte, editarlo, cambiar el avatar, cerrar un trabajo como operario u
+objetar un cierre. O sea, en los cinco lugares donde la app sube un archivo.
+
+`expo/src/winter/runtime.native.ts` reemplaza el `fetch` global por el de Expo.
+Ese arma el multipart en JavaScript (`winter/fetch/convertFormData.ts`) y solo
+entiende `string`, `Blob` u objetos con `bytes`. La forma propia de React Native
+para un archivo local —`{ uri, name, type }`, la que devuelven la cámara y la
+galería— **no está contemplada** y cae en el `throw` del final.
+
+**La solución es `upload()` en `src/api/client.ts`**: cuando el cuerpo es un
+`FormData`, la petición va por `XMLHttpRequest`, que llega al módulo de red
+nativo. Ese sí entiende las partes con `uri` y además transmite el archivo desde
+el disco en lugar de cargarlo entero en memoria. Expo no reemplaza XHR.
+
+Los dos transportes comparten `resolveResponse()`, así que una misma respuesta
+del servidor produce el mismo error por los dos caminos: un 400 se ve igual haya
+foto o no.
+
+### Por qué la variable de entorno no alcanza
+
+Existe `EXPO_PUBLIC_USE_RN_FETCH=1`, que le pide a Expo que no reemplace el
+`fetch`. Está puesta en el `.env` y **sirve solo en un build de producción**, no
+en Expo Go:
+
+- En un export, Metro **incrusta** el valor y la rama se resuelve en tiempo de
+  build. Verificado: `useRnFetch = true` y cero apariciones de `install('fetch'`.
+- En **dev**, los valores del `.env` viven en un módulo aparte de Metro que se
+  evalúa **después** del runtime de Expo. Cuando este lee
+  `process.env.EXPO_PUBLIC_USE_RN_FETCH` todavía vale `undefined`, así que
+  instala su `fetch` igual. Se comprobó sobre el bundle vivo: la definición
+  aparece en el byte ~7.367.000 y la lectura en el ~3.778.000.
+
+Se deja puesta porque en producción es correcta y es una defensa de más, pero
+**el que sostiene la funcionalidad es el camino de XHR**.
+
+**Callejón sin salida ya recorrido:** convertir cada archivo a `Blob` antes de
+adjuntarlo. Funciona, pero hay que hacerlo en los cinco lugares y carga la foto
+entera en memoria.
+
+**Por qué costó encontrarlo:** `describeApiError` reportaba cualquier `Error`
+como "sin conexión", así que el fallo se veía como un problema de red y se
+buscaba en el túnel y en el backend, que estaban sanos. Ya está corregido: solo
+los fallos de red reales dicen eso, el resto muestra el mensaje verdadero.
 
 ## node_modules y iCloud
 

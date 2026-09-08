@@ -25,13 +25,43 @@ import { useUnread } from "../../../src/notifications/UnreadContext";
  * Ícono e color por tipo de aviso. El de cambio de estado (US-011) se distingue
  * a simple vista de los sociales de US-033, sin cambiar cómo se renderizan esos.
  */
-const KIND_STYLE: Record<
-  NotificationKind,
-  { icon: keyof typeof Ionicons.glyphMap; color: string; background: string }
-> = {
+type KindStyle = {
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  background: string;
+};
+
+const KIND_STYLE: Record<NotificationKind, KindStyle> = {
   cambio_estado: { icon: "swap-horizontal", color: "#1a73e8", background: "#e8f0fe" },
   nuevo_comentario: { icon: "chatbubble-outline", color: "#7c3aed", background: "#f3e8ff" },
   nuevo_like: { icon: "heart-outline", color: "#db2777", background: "#fce7f3" },
+  // La voz del municipio: el mismo azul institucional que el hilo de respuestas
+  // oficiales del detalle (US-024).
+  respuesta_oficial: { icon: "business", color: "#1a73e8", background: "#e8f0fe" },
+  // Los dos avisos de plazo por vencer van en ámbar: piden hacer algo antes de
+  // una fecha, y eso es lo que tienen que transmitir de un vistazo.
+  proximo_archivado: { icon: "time-outline", color: "#b45309", background: "#fef3c7" },
+  proxima_confirmacion: { icon: "hourglass-outline", color: "#b45309", background: "#fef3c7" },
+  // El único que no le llega al vecino sino al municipio: algo se objetó.
+  apelacion_cierre: { icon: "alert-circle", color: "#c62828", background: "#ffebee" },
+};
+
+/**
+ * Respaldo para un tipo de aviso que la app todavía no conoce.
+ *
+ * Existe porque el catálogo lo define el **backend** y la app se actualiza
+ * aparte: sin esto, agregar un tipo del lado del servidor rompía la bandeja
+ * entera —`KIND_STYLE[kind]` devolvía `undefined` y leerle `background`
+ * reventaba el render de toda la lista, no de esa fila—. Es exactamente lo que
+ * pasó al sumar los avisos de US-024, US-031, US-047 y US-048.
+ *
+ * El mensaje lo redacta el servidor, así que un aviso desconocido igual se lee
+ * bien; lo único genérico es el ícono.
+ */
+const UNKNOWN_KIND: KindStyle = {
+  icon: "notifications-outline",
+  color: "#546e7a",
+  background: "#eceff1",
 };
 
 function relativeDate(value: string): string {
@@ -199,7 +229,7 @@ export default function NoticesTab() {
           </View>
         }
         renderItem={({ item }) => {
-          const style = KIND_STYLE[item.kind];
+          const style = KIND_STYLE[item.kind] ?? UNKNOWN_KIND;
           return (
             <Pressable
               style={[styles.card, !item.is_read && styles.cardUnread]}

@@ -33,6 +33,7 @@ import {
   MAPPED_STATUSES,
   STATUS_COLOR,
   STATUS_LABEL,
+  reportStatusLabel,
   shortAddress,
 } from "../../../src/reports/labels";
 
@@ -401,7 +402,7 @@ export default function MapTab() {
                   style={[styles.statusDot, { backgroundColor: STATUS_COLOR[selected.status] }]}
                 />
                 <Text style={styles.selectedStatus}>
-                  {STATUS_LABEL[selected.status] ?? selected.status}
+                  {reportStatusLabel(selected)}
                 </Text>
               </View>
               {!!selected.address && (

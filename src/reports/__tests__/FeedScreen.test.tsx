@@ -68,6 +68,10 @@ const REPORT = {
   like_count: 3,
   comment_count: 1,
   created_at: "2026-08-27T10:00:00Z",
+  has_official_response: false,
+  archived_at: null,
+  area_assigned_at: null,
+  appeal_count: 0,
 };
 
 function renderMobile() {
@@ -237,5 +241,62 @@ describe("feed acotado al municipio", () => {
 
     await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, null, NO_FILTERS));
     expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("respuesta oficial en el feed (US-024)", () => {
+  it("destaca los reportes en los que el municipio se pronunció", async () => {
+    // Escenario 1: la respuesta oficial es visible ya en el feed, no solo en
+    // el detalle. El texto entero vive en el detalle.
+    mockedListReports.mockResolvedValue(
+      feedResponse({
+        count: 1,
+        results: [{ ...REPORT, has_official_response: true }],
+      }),
+    );
+
+    renderMobile();
+
+    expect(await screen.findByText("Respuesta oficial")).toBeTruthy();
+  });
+
+  it("no lo destaca cuando todavía no hubo comunicación", async () => {
+    mockedListReports.mockResolvedValue(feedResponse({ count: 1, results: [REPORT] }));
+
+    renderMobile();
+
+    await screen.findByText(REPORT.description);
+    expect(screen.queryByText("Respuesta oficial")).toBeNull();
+  });
+});
+
+describe("reporte reabierto por una objeción (US-048)", () => {
+  it("el feed aclara que volvió a gestión porque el vecino objetó", async () => {
+    // Sin la aclaración se ve igual que un reporte que nunca se cerró, y la
+    // diferencia importa: a este ya lo dieron por resuelto una vez.
+    mockedListReports.mockResolvedValue(
+      feedResponse({
+        count: 1,
+        results: [{ ...REPORT, status: "en_proceso", appeal_count: 1 }],
+      }),
+    );
+
+    renderMobile();
+
+    expect(await screen.findByText("En proceso (objetado)")).toBeTruthy();
+  });
+
+  it("uno en gestión que nunca se objetó se muestra sin aclaración", async () => {
+    mockedListReports.mockResolvedValue(
+      feedResponse({
+        count: 1,
+        results: [{ ...REPORT, status: "en_proceso", appeal_count: 0 }],
+      }),
+    );
+
+    renderMobile();
+
+    expect(await screen.findByText("En proceso")).toBeTruthy();
+    expect(screen.queryByText("En proceso (objetado)")).toBeNull();
   });
 });

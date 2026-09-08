@@ -3,6 +3,7 @@ import { api } from "./client";
 export type UserRole =
   | "ciudadano"
   | "validador"
+  | "operario"
   | "agente_municipal"
   | "admin_plataforma";
 
@@ -10,6 +11,13 @@ export interface Municipality {
   id: number;
   name: string;
   locality?: string;
+}
+
+/** El área operativa a la que pertenece un operario (US-044). */
+export interface OperationalArea {
+  id: number;
+  name: string;
+  is_active: boolean;
 }
 
 export interface UserProfile {
@@ -22,6 +30,10 @@ export interface UserProfile {
   municipality: Municipality | null;
   /** Mientras sea true, el usuario debe cambiar la contraseña temporal. */
   must_change_password: boolean;
+  /** Solo para el rol operario: el área cuyos reportes ve (US-044). */
+  operational_area?: OperationalArea | null;
+  /** Baja lógica de una cuenta de trabajo. */
+  is_work_account_active?: boolean;
   url: string;
 }
 
@@ -71,6 +83,7 @@ export function canValidate(user: UserProfile | null): boolean {
  */
 const WORK_ROLES: readonly UserRole[] = [
   "validador",
+  "operario",
   "agente_municipal",
   "admin_plataforma",
 ];
@@ -96,4 +109,17 @@ const WORK_ROLES: readonly UserRole[] = [
  */
 export function participatesAsCitizen(user: UserProfile | null): boolean {
   return user !== null && !WORK_ROLES.includes(user.role);
+}
+
+/**
+ * Si la cuenta es de operario (US-044).
+ *
+ * Decide la navegación entera de la app: el operario entra directo a su bandeja
+ * y no ve el feed, el mapa, los avisos ni las acciones de aporte. Es una regla
+ * de rol y no de estado, así que alcanza con el rol —igual que
+ * `participatesAsCitizen()`— y la app no muestra pestañas que después devuelvan
+ * 403.
+ */
+export function isOperator(user: UserProfile | null): boolean {
+  return user !== null && user.role === "operario";
 }

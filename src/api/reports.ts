@@ -13,6 +13,10 @@ export type ReportStatus =
   | "pendiente_validacion"
   | "reportado"
   | "en_proceso"
+  // US-046: el operario cierra el trabajo y el reporte queda acá hasta que el
+  // autor deja vencer la ventana de objeción (US-047) o la usa apelando
+  // (US-048). Quien ejecuta el trabajo no lo certifica solo.
+  | "resuelto_pendiente_confirmacion"
   | "resuelto"
   | "cancelado"
   | "archivado";
@@ -27,6 +31,47 @@ export interface StatusHistoryEntry {
   status: ReportStatus;
   created_at: string;
   changed_by: ReportAuthor | null;
+}
+
+/**
+ * Una comunicación institucional del municipio sobre el reporte (US-024).
+ *
+ * Responde la **municipalidad**, no una persona: el encabezado lleva el nombre
+ * del municipio y la fecha. La identidad individual del agente solo se ve en el
+ * panel, con el mismo criterio de protección del personal que US-038 aplica al
+ * validador.
+ */
+export interface OfficialResponse {
+  id: number;
+  text: string;
+  created_at: string;
+  /** Nombre de la ciudad del municipio que responde. */
+  municipality: string;
+}
+
+/**
+ * El parte de trabajo con el que un operario cerró el reporte (US-046).
+ *
+ * Firma el **área operativa**, no la persona: ante el vecino responde la
+ * dependencia, con el mismo criterio de protección del personal municipal que
+ * se aplica al validador y al agente. La identidad del operario solo se ve en
+ * el panel.
+ */
+export interface ResolutionEvidence {
+  id: number;
+  photo: string;
+  description: string;
+  created_at: string;
+  /** Nombre del área que ejecutó el trabajo. */
+  operational_area: string | null;
+}
+
+/** La objeción del autor a un cierre que no resolvió el problema (US-048). */
+export interface ResolutionAppeal {
+  id: number;
+  photo: string;
+  reason: string;
+  created_at: string;
 }
 
 export interface Comment {
@@ -59,11 +104,53 @@ export interface Report {
   like_count: number;
   comment_count: number;
   created_at: string;
+  /** Si el municipio ya se pronunció sobre el reporte (US-024). */
+  has_official_response: boolean;
+  /**
+   * Cuántas veces el autor objetó el cierre (US-048).
+   *
+   * Un reporte *En proceso* con esto en 1 volvió a gestión porque el vecino
+   * objetó la resolución. No es un estado distinto —es el mismo— pero explica
+   * por qué está ahí, y `reportStatusLabel()` lo aclara al lado del estado.
+   */
+  appeal_count: number;
+  /** Cuándo se archivó. Nulo mientras no lo esté (US-031). */
+  archived_at: string | null;
+  /**
+   * Cuándo entró a la bandeja del área operativa (US-045). Es la fecha que la
+   * bandeja del operario muestra y el criterio con el que el backend la ordena.
+   * Nula mientras el reporte no fue asignado.
+   */
+  area_assigned_at: string | null;
 }
 
 export interface ReportDetail extends Report {
   is_liked: boolean;
   comments: Comment[];
+  /**
+   * El hilo institucional, en orden cronológico (US-024).
+   *
+   * Viaja aparte de los comentarios a propósito: un compromiso del municipio no
+   * es un comentario de un vecino, y la pantalla los presenta como dos bloques
+   * distintos para que no puedan confundirse.
+   */
+  official_responses: OfficialResponse[];
+  /**
+   * Los partes de trabajo, en orden cronológico. Son más de uno cuando hubo una
+   * apelación: el segundo cierre no pisa al primero (US-048, escenario 9).
+   */
+  resolution_evidences: ResolutionEvidence[];
+  resolution_appeals: ResolutionAppeal[];
+  /** Hasta cuándo se puede objetar el cierre. Nulo fuera de esa ventana. */
+  objection_deadline: string | null;
+  /**
+   * Si quien mira puede objetar este cierre ahora mismo (US-048).
+   *
+   * Lo decide el servidor: son tres condiciones —ser el autor, estar en el
+   * estado correcto y no haber gastado la única apelación— y replicarlas acá
+   * era garantizar que se fueran divergiendo.
+   */
+  can_appeal: boolean;
   status_history: StatusHistoryEntry[];
   /**
    * Si quien mira puede editar y eliminar este reporte (US-018 y US-019).

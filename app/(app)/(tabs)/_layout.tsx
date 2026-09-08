@@ -2,7 +2,11 @@ import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable } from "react-native";
 
-import { participatesAsCitizen, canValidate } from "../../../src/api/users";
+import {
+  participatesAsCitizen,
+  canValidate,
+  isOperator,
+} from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import {
   FloatingTabBar,
@@ -23,6 +27,14 @@ export default function TabsLayout() {
   // Las cuentas de trabajo no reportan: la pestaña de alta no existe para
   // ellas, ni siquiera escribiendo la ruta.
   const showCreate = participatesAsCitizen(user);
+  // El alcance del operario es deliberadamente acotado (US-045, escenario 8):
+  // ve su bandeja y nada más. La navegación se resuelve por rol acá, en el
+  // arranque de la sesión, y no pantalla por pantalla — así el feed, el mapa y
+  // los avisos no existen para él ni escribiendo la ruta a mano.
+  //
+  // El perfil sí se conserva: es de donde se cierra sesión y se cambia la
+  // contraseña, y sin él la cuenta quedaría encerrada en la app.
+  const operator = isOperator(user);
   const { unread } = useUnread();
 
   return (
@@ -54,27 +66,45 @@ export default function TabsLayout() {
         headerShown: true,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Reportes",
-          headerTitle: "Reportes UrbanCheck",
-          tabBarLabel: "Feed",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "list" : "list-outline"} size={25} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: "Mapa",
-          headerTitle: "Mapa de Incidentes",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "map" : "map-outline"} size={25} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Protected guard={operator}>
+        <Tabs.Screen
+          name="work"
+          options={{
+            title: "Trabajos",
+            headerTitle: "Trabajos de mi área",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "hammer" : "hammer-outline"}
+                size={25}
+                color={color}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Reportes",
+            headerTitle: "Reportes UrbanCheck",
+            tabBarLabel: "Feed",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "list" : "list-outline"} size={25} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="map"
+          options={{
+            title: "Mapa",
+            headerTitle: "Mapa de Incidentes",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "map" : "map-outline"} size={25} color={color} />
+            ),
+          }}
+        />
+      </Tabs.Protected>
       <Tabs.Protected guard={showCreate}>
         <Tabs.Screen
           name="create-tab"
@@ -103,25 +133,32 @@ export default function TabsLayout() {
           }}
         />
       </Tabs.Protected>
-      <Tabs.Screen
-        name="notices"
-        options={{
-          title: "Avisos",
-          headerTitle: "Avisos del Municipio",
-          // Sin avisos pendientes tiene que ser `undefined`: con `0` o `""` el
-          // badge se dibuja igual, vacío, y queda un punto rojo permanente.
-          tabBarBadge: formatUnreadBadge(unread),
-          tabBarBadgeStyle: {
-            backgroundColor: "#e53935",
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: "700",
-          },
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "notifications" : "notifications-outline"} size={25} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="notices"
+          options={{
+            title: "Avisos",
+            headerTitle: "Avisos del Municipio",
+            // Sin avisos pendientes tiene que ser `undefined`: con `0` o `""`
+            // el badge se dibuja igual, vacío, y queda un punto rojo
+            // permanente.
+            tabBarBadge: formatUnreadBadge(unread),
+            tabBarBadgeStyle: {
+              backgroundColor: "#e53935",
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: "700",
+            },
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "notifications" : "notifications-outline"}
+                size={25}
+                color={color}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
       <Tabs.Screen
         name="profile"
         options={{
@@ -132,23 +169,28 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="report/[id]"
-        options={{
-          href: null,
-          headerShown: true,
-          headerTitle: "Detalle del reporte",
-          headerLeft: () => (
-            <Pressable
-              onPress={() => router.back()}
-              hitSlop={12}
-              style={{ paddingHorizontal: 12 }}
-            >
-              <Ionicons name="arrow-back" size={24} color="#1a73e8" />
-            </Pressable>
-          ),
-        }}
-      />
+      {/* Fuera de la barra —`href: null`— pero igual detrás del guard: el
+          detalle del feed no es del operario, y sin esto seguiría siendo
+          alcanzable escribiendo la ruta. */}
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="report/[id]"
+          options={{
+            href: null,
+            headerShown: true,
+            headerTitle: "Detalle del reporte",
+            headerLeft: () => (
+              <Pressable
+                onPress={() => router.back()}
+                hitSlop={12}
+                style={{ paddingHorizontal: 12 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1a73e8" />
+              </Pressable>
+            ),
+          }}
+        />
+      </Tabs.Protected>
     </Tabs>
   );
 }

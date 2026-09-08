@@ -3,12 +3,73 @@ import { api, setSessionToken, setUnauthorizedHandler } from "../client";
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
+/**
+ * `XMLHttpRequest` de mentira: es por donde viajan las subidas, así que sin
+ * esto los tests del camino con archivo no tendrían transporte.
+ */
+interface XhrCall {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+let lastXhr: XhrCall;
+/** Qué contesta la próxima subida. Por defecto, un 201 con `{ id: 1 }`. */
+let xhrResponse:
+  | { status: number; statusText: string; responseText: string }
+  | "network-error";
+
+class FakeXhr {
+  status = 0;
+  statusText = "";
+  responseText = "";
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+
+  open(method: string, url: string) {
+    lastXhr = { method, url, headers: {}, body: undefined };
+  }
+  setRequestHeader(name: string, value: string) {
+    lastXhr.headers[name] = value;
+  }
+  send(body: unknown) {
+    lastXhr.body = body;
+    if (xhrResponse === "network-error") {
+      this.onerror?.();
+      return;
+    }
+    this.status = xhrResponse.status;
+    this.statusText = xhrResponse.statusText;
+    this.responseText = xhrResponse.responseText;
+    this.onload?.();
+  }
+}
+
+global.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest;
+
+beforeEach(() => {
+  mockFetch.mockClear();
+  xhrResponse = {
+    status: 201,
+    statusText: "",
+    responseText: JSON.stringify({ id: 1 }),
+  };
+});
+
+/**
+ * Una respuesta como la que devuelve `fetch`.
+ *
+ * El cuerpo se sirve por `text()` y no por `json()`: el cliente lo lee así para
+ * poder compartir el mismo tratamiento de la respuesta con el camino de subida,
+ * que va por `XMLHttpRequest` y solo tiene texto.
+ */
 function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: "",
-    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   };
 }
 
@@ -52,14 +113,32 @@ describe("api.post", () => {
     expect(options.headers["Content-Type"]).toBe("application/json");
   });
 
-  it("does not set Content-Type for FormData bodies", async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ id: 1 }, 201));
+  it("un FormData no viaja por fetch: sube por XMLHttpRequest", async () => {
+    // Con el `fetch` de Expo no se puede subir un archivo —no entiende las
+    // partes con `uri` que produce la cámara—, así que la subida va por XHR,
+    // que llega al módulo de red nativo. Ver `upload()` en el cliente.
     const form = new FormData();
     form.append("description", "bache");
+
+    const result = await api.post("/api/reports/", form);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(lastXhr.method).toBe("POST");
+    expect(lastXhr.url).toBe("http://localhost:8000/api/reports/");
+    expect(lastXhr.body).toBe(form);
+    // El `Content-Type` lo pone XHR con su `boundary`: fijarlo rompe el cuerpo.
+    expect(lastXhr.headers["Content-Type"]).toBeUndefined();
+    expect(lastXhr.headers.Accept).toBe("application/json");
+    expect(result).toEqual({ id: 1 });
+  });
+
+  it("la subida manda el token de sesión igual que el resto", async () => {
+    setSessionToken("abc123");
+    const form = new FormData();
+
     await api.post("/api/reports/", form);
-    const [, options] = mockFetch.mock.calls[0];
-    expect(options.body).toBe(form);
-    expect(options.headers["Content-Type"]).toBeUndefined();
+
+    expect(lastXhr.headers["X-Session-Token"]).toBe("abc123");
   });
 });
 
@@ -95,21 +174,55 @@ describe("error handling", () => {
       ok: false,
       status: 500,
       statusText: "Internal Server Error",
-      json: () => Promise.reject(new Error("not json")),
+      text: () => Promise.resolve("<html>Bad Gateway</html>"),
     });
     await expect(api.get("/api/test/")).rejects.toEqual({
       detail: "Internal Server Error",
       status: 500,
     });
   });
+
+  it("una subida rechazada da el mismo error que por fetch", async () => {
+    // Los dos transportes comparten el tratamiento de la respuesta: un 400 se
+    // ve igual haya foto o no, y las pantallas no tienen que distinguirlos.
+    xhrResponse = {
+      status: 400,
+      statusText: "Bad Request",
+      responseText: JSON.stringify({ photo: ["La foto es obligatoria."] }),
+    };
+
+    await expect(api.post("/api/reports/", new FormData())).rejects.toEqual({
+      photo: ["La foto es obligatoria."],
+      status: 400,
+    });
+  });
+
+  it("una subida sin red se reporta como falla de red", async () => {
+    xhrResponse = "network-error";
+
+    await expect(api.post("/api/reports/", new FormData())).rejects.toThrow(
+      "Network request failed",
+    );
+  });
+
+  it("una subida con la sesión vencida cierra la sesión", async () => {
+    const onUnauthorized = jest.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    xhrResponse = { status: 401, statusText: "", responseText: "{}" };
+
+    await expect(api.post("/api/reports/", new FormData())).rejects.toThrow(
+      "SESSION_EXPIRED",
+    );
+    expect(onUnauthorized).toHaveBeenCalled();
+  });
 });
 
 describe("api.delete", () => {
   it("returns undefined on 204 without parsing body", async () => {
-    const json = jest.fn();
-    mockFetch.mockResolvedValue({ ok: true, status: 204, json });
+    const text = jest.fn();
+    mockFetch.mockResolvedValue({ ok: true, status: 204, statusText: "", text });
     const result = await api.delete("/api/reports/1/like/");
     expect(result).toBeUndefined();
-    expect(json).not.toHaveBeenCalled();
+    expect(text).not.toHaveBeenCalled();
   });
 });

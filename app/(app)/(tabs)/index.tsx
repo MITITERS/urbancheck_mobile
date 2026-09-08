@@ -11,6 +11,8 @@ import {
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+
 import { imageSource } from "../../../src/api/client";
 import {
   type FeedCoverage,
@@ -25,6 +27,7 @@ import ReportFilterBar, {
   type ReportFilterState,
 } from "../../../src/components/ReportFilterBar";
 import { useDebouncedValue } from "../../../src/hooks/useDebouncedValue";
+import { reportStatusLabel } from "../../../src/reports/labels";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -34,15 +37,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   semaforo: "Semáforo",
   vereda: "Vereda",
   otro: "Otro",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  pendiente_validacion: "Pendiente de validación",
-  reportado: "Reportado",
-  en_proceso: "En proceso",
-  resuelto: "Resuelto",
-  cancelado: "Cancelado",
-  archivado: "Archivado",
 };
 
 const DENIED_REASON =
@@ -73,8 +67,17 @@ function ReportCard({ item }: { item: Report }) {
         <Text style={styles.description} numberOfLines={2}>
           {item.description}
         </Text>
+        {/* El reporte con respuesta oficial se destaca ya en el feed (US-024,
+            escenario 1): es la señal de que el municipio se pronunció. El texto
+            entero vive en el detalle, no en la tarjeta. */}
+        {item.has_official_response && (
+          <View style={styles.officialTag}>
+            <Ionicons name="business" size={12} color="#1a73e8" />
+            <Text style={styles.officialTagText}>Respuesta oficial</Text>
+          </View>
+        )}
         <View style={styles.row}>
-          <Text style={styles.meta}>{STATUS_LABEL[item.status] ?? item.status}</Text>
+          <Text style={styles.meta}>{reportStatusLabel(item)}</Text>
           <Text style={styles.meta}>
             ♥ {item.like_count}  💬 {item.comment_count}
           </Text>
@@ -296,6 +299,18 @@ export default function FeedScreen() {
 }
 
 const styles = StyleSheet.create({
+  officialTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#e8f0fe",
+  },
+  officialTagText: { fontSize: 11, fontWeight: "700", color: "#1a73e8" },
   container: { flex: 1, backgroundColor: "#f5f5f5" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   notice: { backgroundColor: "#fff7ed", padding: 12 },

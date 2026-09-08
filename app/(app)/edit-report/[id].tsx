@@ -229,7 +229,12 @@ export default function EditReportScreen() {
         </View>
 
         <Text style={[styles.label, { marginTop: 22 }]}>Descripción</Text>
+        {/* El ref y el `onFocus` van juntos o el hook no tiene qué revelar:
+            estaba declarado el ref pero nunca conectado, así que acá el teclado
+            tapaba la descripción igual que en el cierre del operario. */}
         <TextInput
+          ref={descriptionField}
+          onFocus={() => keyboard.focusField(descriptionField)}
           style={[styles.input, error && styles.inputError]}
           value={description}
           onChangeText={setDescription}

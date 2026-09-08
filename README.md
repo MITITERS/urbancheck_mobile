@@ -235,11 +235,13 @@ Dos detalles:
 - **El scroll le reserva el alto al anclado mientras está abierto**, medido con
   `onLayout` y no estimado, porque crece con las sugerencias.
 
-### Teclado en los formularios largos: crear y editar reporte
+### Teclado en los formularios largos
 
-Los formularios de reporte no entran en pantalla, y sus campos de texto están
-abajo. Al abrirse el teclado quedaban tapados y uno escribía a ciegas. Aplica a
-la descripción de crear y de editar; la dirección se resolvió anclándola (arriba).
+Los formularios con foto no entran en pantalla, y su campo de texto está abajo.
+Al abrirse el teclado quedaba tapado y uno escribía a ciegas. Aplica a la
+descripción de **crear**, **editar**, el **cierre del operario** (US-046) y el
+motivo de la **objeción del vecino** (US-048); la dirección del alta se resolvió
+anclándola (arriba).
 
 `KeyboardAvoidingView` no lo resuelve, y era lo que había: hace lugar, pero **no
 mueve el scroll hasta el campo enfocado**, así que el campo sigue debajo del
@@ -262,6 +264,14 @@ se achica y suponer que sí dejaba el campo debajo del teclado.
 La corrección se dispara cuando cambia el alto del teclado, no al enfocar: al
 momento del `focus` el teclado todavía no ocupa nada. El salto de un campo a
 otro con el teclado ya abierto se corrige aparte, porque ahí el alto no cambia.
+
+**El hook son tres piezas y las tres son obligatorias**: `scrollViewProps` sobre
+el `ScrollView`, el `keyboardOffset` sumado a su `paddingBottom`, y el par
+`ref` + `onFocus={() => keyboard.focusField(ref)}` sobre el campo. Sin la
+tercera el hook no tiene qué revelar y el teclado tapa igual —le pasó a la
+edición de reporte, que tenía el `ref` declarado y nunca conectado, y como
+TypeScript no marca una variable sin usar, no lo dijo nadie hasta que se
+reportó desde la app—. Si agregás un formulario largo, revisá las tres.
 
 ### Teclado en los formularios de sesión
 
@@ -540,6 +550,158 @@ solo**, sin tocar el código de la app. Desactivar un tipo **suprime el push,
 no la bandeja**: el aviso igual queda para consultar, que es el comportamiento
 menos sorpresivo y el que menos riesgo tiene de que el vecino se pierda
 información de su propio reclamo.
+
+### La bandeja del operario y su alcance (US-044 y US-045)
+
+El operario usa la app con un alcance deliberadamente acotado: ve los reportes
+*En proceso* asignados **a su área** y nada más. No accede al feed comunitario,
+al mapa general, a los avisos, ni a crear, comentar o dar me gusta.
+
+**La navegación se resuelve por rol en el arranque de sesión**, en
+`(tabs)/_layout.tsx`, y no pantalla por pantalla: `isOperator()` gatea con
+`Tabs.Protected` el feed, el mapa, los avisos y el detalle del feed, de modo que
+esas rutas no existen para él ni escribiéndolas a mano. `participatesAsCitizen()`
+ya le sacaba los controles de aporte, porque el operario entra en `WORK_ROLES`.
+
+El **perfil sí se conserva**: es de donde se cierra sesión y se cambia la
+contraseña temporal, y sin él la cuenta quedaría encerrada en la app. En lugar
+de «Mis reportes» muestra «Trabajos resueltos» (ver abajo); el resto de las
+cuentas de trabajo sigue sin sección propia.
+
+El detalle del trabajo es una pantalla propia (`work-report/[id].tsx`) y no la
+del feed con condicionales: el operario necesita la foto, la descripción, la
+categoría y cómo llegar, sin la mitad de la pantalla escondida. «Cómo llegar»
+abre las coordenadas en la app de mapas del dispositivo — `maps:` en iOS,
+`geo:` en Android, y Google Maps en el navegador si ninguno resuelve.
+
+`src/api/operator.ts` **no recibe ningún identificador de área**: si lo
+recibiera, la app estaría en condiciones de pedir el trabajo de otra. El área y
+la municipalidad los resuelve el servidor desde la sesión.
+
+La lista recarga por gesto y al volver a la pestaña, no solo al montarla: un
+reporte que sale de *En proceso* tiene que desaparecer de inmediato.
+
+Un `403` por cuenta o área desactivadas trae su propio motivo desde el backend y
+se muestra tal cual, en vez de un texto genérico: el operario tiene que entender
+por qué no entra.
+
+### Respuestas oficiales: la voz del municipio (US-024)
+
+El detalle del reporte muestra el hilo institucional **antes** del historial y
+de los comentarios, con tratamiento visual propio —filete azul, fondo de la
+marca, encabezado con el nombre del municipio—. Son tres bloques que no se
+pueden confundir: la descripción del vecino, el compromiso del municipio y los
+comentarios del vecindario.
+
+Firma la **municipalidad**, no una persona: la identidad del agente que la
+publicó no viaja en la respuesta del ciudadano, con el mismo criterio de
+protección del personal que se aplica al validador. Solo se ve en el panel.
+
+### El operario ve en su perfil lo que resolvió (US-046)
+
+El vecino ve en su perfil lo que reportó; el operario, lo que cerró. Es la misma
+idea —el registro de lo que hizo esta persona— así que comparte la sección
+plegable, el resumen de tres cifras y la tarjeta de cada fila, en vez de tener
+una pantalla aparte. `isOperator()` decide de cuál de los dos endpoints sale la
+lista, y `ProfileReport` es el tipo de fila común: `Report` más un `resolved_at`
+opcional, que es lo único que difiere entre las dos listas.
+
+Lo que cambia por rol, y por qué:
+
+- **El resumen cuenta cierres, no reportes**: «Cerrados», «A confirmar» y
+  «Confirmados». Un cierre objetado por el vecino (US-048) volvió a *En proceso*
+  y solo suma en el total — la acción sobre ese trabajo está en la bandeja, que
+  es de donde se lo retoma, y no en el perfil.
+- **La fecha de la fila es la del cierre**, no la del reporte: es la que le
+  importa al operario y la que el servidor usa para ordenar. Va rotulada
+  («Cerrado 05/09/2026») porque en la misma posición el vecino ve otra cosa.
+- **Sin me gusta ni comentarios**: son la repercusión entre vecinos y en la fila
+  del operario serían ruido.
+- **La fila abre `work-report/[id]`** y no el detalle del feed, que la
+  navegación le cierra por rol y que además no muestra el parte de cierre ya
+  registrado.
+- **El vacío lo manda a su bandeja**, no a crear un reporte.
+
+### El cierre se saca con la cámara, no se elige de la galería (US-046)
+
+`close-report/[id].tsx` es la única pantalla de carga de imagen que **no**
+ofrece el selector de galería que sí ofrecen el alta y la edición de un reporte.
+La evidencia tiene que corresponder al trabajo efectivamente ejecutado, y una
+imagen de la galería puede ser de cualquier momento y de cualquier lugar. Lo
+mismo vale para la foto de la apelación de US-048.
+
+Foto, descripción y ubicación son las tres obligatorias, y por motivos
+distintos: sin foto no hay evidencia de que el trabajo se hizo, sin descripción
+no se sabe qué se hizo, y sin coordenadas no se puede verificar que quien cierra
+estuvo en el lugar.
+
+**La proximidad se verifica antes de subir la foto.** El backend la vuelve a
+comprobar y es la fuente de verdad, pero hacer esperar una carga que después se
+rechaza es maltratar a alguien que está parado en la calle. Se usa
+`getFreshPosition()` y no la lectura de la entrada: es la que se compara contra
+las coordenadas del reporte.
+
+El detalle del trabajo recarga al enfocarse y no solo al montarse: se vuelve
+desde el formulario de cierre, y el reporte tiene que reflejar que ya se cerró.
+
+### Objetar el cierre: del autor, una sola vez (US-047 y US-048)
+
+La acción aparece según `can_appeal`, que decide el servidor. Son tres
+condiciones —ser el autor, estar en el estado correcto y no haber gastado la
+única apelación— y replicarlas en la app era garantizar que se fueran
+divergiendo con el backend.
+
+El aviso de que es **una sola** está en pantalla antes de enviar, no después: el
+segundo cierre del operario es definitivo, y quien objeta tiene que saberlo
+mientras decide si le conviene hacerlo ahora.
+
+El plazo restante se muestra junto a la evidencia. Durante esa ventana el
+reporte **no** se oculta del feed ni del mapa: se ve con su estado diferenciado
+y con la resolución publicada.
+
+### «En proceso (objetado)» no es un estado nuevo
+
+Un reporte reabierto por una apelación vuelve a *En proceso*, el mismo estado
+que uno que nunca se cerró. En el feed se veían idénticos, y no lo son: a este
+ya lo dieron por resuelto una vez y el vecino no lo aceptó.
+
+`reportStatusLabel()` (`src/reports/labels.ts`) agrega la aclaración cuando el
+reporte está *En proceso* y tiene apelaciones. **La máquina de estados no se
+tocó** —sigue teniendo siete estados—: la aclaración es el motivo por el que
+está donde está, no un estado más.
+
+Vive ahí y no en cada pantalla porque son **seis** las que pintan el estado de
+un reporte concreto —feed, detalle, línea de tiempo, popup del mapa, perfil
+propio y perfil de otra persona—, y repartida terminaría aclarándolo en unas y
+en otras no. `STATUS_LABEL` a secas queda para lo que nombra un estado en
+abstracto: la leyenda del mapa, los pasos de la línea de tiempo y los filtros.
+
+De paso se borraron tres copias locales de `STATUS_LABEL` que vivían en el feed,
+el perfil y el detalle. **La del feed nunca se había actualizado**, así que un
+reporte pendiente de confirmación mostraba ahí el valor crudo del backend.
+
+### Quién objetó: segunda persona solo para el autor
+
+La objeción la ve cualquier vecino que abra el reporte, no solo quien la hizo.
+El cartel decía *«Objetaste este cierre»* a todo el mundo, y el plazo decía
+*«tenés tiempo de objetar»* a quien no podía hacerlo.
+
+Ahora el autor lee la acción que puede tomar y el resto lee el estado del
+trámite: *«El vecino que reportó objetó el cierre»*. Quien objeta es siempre el
+autor —US-048 no habilita a nadie más—, así que para el resto alcanza con
+nombrarlo sin exponer identidad.
+
+### Tres bloques que no se pueden confundir
+
+El detalle del reporte tiene ahora cuatro cosas que decir sobre el mismo caso, y
+cada una con su tratamiento: la **descripción del vecino**, la **resolución del
+municipio** (verde, firmada por el área operativa), la **objeción del autor**
+(roja, colgando de la resolución que objeta) y las **respuestas oficiales**
+(azules, firmadas por la municipalidad). Los comentarios van al final.
+
+La identidad del operario **no** aparece en ninguna: ante el vecino responde el
+área, con el mismo criterio de protección del personal municipal que se aplica
+al validador y al agente. Quién fue se ve únicamente en el panel.
 
 ## Nota: `feature/sprint-3` no salió de `develop`
 
