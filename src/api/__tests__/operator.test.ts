@@ -19,6 +19,7 @@ const OPERATOR: UserProfile = {
   avatar: null,
   role: "operario",
   municipality: { id: 3, name: "Villa María" },
+  is_public: true,
   operational_area: { id: 9, name: "Obras Públicas", is_active: true },
   must_change_password: false,
   url: "/api/users/1/",

@@ -47,6 +47,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  is_public: true,
   url: "/api/users/1/",
 };
 

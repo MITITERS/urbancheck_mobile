@@ -23,6 +23,7 @@ const VALIDATOR: UserProfile = {
   role: "validador",
   municipality: { id: 3, name: "Villa María" },
   must_change_password: false,
+  is_public: true,
   url: "/api/users/1/",
 };
 

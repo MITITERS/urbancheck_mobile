@@ -55,6 +55,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  is_public: true,
   url: "/api/users/1/",
 };
 
@@ -66,6 +67,7 @@ const OPERATOR: UserProfile = {
   role: "operario",
   municipality: { id: 4, name: "Villa María" },
   must_change_password: false,
+  is_public: true,
   operational_area: { id: 2, name: "Alumbrado", is_active: true },
   url: "/api/users/7/",
 };

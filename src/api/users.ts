@@ -30,6 +30,8 @@ export interface UserProfile {
   municipality: Municipality | null;
   /** Mientras sea true, el usuario debe cambiar la contraseña temporal. */
   must_change_password: boolean;
+  /** US-027: si es false, el perfil público solo muestra nombre y avatar. */
+  is_public: boolean;
   /** Solo para el rol operario: el área cuyos reportes ve (US-044). */
   operational_area?: OperationalArea | null;
   /** Baja lógica de una cuenta de trabajo. */

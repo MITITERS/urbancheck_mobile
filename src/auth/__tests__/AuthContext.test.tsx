@@ -43,6 +43,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  is_public: true,
   url: "/api/users/1/",
 };
 
@@ -157,6 +158,7 @@ describe("profile loading", () => {
       ...CITIZEN,
       role: "validador",
       must_change_password: true,
+      is_public: true,
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
