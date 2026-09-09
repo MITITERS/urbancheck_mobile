@@ -242,11 +242,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#eceff1",
   },
+  // Sin filete lateral, igual que en el detalle del vecino: corría el contenido
+  // respecto del margen opuesto y pisaba la esquina redondeada.
   official: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#1a73e8",
+    borderWidth: 1,
+    borderColor: "#c6dafc",
     backgroundColor: "#e8f0fe",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     gap: 4,
   },

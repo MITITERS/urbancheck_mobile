@@ -783,6 +783,17 @@ La identidad del operario **no** aparece en ninguna: ante el vecino responde el
 área, con el mismo criterio de protección del personal municipal que se aplica
 al validador y al agente. Quién fue se ve únicamente en el panel.
 
+**Ninguna lleva filete lateral.** Lo tenían, y un borde de un solo lado corre el
+contenido respecto del margen opuesto —la foto quedaba con 15 píxeles a la
+izquierda y 12 a la derecha— y pisa la esquina redondeada por la que pasa. El
+color lo dan el ícono y el título, así que el contorno completo alcanza para
+cerrar la tarjeta. Mismo cambio que en el panel, y por lo mismo.
+
+**La objeción muestra su foto.** No la mostraba: el backend la manda y el vecino
+la sube al objetar, pero el hilo dibujaba solo el texto. La gracia de estos dos
+bloques es poder comparar la foto del cierre con la del estado real, y con una
+sola no hay comparación.
+
 ## Nota: `feature/sprint-3` no salió de `develop`
 
 Esta rama arranca de un punto **anterior** al merge de Sprint 2 en `develop`, así

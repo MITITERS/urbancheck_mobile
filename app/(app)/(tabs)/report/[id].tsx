@@ -610,6 +610,16 @@ export default function ReportDetailScreen() {
                   </Text>
                 </View>
                 <Text style={styles.officialText}>{appeal.reason}</Text>
+                {/* La foto de la objeción **no se mostraba**, aunque el backend
+                    la manda y el vecino la sube al objetar. Es la mitad que
+                    faltaba: la gracia del hilo es comparar la foto del cierre
+                    con la del estado real, y con una sola no hay comparación. */}
+                {appeal.photo && (
+                  <Image
+                    source={{ uri: appeal.photo }}
+                    style={styles.resolutionPhoto}
+                  />
+                )}
               </View>
             ))}
 
@@ -898,11 +908,16 @@ export default function ReportDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Sin filete lateral: el borde de un solo lado corría el contenido tres
+  // píxeles respecto del otro margen —la foto quedaba con 15 a la izquierda y
+  // 12 a la derecha— y pisaba la esquina redondeada por la que pasaba. El color
+  // ya lo dan el ícono y el título; el contorno completo solo cierra la
+  // tarjeta.
   resolutionCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#16a34a",
+    borderWidth: 1,
+    borderColor: "#c8e6c9",
     backgroundColor: "#e8f5e9",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 8,
     gap: 6,
@@ -920,10 +935,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#eceff1",
   },
   appealCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#c62828",
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
     backgroundColor: "#ffebee",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 8,
     gap: 6,
@@ -949,10 +964,10 @@ const styles = StyleSheet.create({
   },
   appealBtnText: { color: "#c62828", fontWeight: "700", fontSize: 15 },
   officialCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#1a73e8",
+    borderWidth: 1,
+    borderColor: "#c6dafc",
     backgroundColor: "#e8f0fe",
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 8,
     gap: 6,
