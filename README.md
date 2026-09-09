@@ -237,11 +237,18 @@ Dos detalles:
 
 ### Teclado en los formularios largos
 
-Los formularios con foto no entran en pantalla, y su campo de texto está abajo.
-Al abrirse el teclado quedaba tapado y uno escribía a ciegas. Aplica a la
-descripción de **crear**, **editar**, el **cierre del operario** (US-046) y el
-motivo de la **objeción del vecino** (US-048); la dirección del alta se resolvió
-anclándola (arriba).
+Los formularios que no entran en pantalla tienen su campo de texto abajo, y al
+abrirse el teclado quedaba tapado: se escribía a ciegas. Aplica a la descripción
+de **crear**, **editar**, el **cierre del operario** (US-046), el motivo de la
+**objeción del vecino** (US-048) y el **registro**; la dirección del alta se
+resolvió anclándola (arriba).
+
+El registro llegó último y por la misma vía que la edición: reportado desde la
+app. No es un formulario con foto, pero da igual —son cuatro campos más el logo,
+y en un teléfono chico la confirmación de contraseña y el botón quedaban abajo
+del teclado—. **El criterio no es "tiene foto" sino "no entra en pantalla"**, y
+cualquier formulario que no entre necesita el hook, no un
+`KeyboardAvoidingView`.
 
 `KeyboardAvoidingView` no lo resuelve, y era lo que había: hace lugar, pero **no
 mueve el scroll hasta el campo enfocado**, así que el campo sigue debajo del
@@ -277,7 +284,9 @@ reportó desde la app—. Si agregás un formulario largo, revisá las tres.
 
 Login, registro, olvidé mi contraseña, restablecer y cambiar contraseña siguen
 las mismas tres reglas, porque el teclado se quedaba arriba sin forma de
-bajarlo:
+bajarlo. Son sobre **cerrar** el teclado; que además no tape el campo enfocado
+es otra cosa, y la resuelve el hook de la sección anterior —el registro necesitó
+las dos—:
 
 1. **El formulario va dentro de un `ScrollView`**, aunque entre en pantalla. Es
    lo que da las dos formas de cerrar el teclado que uno espera:

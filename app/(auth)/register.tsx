@@ -1,12 +1,10 @@
 import { Link } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +17,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { signup, logout } from "../../src/api/auth";
 import { describeApiError } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
+import { useKeyboardAwareScroll } from "../../src/components/useKeyboardAwareScroll";
+
+/** Aire al final del formulario, antes de sumarle lo que ocupe el teclado. */
+const CONTENT_BOTTOM_PADDING = 24;
 
 export default function RegisterScreen() {
   const { signIn } = useAuth();
@@ -30,6 +32,15 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Son cuatro campos más el logo: en un teléfono chico el teclado tapaba la
+  // confirmación de contraseña y el botón, y se escribía a ciegas. El hook mide
+  // cuánto tapa el teclado de verdad y sube solo al campo enfocado, igual que
+  // en el alta y el cierre de un reporte.
+  const nameField = useRef<TextInput>(null);
+  const emailField = useRef<TextInput>(null);
+  const passwordField = useRef<TextInput>(null);
+  const confirmField = useRef<TextInput>(null);
+  const keyboard = useKeyboardAwareScroll();
 
   async function handleRegister() {
     // Si queda abierto, tapa los errores de validación que se muestran debajo
@@ -119,11 +130,16 @@ export default function RegisterScreen() {
     value: string,
     onChange: (v: string) => void,
     errorKey: string,
+    // El ref y el `onFocus` van juntos o el hook no tiene qué revelar: uno dice
+    // qué campo medir y el otro cuándo.
+    ref: React.RefObject<TextInput | null>,
     extra?: object,
   ) {
     return (
       <>
         <TextInput
+          ref={ref}
+          onFocus={() => keyboard.focusField(ref)}
           style={[styles.input, errors[errorKey] && styles.inputError]}
           placeholder={label}
           value={value}
@@ -138,96 +154,112 @@ export default function RegisterScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <ScrollView
+      style={styles.screen}
+      {...keyboard.scrollViewProps}
+      // Arrastrá y el teclado se baja. Sin esto quedaba arriba para siempre.
+      keyboardDismissMode="on-drag"
+      // El teclado se suma al espacio de abajo: sin ese lugar el scroll no
+      // tiene a dónde ir y el último campo no puede subir por encima de él.
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: CONTENT_BOTTOM_PADDING + keyboard.keyboardOffset },
+      ]}
     >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        // Toca fuera de los campos y el toque llega igual al botón; arrastrá y
-        // el teclado se baja. Sin lo segundo quedaba arriba para siempre.
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        <Image
-          source={require("../../assets/urbancheck_logo.png")}
-          style={styles.logo}
+      <Image
+        source={require("../../assets/urbancheck_logo.png")}
+        style={styles.logo}
+      />
+
+      {field("Nombre completo", name, setName, "name", nameField)}
+      {field("Email", email, setEmail, "email", emailField, {
+        autoCapitalize: "none",
+        keyboardType: "email-address",
+      })}
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          ref={passwordField}
+          onFocus={() => keyboard.focusField(passwordField)}
+          style={[styles.passwordInput, errors.password && styles.inputError]}
+          placeholder="Contraseña (mín. 8 caracteres)"
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
         />
-
-        {field("Nombre completo", name, setName, "name")}
-        {field("Email", email, setEmail, "email", {
-          autoCapitalize: "none",
-          keyboardType: "email-address",
-        })}
-
-        <View style={styles.passwordContainer}>
-          <TextInput
-            style={[styles.passwordInput, errors.password && styles.inputError]}
-            placeholder="Contraseña (mín. 8 caracteres)"
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-          />
-          <Pressable
-            style={styles.eyeButton}
-            onPress={() => setShowPassword(!showPassword)}
-          >
-            <Ionicons
-              name={showPassword ? "eye-outline" : "eye-off-outline"}
-              size={22}
-              color="#888"
-            />
-          </Pressable>
-        </View>
-        {errors.password && (
-          <Text style={styles.errorText}>{errors.password}</Text>
-        )}
-
-        <View style={styles.passwordContainer}>
-          <TextInput
-            style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}
-            placeholder="Confirmar contraseña"
-            secureTextEntry={!showConfirmPassword}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
-          <Pressable
-            style={styles.eyeButton}
-            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-          >
-            <Ionicons
-              name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-              size={22}
-              color="#888"
-            />
-          </Pressable>
-        </View>
-        {errors.confirmPassword && (
-          <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-        )}
-
         <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Registrarse</Text>
-          )}
+          <Ionicons
+            name={showPassword ? "eye-outline" : "eye-off-outline"}
+            size={22}
+            color="#888"
+          />
         </Pressable>
+      </View>
+      {errors.password && (
+        <Text style={styles.errorText}>{errors.password}</Text>
+      )}
 
-        <Link href="/(auth)/login" style={styles.link}>
-          Ya tengo cuenta
-        </Link>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.passwordContainer}>
+        <TextInput
+          ref={confirmField}
+          onFocus={() => keyboard.focusField(confirmField)}
+          style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}
+          placeholder="Confirmar contraseña"
+          secureTextEntry={!showConfirmPassword}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          // Último campo del formulario: la tecla del teclado envía, en vez de
+          // dejarlo abierto tapando los errores de validación.
+          returnKeyType="go"
+          onSubmitEditing={() => void handleRegister()}
+        />
+        <Pressable
+          style={styles.eyeButton}
+          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+        >
+          <Ionicons
+            name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
+            size={22}
+            color="#888"
+          />
+        </Pressable>
+      </View>
+      {errors.confirmPassword && (
+        <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+      )}
+
+      <Pressable
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleRegister}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Registrarse</Text>
+        )}
+      </Pressable>
+
+      <Link href="/(auth)/login" style={styles.link}>
+        Ya tengo cuenta
+      </Link>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: "#fff", flexGrow: 1, justifyContent: "center" },
+  screen: { flex: 1, backgroundColor: "#fff" },
+  // `paddingBottom` lo pone el componente, que le suma el alto del teclado.
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    backgroundColor: "#fff",
+    flexGrow: 1,
+    justifyContent: "center",
+  },
   logo: {
     width: 150,
     height: 150,
