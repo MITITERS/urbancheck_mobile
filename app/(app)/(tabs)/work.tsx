@@ -1,5 +1,4 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -14,9 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
 import { describeApiError } from "../../../src/api/errors";
-import { listAssignedWork } from "../../../src/api/operator";
-import type { Report } from "../../../src/api/reports";
+import { useAssignedWork } from "../../../src/queries/operator";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import { operatorKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
 
 /**
@@ -34,35 +34,22 @@ import { CATEGORY_LABEL } from "../../../src/reports/labels";
 export default function WorkInboxScreen() {
   const router = useRouter();
   const tabBarInset = useFloatingTabBarInset();
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchWork = useCallback(async () => {
-    try {
-      const data = await listAssignedWork();
-      setReports(data.results);
-      setError(null);
-    } catch (err: unknown) {
-      // El 403 de una cuenta o un área desactivadas trae su propio motivo
-      // (US-044, escenario 9): se muestra tal cual en lugar de un texto genérico.
-      setError(describeApiError(err, "No pudimos cargar tus trabajos").message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
+  const work = useAssignedWork();
   // Al volver a la pestaña, y no solo al montarla: después de registrar una
-  // resolución el reporte cerrado tiene que desaparecer de inmediato.
-  useFocusEffect(
-    useCallback(() => {
-      void fetchWork();
-    }, [fetchWork]),
-  );
+  // resolución el reporte cerrado tiene que desaparecer. Refresca por detrás
+  // —solo si el dato venció— en lugar de tapar la bandeja con un spinner.
+  useRefetchOnFocus(operatorKeys.lists());
 
-  if (loading) {
+  const reports = work.data?.results ?? [];
+  // El 403 de una cuenta o un área desactivadas trae su propio motivo
+  // (US-044, escenario 9): se muestra tal cual en lugar de un texto genérico.
+  const error = work.isError
+    ? describeApiError(work.error, "No pudimos cargar tus trabajos").message
+    : null;
+
+  // Spinner solo cuando todavía no hay nada que mostrar. Con datos en caché la
+  // pantalla se dibuja al instante y el refresco no se ve.
+  if (work.isPending) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1a73e8" />
@@ -75,13 +62,7 @@ export default function WorkInboxScreen() {
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={44} color="#c62828" />
         <Text style={styles.errorText}>{error}</Text>
-        <Pressable
-          style={styles.retryBtn}
-          onPress={() => {
-            setLoading(true);
-            void fetchWork();
-          }}
-        >
+        <Pressable style={styles.retryBtn} onPress={() => void work.refetch()}>
           <Text style={styles.retryText}>Reintentar</Text>
         </Pressable>
       </View>
@@ -99,11 +80,9 @@ export default function WorkInboxScreen() {
       ]}
       refreshControl={
         <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => {
-            setRefreshing(true);
-            void fetchWork();
-          }}
+          // El gesto sí fuerza el pedido, venza o no: es una orden explícita.
+          refreshing={work.isRefetching}
+          onRefresh={() => void work.refetch()}
         />
       }
       ListEmptyComponent={

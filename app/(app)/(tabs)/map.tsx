@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -13,11 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
 
-import {
-  listMapReports,
-  type FeedCoverage,
-  type ReportMarker,
-} from "../../../src/api/reports";
+import { type FeedCoverage, type ReportMarker } from "../../../src/api/reports";
+import { useMapReports } from "../../../src/queries/reports";
+import { reportKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { participatesAsCitizen } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
@@ -117,87 +116,73 @@ export default function MapTab() {
   const categoryKey = filters.categories.join(",");
   const statusKey = filters.statuses.join(",");
 
-  const [markers, setMarkers] = useState<ReportMarker[]>([]);
-  const [coverage, setCoverage] = useState<FeedCoverage | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const scopeCoords = scopedToLocation ? coords : null;
   // Sin ubicación no hay mapa que pedir para el vecino: el servidor devolvería
   // los reportes de todos los municipios.
   const canQuery = !scopedToLocation || coords !== null;
 
-  const load = useCallback(async () => {
-    if (!canQuery) {
-      setMarkers([]);
-      setCoverage(null);
-      setLoading(false);
-      return [] as ReportMarker[];
-    }
-    setError(null);
-    try {
-      const data = await listMapReports(scopeCoords, {
-        search,
-        categories: filters.categories,
-        statuses: filters.statuses,
-      });
-      setMarkers(data.results);
-      setCoverage(data.coverage ?? null);
-      // La ficha abierta puede ser de un marcador que el filtro nuevo ya no
-      // devuelve: quedaría flotando sobre un mapa donde ese punto no está.
-      setSelected((current) =>
-        current && data.results.some((marker) => marker.id === current.id)
-          ? current
-          : null,
-      );
-      return data.results;
-    } catch {
-      setError("No pudimos cargar el mapa. Probá de nuevo.");
-      return [] as ReportMarker[];
-    } finally {
-      setLoading(false);
-    }
+  const activeFilters = useMemo(
+    () => ({
+      search,
+      categories: filters.categories,
+      statuses: filters.statuses,
+    }),
+    // Las listas serializadas: sin eso, un array nuevo en cada render cambiaría
+    // la clave de la consulta y volvería a pedir el mapa entero.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canQuery, scopeCoords, search, categoryKey, statusKey]);
+    [search, categoryKey, statusKey],
+  );
 
+  const map = useMapReports(
+    scopeCoords,
+    activeFilters,
+    canQuery && permission !== "checking",
+  );
+  useRefetchOnFocus(reportKeys.lists());
+
+  const markers: ReportMarker[] = canQuery ? (map.data?.results ?? []) : [];
+  const coverage: FeedCoverage | null = canQuery ? (map.data?.coverage ?? null) : null;
+  const loading = map.isPending && canQuery && permission !== "checking";
+  const error = map.isError ? "No pudimos cargar el mapa. Probá de nuevo." : null;
+
+  // La ficha abierta puede ser de un marcador que el filtro nuevo ya no
+  // devuelve: quedaría flotando sobre un mapa donde ese punto no está.
   useEffect(() => {
-    if (permission === "checking") return;
-    let cancelled = false;
+    setSelected((current) =>
+      current && markers.some((marker) => marker.id === current.id) ? current : null,
+    );
+    // Solo cuando cambia el conjunto de marcadores, no en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markers.map((marker) => marker.id).join(",")]);
 
-    async function start() {
-      const results = await load();
-      if (cancelled) return;
-
-      // La vista arranca donde está el usuario; si no dio permiso, sobre el
-      // primer reporte, y si no hay ninguno, sobre el municipio.
-      if (coords) {
-        setRegion({
-          ...coords,
-          latitudeDelta: MARKER_DELTA,
-          longitudeDelta: MARKER_DELTA,
-        });
-        return;
-      }
-
-      const first = results[0];
-      setRegion(
-        first
-          ? {
-              latitude: Number(first.latitude),
-              longitude: Number(first.longitude),
-              latitudeDelta: MARKER_DELTA,
-              longitudeDelta: MARKER_DELTA,
-            }
-          : FALLBACK_REGION,
-      );
+  // La vista arranca donde está el usuario; si no dio permiso, sobre el primer
+  // reporte, y si no hay ninguno, sobre el municipio. Se decide **una vez**: a
+  // partir de ahí la cámara es del usuario y un refresco no se la mueve.
+  useEffect(() => {
+    if (permission === "checking" || region !== null) return;
+    if (coords) {
+      setRegion({
+        ...coords,
+        latitudeDelta: MARKER_DELTA,
+        longitudeDelta: MARKER_DELTA,
+      });
+      return;
     }
-
-    void start();
-    return () => {
-      cancelled = true;
-    };
-  }, [coords, load, permission]);
+    if (map.isPending && canQuery) return;
+    const first = markers[0];
+    setRegion(
+      first
+        ? {
+            latitude: Number(first.latitude),
+            longitude: Number(first.longitude),
+            latitudeDelta: MARKER_DELTA,
+            longitudeDelta: MARKER_DELTA,
+          }
+        : FALLBACK_REGION,
+    );
+  }, [canQuery, coords, map.isPending, markers, permission, region]);
 
   /**
    * Lleva la vista a donde está el usuario, con una lectura del momento.
@@ -306,7 +291,7 @@ export default function MapTab() {
         {error && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{error}</Text>
-            <Pressable onPress={() => void load()}>
+            <Pressable onPress={() => void map.refetch()}>
               <Text style={styles.bannerAction}>Reintentar</Text>
             </Pressable>
           </View>
@@ -374,7 +359,11 @@ export default function MapTab() {
           ))}
         </View>
 
-        <Pressable style={styles.refresh} onPress={() => void load()} hitSlop={8}>
+        <Pressable
+          style={styles.refresh}
+          onPress={() => void map.refetch()}
+          hitSlop={8}
+        >
           <Ionicons name="refresh" size={20} color="#1a73e8" />
         </Pressable>
 

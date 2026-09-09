@@ -1,8 +1,9 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { screen, userEvent, waitFor } from "@testing-library/react-native";
 import * as ImagePicker from "expo-image-picker";
 
 import AppealReportScreen from "../../../app/(app)/appeal-report/[id]";
 import { appealResolution } from "../../api/resolution";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 /**
  * US-048 — el vecino objeta el cierre de su reporte.
@@ -58,7 +59,7 @@ beforeEach(() => {
 
 describe("objetar un cierre", () => {
   it("ofrece los dos orígenes de foto, no solo la cámara", () => {
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     expect(screen.getByText("Sacar foto")).toBeTruthy();
     expect(screen.getByText("Elegir de galería")).toBeTruthy();
@@ -66,7 +67,7 @@ describe("objetar un cierre", () => {
 
   it("elegir de galería pide el permiso de galería y no el de cámara", async () => {
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Elegir de galería"));
 
@@ -77,7 +78,7 @@ describe("objetar un cierre", () => {
 
   it("sacar foto sigue abriendo la cámara", async () => {
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Sacar foto"));
 
@@ -88,7 +89,7 @@ describe("objetar un cierre", () => {
   it("sin permiso de galería lo explica en lugar de fallar en silencio", async () => {
     picker.requestMediaLibraryPermissionsAsync.mockResolvedValue(DENIED);
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Elegir de galería"));
 
@@ -98,7 +99,7 @@ describe("objetar un cierre", () => {
 
   it("con la foto elegida deja reemplazarla por cualquiera de los dos caminos", async () => {
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Elegir de galería"));
 
@@ -109,7 +110,7 @@ describe("objetar un cierre", () => {
 
   it("envía la objeción con la foto de la galería y el motivo", async () => {
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Elegir de galería"));
     await screen.findByText("Elegir otra");
@@ -129,7 +130,7 @@ describe("objetar un cierre", () => {
 
   it("sin foto no envía nada y lo dice", async () => {
     const user = userEvent.setup();
-    render(<AppealReportScreen />);
+    renderWithProviders(<AppealReportScreen />);
 
     await user.press(screen.getByText("Objetar el cierre"));
 

@@ -9,6 +9,7 @@ import FeedScreen from "../../../app/(app)/(tabs)/index";
 import { listReports, type PaginatedReports } from "../../api/reports";
 import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -76,7 +77,7 @@ const REPORT = {
 };
 
 function renderMobile() {
-  return render(<FeedScreen />);
+  return renderWithProviders(<FeedScreen />);
 }
 
 function feedResponse(overrides: Partial<PaginatedReports> = {}): PaginatedReports {

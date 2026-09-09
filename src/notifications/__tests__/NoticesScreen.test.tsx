@@ -8,6 +8,7 @@ import {
   type PaginatedNotifications,
 } from "../../api/notifications";
 import { useUnread } from "../UnreadContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -61,7 +62,7 @@ function page(results: Notification[]): PaginatedNotifications {
 }
 
 function renderNotices() {
-  return render(
+  return renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <NoticesTab />
     </SafeAreaProvider>,

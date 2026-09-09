@@ -17,12 +17,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { imageSource } from "../../../src/api/client";
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
 import {
-  getReport,
   updateReport,
   type ReportCategory,
   type ReportDetail,
 } from "../../../src/api/reports";
 import { Notice } from "../../../src/components/Notice";
+import { useInvalidateReports, useReport } from "../../../src/queries/reports";
 import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 
 const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
@@ -57,38 +57,37 @@ type NewPhoto = { uri: string; name: string; type: string };
 const CONTENT_BOTTOM_PADDING = 40;
 
 export default function EditReportScreen() {
+  const invalidateReports = useInvalidateReports();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [report, setReport] = useState<ReportDetail | null>(null);
+  const query = useReport(Number(id));
+  const report = query.data ?? null;
   const [description, setDescription] = useState("");
   const descriptionField = useRef<TextInput>(null);
   const keyboard = useKeyboardAwareScroll();
   const [category, setCategory] = useState<ReportCategory>("bache");
   const [photo, setPhoto] = useState<NewPhoto | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
 
+  const loading = query.isPending;
+
+  // El formulario se siembra una vez, con el reporte que llega: después manda
+  // la persona, y un refresco por detrás no puede pisarle lo que escribió.
+  const seeded = useRef(false);
   useEffect(() => {
-    let cancelled = false;
-    void getReport(Number(id))
-      .then((data) => {
-        if (cancelled) return;
-        setReport(data);
-        setDescription(data.description);
-        setCategory(data.category);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setNotice(describeApiError(err, "No pudimos abrir el reporte"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    if (!report || seeded.current) return;
+    seeded.current = true;
+    setDescription(report.description);
+    setCategory(report.category);
+  }, [report]);
+
+  useEffect(() => {
+    if (query.isError) {
+      setNotice(describeApiError(query.error, "No pudimos abrir el reporte"));
+    }
+  }, [query.error, query.isError]);
 
   async function pickPhoto(fromCamera: boolean) {
     const permission = fromCamera
@@ -147,6 +146,8 @@ export default function EditReportScreen() {
         } as unknown as Blob);
       }
       await updateReport(Number(id), form);
+      // La edición tiene que verse en el feed y en el detalle al volver.
+      invalidateReports();
       router.back();
     } catch (err: unknown) {
       const described = describeApiError(err, "No pudimos guardar los cambios");

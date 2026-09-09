@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { AuthProvider, useAuth } from "../src/auth/AuthContext";
+import { QueryProvider } from "../src/lib/QueryProvider";
 
 function RootStack() {
   const { token, user, isLoading } = useAuth();
@@ -29,8 +30,12 @@ function RootStack() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootStack />
-    </AuthProvider>
+    // La caché envuelve a la sesión: `AuthContext` limpia las consultas al
+    // cerrar sesión, así que necesita tener el cliente por encima.
+    <QueryProvider>
+      <AuthProvider>
+        <RootStack />
+      </AuthProvider>
+    </QueryProvider>
   );
 }

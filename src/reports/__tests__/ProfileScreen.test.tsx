@@ -1,16 +1,11 @@
-import {
-  render,
-  screen,
-  userEvent,
-  waitFor,
-} from "@testing-library/react-native";
+import { screen, userEvent, waitFor } from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import ProfileScreen from "../../../app/(app)/(tabs)/profile";
-import { listResolvedWork } from "../../api/operator";
-import { listMyReports } from "../../api/reports";
-import { getMe, type UserProfile } from "../../api/users";
+import { api } from "../../api/client";
+import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -23,24 +18,51 @@ jest.mock("@expo/vector-icons", () => {
   return { Ionicons: View };
 });
 
-jest.mock("../../api/users", () => ({
-  getMe: jest.fn(),
-  // Las reglas de rol son las de verdad: son las que deciden qué secciones
-  // existen en esta pantalla y de qué endpoint sale la lista.
-  participatesAsCitizen: jest.requireActual("../../api/users").participatesAsCitizen,
-  isOperator: jest.requireActual("../../api/users").isOperator,
+// Se mockea el **transporte**, no los módulos de la API: así corren de verdad
+// los hooks de caché, los fetchers y las reglas de rol, que es donde vive el
+// comportamiento. Cada endpoint se resuelve por su URL.
+jest.mock("../../api/client", () => ({
+  ...jest.requireActual("../../api/client"),
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-jest.mock("../../api/reports", () => ({ listMyReports: jest.fn() }));
-jest.mock("../../api/operator", () => ({ listResolvedWork: jest.fn() }));
+
 jest.mock("../../api/auth", () => ({ logout: jest.fn() }));
 jest.mock("../../auth/AuthContext", () => ({ useAuth: jest.fn() }));
 
-const mockedGetMe = getMe as jest.MockedFunction<typeof getMe>;
-const mockedListMyReports = listMyReports as jest.MockedFunction<typeof listMyReports>;
-const mockedListResolvedWork = listResolvedWork as jest.MockedFunction<
-  typeof listResolvedWork
->;
+const mockedGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+
+const ME_URL = "/api/users/me/";
+const MY_REPORTS_URL = "/api/reports/?mine=true";
+const HISTORY_URL = "/api/operator/reports/history/";
+
+/** Respuestas por endpoint. Lo que no se declare responde una lista vacía. */
+function respondWith(routes: Record<string, unknown>) {
+  mockedGet.mockImplementation((url: string) => {
+    const match = Object.keys(routes).find((prefix) => url.startsWith(prefix));
+    if (match) return Promise.resolve(routes[match]) as never;
+    return Promise.resolve(page([])) as never;
+  });
+}
+
+/** Una respuesta paginada del backend. */
+function page(results: unknown[]) {
+  return { count: results.length, next: null, previous: null, results };
+}
+
+/** Quién dice el servidor que sos, y qué le contesta al resto de la pantalla. */
+function signedInAs(profile: UserProfile, routes: Record<string, unknown> = {}) {
+  mockedUseAuth.mockReturnValue({
+    user: profile,
+    token: "t",
+    isLoading: false,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    setUser: jest.fn(),
+    refreshUser: jest.fn(),
+  });
+  respondWith({ [ME_URL]: profile, ...routes });
+}
 
 const METRICS: Metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -105,26 +127,11 @@ function work(id: number, status: UserReportStatus, resolvedAt: string) {
 
 /** Entra a la pantalla como operario, con el historial que se le indique. */
 function asOperator(results: ReturnType<typeof work>[]) {
-  mockedGetMe.mockResolvedValue(OPERATOR);
-  mockedUseAuth.mockReturnValue({
-    user: OPERATOR,
-    token: "t",
-    isLoading: false,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-    setUser: jest.fn(),
-    refreshUser: jest.fn(),
-  });
-  mockedListResolvedWork.mockResolvedValue({
-    count: results.length,
-    next: null,
-    previous: null,
-    results,
-  });
+  signedInAs(OPERATOR, { [HISTORY_URL]: page(results) });
 }
 
 function renderProfile() {
-  return render(
+  return renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ProfileScreen />
     </SafeAreaProvider>,
@@ -132,46 +139,24 @@ function renderProfile() {
 }
 
 beforeEach(() => {
-  mockedUseAuth.mockReturnValue({
-    user: CITIZEN,
-    token: "t",
-    isLoading: false,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-    setUser: jest.fn(),
-    refreshUser: jest.fn(),
-  });
-  mockedGetMe.mockResolvedValue(CITIZEN);
-  mockedListMyReports.mockResolvedValue({
-    count: 0,
-    next: null,
-    previous: null,
-    results: [],
-  });
-  mockedListResolvedWork.mockResolvedValue({
-    count: 0,
-    next: null,
-    previous: null,
-    results: [],
-  });
+  signedInAs(CITIZEN);
 });
 
 describe("perfil", () => {
   it("resume la actividad con las cifras de la misma lista que muestra", async () => {
-    mockedListMyReports.mockResolvedValue({
-      count: 3,
-      next: null,
-      previous: null,
-      results: [
+    respondWith({ [ME_URL]: CITIZEN, [MY_REPORTS_URL]: page([
         report(1, "reportado"),
         report(2, "en_proceso"),
         report(3, "resuelto"),
-      ],
-    });
+      ]) });
 
     renderProfile();
 
     expect(await screen.findByText("Mis reportes")).toBeTruthy();
+    // El perfil y la lista son **dos consultas independientes**: el encabezado
+    // aparece antes que las tarjetas, así que hay que esperar a la lista en vez
+    // de dar por hecho que ya llegó con él.
+    expect(await screen.findByText("Reporte 2")).toBeTruthy();
     // Las etiquetas del resumen, en plural, no se confunden con las de estado
     // de cada tarjeta ("Resuelto", "En proceso").
     expect(screen.getByText("Reportes")).toBeTruthy();
@@ -194,31 +179,21 @@ describe("perfil", () => {
       role: "validador",
       municipality: { id: 4, name: "Villa María" },
     };
-    mockedGetMe.mockResolvedValue(validator);
-    mockedUseAuth.mockReturnValue({
-      user: validator,
-      token: "t",
-      isLoading: false,
-      signIn: jest.fn(),
-      signOut: jest.fn(),
-      setUser: jest.fn(),
-      refreshUser: jest.fn(),
-    });
+    signedInAs(validator);
 
     renderProfile();
 
     expect(await screen.findByText("Validador")).toBeTruthy();
     expect(screen.queryByText("Mis reportes")).toBeNull();
-    await waitFor(() => expect(mockedListMyReports).not.toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockedGet).not.toHaveBeenCalledWith(
+        expect.stringContaining("mine=true"),
+      ),
+    );
   });
 
   it("«Mis reportes» se pliega y se despliega", async () => {
-    mockedListMyReports.mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [report(1, "reportado")],
-    });
+    respondWith({ [ME_URL]: CITIZEN, [MY_REPORTS_URL]: page([report(1, "reportado")]) });
     const user = userEvent.setup();
 
     renderProfile();
@@ -258,7 +233,11 @@ describe("perfil del operario", () => {
     expect(screen.getByText("Reporte 1")).toBeTruthy();
     // El operario no reporta: pedirle la lista del vecino sería pedir algo que
     // siempre viene vacío.
-    await waitFor(() => expect(mockedListMyReports).not.toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockedGet).not.toHaveBeenCalledWith(
+        expect.stringContaining("mine=true"),
+      ),
+    );
     expect(screen.queryByText("Mis reportes")).toBeNull();
   });
 

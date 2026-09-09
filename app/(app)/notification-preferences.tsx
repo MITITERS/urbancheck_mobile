@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,11 +9,14 @@ import {
   View,
 } from "react-native";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import {
-  getNotificationPreferences,
   setNotificationPreference,
   type NotificationPreference,
 } from "../../src/api/notifications";
+import { notificationKeys } from "../../src/lib/queryKeys";
+import { useNotificationPreferences } from "../../src/queries/notifications";
 
 const GROUP_TITLE: Record<string, string> = {
   social: "Actividad en tus reportes",
@@ -30,37 +33,35 @@ const GROUP_TITLE: Record<string, string> = {
  * botón de guardar sería una fuente de cambios perdidos.
  */
 export default function NotificationPreferencesScreen() {
-  const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const query = useNotificationPreferences();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setPreferences(await getNotificationPreferences());
-    } catch {
-      setError("No pudimos cargar tus preferencias.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const preferences: NotificationPreference[] = query.data ?? [];
+  const loading = query.isPending;
+  const error = query.isError ? "No pudimos cargar tus preferencias." : saveError;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const key = notificationKeys.list({ preferences: true });
 
   async function toggle(preference: NotificationPreference, enabled: boolean) {
-    const previous = preferences;
-    setPreferences((current) =>
-      current.map((item) =>
+    // El interruptor tiene que moverse en el acto: se escribe la caché primero
+    // y se revierte si el servidor rechaza. Sin botón de guardar, esperar la
+    // respuesta para mover el control se lee como que no reaccionó.
+    const previous = queryClient.getQueryData<NotificationPreference[]>(key);
+    setSaveError(null);
+    queryClient.setQueryData(key, (current: NotificationPreference[] | undefined) =>
+      (current ?? []).map((item) =>
         item.kind === preference.kind ? { ...item, enabled } : item,
       ),
     );
     try {
-      setPreferences(await setNotificationPreference(preference.kind, enabled));
+      queryClient.setQueryData(
+        key,
+        await setNotificationPreference(preference.kind, enabled),
+      );
     } catch {
-      setPreferences(previous);
-      setError("No pudimos guardar el cambio. Intentá de nuevo.");
+      queryClient.setQueryData(key, previous);
+      setSaveError("No pudimos guardar el cambio. Intentá de nuevo.");
     }
   }
 
@@ -84,7 +85,7 @@ export default function NotificationPreferencesScreen() {
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
-          <Pressable onPress={() => void load()}>
+          <Pressable onPress={() => void query.refetch()}>
             <Text style={styles.retry}>Reintentar</Text>
           </Pressable>
         </View>

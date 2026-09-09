@@ -49,6 +49,64 @@ feed como siempre y recibe solo lo que corresponde.
 
 ## Decisiones técnicas
 
+### La caché es TanStack Query, y las tres piezas que la sostienen
+
+La app leía datos con `useState` + `useEffect` + `useFocusEffect`: cada pantalla
+guardaba su propia lista y **la volvía a pedir desde cero cada vez que se
+entraba a la pestaña**, tapando todo con un `ActivityIndicator`. Eso producía
+los dos síntomas que se reportaron: se sentía lenta —cada navegación era una
+pantalla en blanco— y no se actualizaba —lo que cambiaba en una pantalla no
+llegaba a las otras hasta volver a entrar—.
+
+Ahora la caché es de **TanStack Query**, la misma librería y la misma
+convención de claves que el panel (`src/lib/queryKeys.ts`).
+
+**El transporte y la caché van en módulos distintos**, y no es cosmético:
+
+| Capa | Dónde | Qué sabe |
+| --- | --- | --- |
+| Transporte | `src/api/*.ts` | Cómo hablarle al servidor |
+| Caché | `src/queries/*.ts` | Cuándo hace falta preguntarle |
+
+Separarlos deja probar cada una por su lado: un test puede sustituir el fetcher
+y seguir ejerciendo el hook de verdad. Con los dos en el mismo archivo eso es
+**imposible**, porque el hook llama al fetcher por referencia interna del módulo
+y `jest.mock` del export no lo intercepta. Si algún día se juntan, la mitad de
+los tests de pantalla dejan de probar lo que dicen probar.
+
+Tres piezas hacen que ande en React Native, donde no hay ventana que enfocar:
+
+1. **`QueryProvider`** conecta `AppState` con el `focusManager`, para quien deja
+   el teléfono y vuelve.
+2. **`useRefetchOnFocus(clave)`** cubre el otro evento: volver a una pantalla
+   dentro de la app. Las pestañas quedan montadas, así que no hay montaje que
+   dispare nada. Usa `refetchQueries({ type: "active", stale: true })`: **no
+   fuerza el pedido**, refresca lo que ya venció. Ahí está la diferencia con lo
+   de antes — volver a una pestaña que se miró hace cinco segundos no cuesta una
+   request y se ve al instante.
+3. **El spinner solo si no hay nada que mostrar** (`isPending`, no
+   `isFetching`). Con datos en caché la pantalla se dibuja entera y el refresco
+   pasa por detrás.
+
+**Toda escritura invalida lo que dependía de ella**, que es la otra mitad del
+problema. `useInvalidateReports()` y `useInvalidateOperatorWork()` existen para
+eso y se llaman desde crear, editar, borrar, cerrar y objetar. El me gusta es el
+caso menos evidente y el más importante: al cruzar el umbral **valida el
+reporte** (US-040), así que lo que cambia no es un contador sino el estado, y
+eso se ve en el feed, en el mapa y en dos perfiles.
+
+**Al cerrar sesión se vacía la caché entera** (`queryClient.clear()` en
+`AuthContext`). Vive en memoria del proceso y no en la sesión: sin eso, quien
+entre después en el mismo teléfono vería los reportes, los avisos y el perfil
+del anterior mientras llegan los suyos.
+
+El feed va con `useInfiniteQuery` y no con una consulta por página, porque sus
+páginas son **una sola lista**: al volver a la pestaña hay que recuperar todo lo
+que se venía scrolleando, no la primera página.
+
+Lo que **no** se migró son los formularios —alta, edición, login, registro—: ahí
+`setLoading` es el estado del envío, no un dato que cachear.
+
 ### Capacidad de validar: una sola regla
 
 `canValidate()` (`src/api/users.ts`) y `canValidateReport()`

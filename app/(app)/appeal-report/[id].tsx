@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
 import { appealResolution } from "../../../src/api/resolution";
+import { useInvalidateReports } from "../../../src/queries/reports";
 import { Notice } from "../../../src/components/Notice";
 import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 
@@ -50,6 +51,7 @@ const CONTENT_BOTTOM_PADDING = 40;
  * que saberlo mientras decide si le conviene hacerlo ahora.
  */
 export default function AppealReportScreen() {
+  const invalidateReports = useInvalidateReports();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [photo, setPhoto] = useState<LocalPhoto | null>(null);
@@ -122,6 +124,8 @@ export default function AppealReportScreen() {
     setNotice(null);
     try {
       await appealResolution(Number(id), { photo, reason: reason.trim() });
+      // El reporte volvió a gestión: cambia de estado en el feed y en el detalle.
+      invalidateReports();
       router.back();
     } catch (err: unknown) {
       setNotice(describeApiError(err, "No pudimos registrar tu objeción"));

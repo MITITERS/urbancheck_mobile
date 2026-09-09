@@ -11,15 +11,20 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import {
-  listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
   type Notification,
   type NotificationKind,
+  type PaginatedNotifications,
 } from "../../../src/api/notifications";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import { notificationKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { useUnread } from "../../../src/notifications/UnreadContext";
+import { useNotifications } from "../../../src/queries/notifications";
 
 /**
  * Ícono e color por tipo de aviso. El de cambio de estado (US-011) se distingue
@@ -80,46 +85,52 @@ export default function NoticesTab() {
   // El contador sale del backend, no de la lista: la bandeja está paginada, así
   // que contar lo que hay en pantalla daría de menos con más de una página.
   const { unread, refreshUnread, applyUnreadDelta, clearUnread } = useUnread();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+  const queryClient = useQueryClient();
+  const inbox = useNotifications();
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const data = await listNotifications();
-      setNotifications(data.results);
-    } catch {
-      setError("No pudimos cargar tus avisos.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const notifications: Notification[] = inbox.data?.results ?? [];
+  const loading = inbox.isPending;
+  const error = inbox.isError ? "No pudimos cargar tus avisos." : null;
 
-  // Cubre también el montaje, porque la pantalla se monta ya enfocada: un
-  // `useEffect` además de esto dispararía dos veces el mismo pedido. Hace falta
-  // en cada foco porque la pantalla queda montada al cambiar de pestaña, y sin
-  // esto volver a Avisos muestra la lista vieja, desalineada con el badge.
+  /** Reescribe la lista en la caché, que es de donde la pantalla la lee. */
+  const patchList = useCallback(
+    (update: (items: Notification[]) => Notification[]) => {
+      queryClient.setQueryData(
+        notificationKeys.list({ page: 1 }),
+        (current: PaginatedNotifications | undefined) =>
+          current ? { ...current, results: update(current.results) } : current,
+      );
+    },
+    [queryClient],
+  );
+
+  // La pantalla queda montada al cambiar de pestaña: sin esto, volver a Avisos
+  // mostraría la lista vieja, desalineada con el badge. Refresca solo lo que
+  // venció y por detrás, en lugar de recargar de cero con un spinner.
+  useRefetchOnFocus(notificationKeys.lists());
   useFocusEffect(
     useCallback(() => {
-      void load();
       void refreshUnread();
-    }, [load, refreshUnread]),
+    }, [refreshUnread]),
   );
+
+  const load = useCallback(() => {
+    void inbox.refetch();
+    // `refetch` es estable; incluir `inbox` entero re-crearía esto en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function open(notification: Notification) {
     if (!notification.is_read) {
-      setNotifications((current) =>
-        current.map((item) =>
+      patchList((items) =>
+        items.map((item) =>
           item.id === notification.id ? { ...item, is_read: true } : item,
         ),
       );
       applyUnreadDelta(-1);
       await markNotificationRead(notification.id).catch(() => {
-        void load();
+        load();
         void refreshUnread();
       });
     }
@@ -131,14 +142,14 @@ export default function NoticesTab() {
   async function readAll() {
     if (unread === 0 || markingAll) return;
     setMarkingAll(true);
-    setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
+    patchList((items) => items.map((item) => ({ ...item, is_read: true })));
     clearUnread();
     try {
       await markAllNotificationsRead();
     } catch {
       // El optimismo no se sostuvo: se vuelve al estado real del servidor en
       // vez de dejar la bandeja mintiendo.
-      await load();
+      load();
       await refreshUnread();
     } finally {
       setMarkingAll(false);
@@ -212,11 +223,9 @@ export default function NoticesTab() {
         contentContainerStyle={[styles.listContent, { paddingBottom: tabBarInset }]}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void load();
-            }}
+            // El gesto fuerza el pedido, venza o no: es una orden explícita.
+            refreshing={inbox.isRefetching}
+            onRefresh={load}
           />
         }
         ListEmptyComponent={

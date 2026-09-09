@@ -1,13 +1,10 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react-native";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import WorkInboxScreen from "../../../app/(app)/(tabs)/work";
-import { listAssignedWork, type PaginatedWork } from "../../api/operator";
+import { api } from "../../api/client";
+import type { PaginatedWork } from "../../api/operator";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 const mockedPush = jest.fn();
 
@@ -26,9 +23,23 @@ jest.mock("@expo/vector-icons", () => {
   return { Ionicons: View };
 });
 
-jest.mock("../../api/operator", () => ({ listAssignedWork: jest.fn() }));
+// Se mockea el **transporte** y no el módulo de la API: así corren de verdad
+// el hook de caché y el fetcher, que es donde vive el comportamiento nuevo.
+// Mockear `listAssignedWork` no serviría —el hook lo llama por referencia
+// interna del módulo, así que el mock del export no lo intercepta—.
+jest.mock("../../api/client", () => ({
+  ...jest.requireActual("../../api/client"),
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+}));
 
-const mockedList = listAssignedWork as jest.MockedFunction<typeof listAssignedWork>;
+const mockedGet = api.get as jest.MockedFunction<typeof api.get>;
+/** Lo que responde la API, tipado como la bandeja. */
+const mockedList = {
+  mockResolvedValue: (value: PaginatedWork) => mockedGet.mockResolvedValue(value),
+  mockRejectedValue: (value: unknown) => mockedGet.mockRejectedValue(value),
+  mockResolvedValueOnce: (value: PaginatedWork) =>
+    mockedGet.mockResolvedValueOnce(value),
+};
 
 const WORK = {
   id: 7,
@@ -60,7 +71,7 @@ const METRICS: Metrics = {
 
 /** La bandeja reserva el espacio de la barra flotante: necesita las insets. */
 function renderInbox() {
-  return render(
+  return renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <WorkInboxScreen />
     </SafeAreaProvider>,

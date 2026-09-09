@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { Fragment, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,17 +16,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { imageSource } from "../../../src/api/client";
 import { logout } from "../../../src/api/auth";
-import { listResolvedWork } from "../../../src/api/operator";
-import { listMyReports, type Report } from "../../../src/api/reports";
+import { useResolvedWork } from "../../../src/queries/operator";
+import { type Report } from "../../../src/api/reports";
+import { useMyReports } from "../../../src/queries/reports";
 import {
-  getMe,
   isOperator,
   participatesAsCitizen,
-  type UserProfile,
   type UserRole,
 } from "../../../src/api/users";
+import { useMe } from "../../../src/queries/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
+import { reportKeys, userKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { reportStatusLabel } from "../../../src/reports/labels";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -125,7 +127,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabBarInset = useFloatingTabBarInset();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const me = useMe();
+  const user = me.data ?? null;
   // Las cuentas de trabajo no reportan, así que «Mis reportes» no les aplica:
   // mostrarles la sección vacía es prometerles algo que no van a poder llenar.
   const isCitizen = participatesAsCitizen(user);
@@ -136,36 +139,21 @@ export default function ProfileScreen() {
   // sección, el resumen y la tarjeta en lugar de tener una pantalla aparte.
   const operator = isOperator(user);
   const hasHistory = isCitizen || operator;
-  const [reports, setReports] = useState<ProfileReport[]>([]);
+
+  // Las dos listas se declaran siempre y se habilita la que corresponde: un
+  // hook no puede ir adentro de un `if`. La que no aplica no pide nada.
+  const myReports = useMyReports(1, isCitizen);
+  const resolvedWork = useResolvedWork();
+  const history = operator ? resolvedWork : myReports;
+  const reports: ProfileReport[] = hasHistory ? (history.data?.results ?? []) : [];
+
+  // Al volver al perfil se refresca lo que venció, sin tapar la pantalla.
+  useRefetchOnFocus(userKeys.details());
+  useRefetchOnFocus(reportKeys.lists());
   // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
   // se lee como que no hay reportes, y el contador no alcanza para desmentirlo.
   const [reportsOpen, setReportsOpen] = useState(true);
   const chevronSpin = useRef(new Animated.Value(1)).current;
-  const [loading, setLoading] = useState(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      void getMe()
-        .then(async (profile) => {
-          setUser(profile);
-          if (isOperator(profile)) {
-            const { results } = await listResolvedWork();
-            setReports(results);
-            return;
-          }
-          // No se piden si no van a mostrarse: una request menos en cada
-          // entrada al perfil del resto del personal municipal.
-          if (!participatesAsCitizen(profile)) {
-            setReports([]);
-            return;
-          }
-          const { results } = await listMyReports();
-          setReports(results);
-        })
-        .finally(() => setLoading(false));
-    }, []),
-  );
 
   function toggleReports() {
     const opening = !reportsOpen;
@@ -191,7 +179,10 @@ export default function ProfileScreen() {
     ]);
   }
 
-  if (loading) {
+  // Spinner solo mientras no haya perfil que dibujar. Con el dato en caché la
+  // pantalla aparece entera y la lista se refresca por detrás, en lugar de
+  // pasar por una pantalla en blanco en cada visita.
+  if (me.isPending) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />

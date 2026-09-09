@@ -1,5 +1,5 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -14,11 +14,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
-import {
-  type FeedCoverage,
-  type Report,
-  listReports,
-} from "../../../src/api/reports";
+import { type FeedCoverage, type Report } from "../../../src/api/reports";
+import { useInfiniteReports } from "../../../src/queries/reports";
 import { participatesAsCitizen } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import ReportFilterBar, {
@@ -27,6 +24,8 @@ import ReportFilterBar, {
   type ReportFilterState,
 } from "../../../src/components/ReportFilterBar";
 import { useDebouncedValue } from "../../../src/hooks/useDebouncedValue";
+import { reportKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { reportStatusLabel } from "../../../src/reports/labels";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 
@@ -118,74 +117,52 @@ export default function FeedScreen() {
   const categoryKey = filters.categories.join(",");
   const statusKey = filters.statuses.join(",");
 
-  const [reports, setReports] = useState<Report[]>([]);
-  const [coverage, setCoverage] = useState<FeedCoverage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   // Sin ubicación no hay feed que pedir: el servidor devolvería el de todos los
   // municipios, que es justamente lo que esta pantalla no debe mostrar.
   const canQuery = !scopedToLocation || coords !== null;
 
-  const fetchPage = useCallback(
-    async (p: number) => {
-      try {
-        const data = await listReports(p, coords, {
-          search,
-          categories: filters.categories,
-          statuses: filters.statuses,
-        });
-        setReports((prev) => (p === 1 ? data.results : [...prev, ...data.results]));
-        setCoverage(data.coverage ?? null);
-        setHasMore(!!data.next);
-        setPage(p);
-        setError(null);
-      } catch {
-        // Sin esto la promesa quedaba sin atrapar y el error terminaba en la
-        // consola en lugar de en la pantalla.
-        setError("No pudimos cargar el feed. Deslizá para reintentar.");
-        setHasMore(false);
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-        setRefreshing(false);
-      }
-    },
-    // `categoryKey` y `statusKey` son las listas serializadas: sin eso, un
-    // array nuevo en cada render volvería a crear la función y a pedir todo.
+  // `categoryKey` y `statusKey` son las listas serializadas: sin eso, un array
+  // nuevo en cada render cambiaría la clave y volvería a pedir todo.
+  const activeFilters = useMemo(
+    () => ({
+      search,
+      categories: filters.categories,
+      statuses: filters.statuses,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [coords, search, categoryKey, statusKey],
+    [search, categoryKey, statusKey],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      if (permission === "checking") return;
-      if (!canQuery) {
-        // El permiso se resolvió y no hay posición: no hay nada que pedir, pero
-        // la pantalla tiene que dejar de mostrar el spinner y explicarlo.
-        setReports([]);
-        setCoverage(null);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      void fetchPage(1);
-    }, [canQuery, fetchPage, permission]),
+  const feed = useInfiniteReports(
+    coords,
+    activeFilters,
+    canQuery && permission !== "checking",
   );
+  // Al volver a la pestaña se refresca lo que venció, conservando el scroll y
+  // las páginas ya cargadas: antes se volvía a la primera y a un spinner.
+  useRefetchOnFocus(reportKeys.lists());
+
+  const pages = feed.data?.pages ?? [];
+  const reports: Report[] = pages.flatMap(
+    (chunk: { results: Report[] }) => chunk.results,
+  );
+  // La cobertura la informa el servidor en cada página; alcanza con la primera.
+  const coverage: FeedCoverage | null = pages[0]?.coverage ?? null;
+  // Solo tapa la pantalla si todavía no hay nada. Con datos en caché el feed se
+  // dibuja al instante y el refresco pasa por detrás.
+  const loading = feed.isPending && canQuery && permission !== "checking";
+  const error = feed.isError
+    ? "No pudimos cargar el feed. Deslizá para reintentar."
+    : null;
 
   function onRefresh() {
-    setRefreshing(true);
     if (!canQuery) {
       // Deslizar hacia abajo es el gesto con el que se reintenta: si el permiso
       // se puede volver a pedir, se pide.
-      void request().finally(() => setRefreshing(false));
+      void request();
       return;
     }
-    void fetchPage(1);
+    void feed.refetch();
   }
 
   function loadMore() {
@@ -193,10 +170,9 @@ export default function FeedScreen() {
     // `onEndReached` ya en el primer render, cuando la lista está vacía y la
     // página 1 todavía viaja. Pedir la 2 ahí es pedir una página que puede no
     // existir, y el servidor responde 404.
-    if (!hasMore || loadingMore || loading || !canQuery) return;
+    if (!feed.hasNextPage || feed.isFetchingNextPage || loading) return;
     if (reports.length === 0) return;
-    setLoadingMore(true);
-    void fetchPage(page + 1);
+    void feed.fetchNextPage();
   }
 
   const locationNotice =
@@ -251,7 +227,8 @@ export default function FeedScreen() {
         onEndReachedThreshold={0.3}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            // El gesto fuerza el pedido, venza o no: es una orden explícita.
+            refreshing={feed.isRefetching && !feed.isFetchingNextPage}
             onRefresh={onRefresh}
             colors={["#1a73e8"]}
             tintColor="#1a73e8"
@@ -259,7 +236,9 @@ export default function FeedScreen() {
         }
         contentContainerStyle={{ paddingBottom: 110, flexGrow: 1 }}
         ListFooterComponent={
-          loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null
+          feed.isFetchingNextPage ? (
+            <ActivityIndicator style={{ margin: 16 }} />
+          ) : null
         }
         ListEmptyComponent={
           isOutOfCoverage ? (

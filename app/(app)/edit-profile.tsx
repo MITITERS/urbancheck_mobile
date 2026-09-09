@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,29 +18,35 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../src/api/client";
 import { describeApiError, type ApiErrorDescription } from "../../src/api/errors";
-import { getMe, patchMe, type UserProfile } from "../../src/api/users";
+import { useAuth } from "../../src/auth/AuthContext";
 import { Notice } from "../../src/components/Notice";
+import { useMe, useUpdateMe } from "../../src/queries/users";
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const { setUser: setSessionUser } = useAuth();
+  const me = useMe();
+  const updateMe = useUpdateMe();
+  const user = me.data ?? null;
   const [name, setName] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [avatar, setAvatar] = useState<{ uri: string; name: string; type: string } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
 
+  const loading = me.isPending;
+
+  // El formulario se siembra una vez, cuando llega el perfil: después es la
+  // persona la que manda, y un refresco por detrás no puede pisarle lo que
+  // está escribiendo.
+  const seeded = useRef(false);
   useEffect(() => {
-    getMe()
-      .then((u) => {
-        setUser(u);
-        setName(u.name);
-        setIsPublic(u.is_public);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    if (!user || seeded.current) return;
+    seeded.current = true;
+    setName(user.name);
+    setIsPublic(user.is_public);
+  }, [user]);
 
   async function pickAvatar() {
     try {
@@ -92,7 +98,14 @@ export default function EditProfileScreen() {
           type: avatar.type,
         } as any);
       }
-      await patchMe(form);
+      // La mutación escribe la respuesta en la caché, así que el perfil y
+      // cualquier pantalla que muestre el nombre o el avatar quedan al día sin
+      // volver a pedir nada. Antes se guardaba y no se enteraba nadie: la app
+      // seguía mostrando los datos viejos hasta reiniciarla.
+      const updated = await updateMe.mutateAsync(form);
+      // La sesión guarda su propia copia del usuario (decide la navegación por
+      // rol), así que también hay que ponerla al día.
+      setSessionUser(updated);
       Alert.alert("¡Listo!", "Tu perfil fue actualizado.", [
         { text: "OK", onPress: () => router.back() },
       ]);

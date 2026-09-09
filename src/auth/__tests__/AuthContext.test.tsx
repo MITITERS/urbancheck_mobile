@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import * as SecureStore from "expo-secure-store";
 import React from "react";
@@ -6,6 +7,7 @@ import { getSession } from "../../api/auth";
 import { setSessionToken } from "../../api/client";
 import { getMe, type UserProfile } from "../../api/users";
 import { AuthProvider, useAuth } from "../AuthContext";
+import { createTestQueryClient } from "../../test/renderWithProviders";
 
 jest.mock("expo-secure-store", () => ({
   getItemAsync: jest.fn(),
@@ -47,8 +49,12 @@ const CITIZEN: UserProfile = {
   url: "/api/users/1/",
 };
 
+// La sesión vive dentro de la caché: al cerrarla la vacía, así que necesita el
+// cliente por encima —el mismo orden que en `app/_layout.tsx`—.
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <AuthProvider>{children}</AuthProvider>
+  <QueryClientProvider client={createTestQueryClient()}>
+    <AuthProvider>{children}</AuthProvider>
+  </QueryClientProvider>
 );
 
 beforeEach(() => {
@@ -129,6 +135,26 @@ describe("signOut", () => {
     expect(mockedStore.deleteItemAsync).toHaveBeenCalledWith(
       "urbancheck_session_token",
     );
+  });
+
+  it("empties the query cache so the next user sees nothing of this one", async () => {
+    // La caché vive en memoria del proceso y no en la sesión: sin vaciarla,
+    // quien entre después en el mismo teléfono vería los reportes, los avisos
+    // y el perfil del anterior mientras llegan los suyos.
+    const queryClient = createTestQueryClient();
+    const scoped = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    );
+    queryClient.setQueryData(["reportes", "list", {}], { results: ["secreto"] });
+    mockedStore.getItemAsync.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAuth(), { wrapper: scoped });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.signOut());
+
+    expect(queryClient.getQueryData(["reportes", "list", {}])).toBeUndefined();
   });
 });
 

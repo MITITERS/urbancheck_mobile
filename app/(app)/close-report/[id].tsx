@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
 import { isTooFarError, registerResolution } from "../../../src/api/resolution";
+import { useInvalidateOperatorWork } from "../../../src/queries/operator";
 import { Notice } from "../../../src/components/Notice";
 import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
@@ -52,6 +53,7 @@ const CONTENT_BOTTOM_PADDING = 40;
  * se rechaza es maltratar a alguien que está parado en la calle.
  */
 export default function CloseReportScreen() {
+  const invalidateWork = useInvalidateOperatorWork();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [photo, setPhoto] = useState<LocalPhoto | null>(null);
@@ -170,8 +172,10 @@ export default function CloseReportScreen() {
         description: description.trim(),
         coords,
       });
-      // Vuelve a la bandeja, que se recarga al enfocarse: el reporte cerrado
-      // desaparece de la lista de trabajos pendientes.
+      // La bandeja, el historial y el detalle quedan viejos en el mismo
+      // instante: el trabajo cerrado tiene que salir de una lista y entrar en
+      // la otra al volver, no cuando venza la caché.
+      invalidateWork();
       router.back();
     } catch (err: unknown) {
       if (isTooFarError(err)) {

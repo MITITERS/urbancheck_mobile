@@ -1,5 +1,4 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -17,8 +16,9 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
 import { describeApiError } from "../../../src/api/errors";
-import { getAssignedReport } from "../../../src/api/operator";
-import type { ReportDetail } from "../../../src/api/reports";
+import { operatorKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import { useAssignedReport } from "../../../src/queries/operator";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
 
 /**
@@ -35,30 +35,16 @@ import { CATEGORY_LABEL } from "../../../src/reports/labels";
 export default function WorkReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [report, setReport] = useState<ReportDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchReport = useCallback(async () => {
-    try {
-      setReport(await getAssignedReport(Number(id)));
-      setError(null);
-    } catch (err: unknown) {
-      setError(
-        describeApiError(err, "No pudimos abrir este trabajo").message,
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
+  const query = useAssignedReport(Number(id));
   // Al enfocarse y no solo al montar: se vuelve acá desde el formulario de
   // cierre, y el reporte tiene que reflejar que ya se cerró.
-  useFocusEffect(
-    useCallback(() => {
-      void fetchReport();
-    }, [fetchReport]),
-  );
+  useRefetchOnFocus(operatorKeys.details());
+
+  const report = query.data ?? null;
+  const loading = query.isPending;
+  const error = query.isError
+    ? describeApiError(query.error, "No pudimos abrir este trabajo").message
+    : null;
 
   /**
    * Abre las coordenadas en la aplicación de mapas del dispositivo

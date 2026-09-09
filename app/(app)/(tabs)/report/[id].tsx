@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,17 +19,20 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { imageSource } from "../../../../src/api/client";
 import {
   addComment,
   deleteComment,
   deleteReport,
-  getReport,
   likeReport,
   type Comment,
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
+import { reportKeys } from "../../../../src/lib/queryKeys";
+import { useInvalidateReports, useReport } from "../../../../src/queries/reports";
 import { describeApiError } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
@@ -76,8 +79,22 @@ export default function ReportDetailScreen() {
   // Cuánto tapa el teclado de lo que hay anclado abajo. Ya viene descontado lo
   // que la ventana se achicó sola, si es que se achicó.
   const keyboardOffset = useKeyboardOffset();
-  const [report, setReport] = useState<ReportDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const invalidateReports = useInvalidateReports();
+  const query = useReport(Number(id));
+  const report = query.data ?? null;
+
+  /** Reescribe el reporte en la caché, que es de donde la pantalla lo lee. */
+  const setReport = useCallback(
+    (update: (current: ReportDetail | null) => ReportDetail | null) => {
+      queryClient.setQueryData(
+        reportKeys.detail(Number(id)),
+        (current: ReportDetail | undefined) => update(current ?? null) ?? undefined,
+      );
+    },
+    [id, queryClient],
+  );
+
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activePage, setActivePage] = useState(0);
@@ -127,13 +144,12 @@ export default function ReportDetailScreen() {
     setIsEnlarged(!isEnlarged);
   }
 
+  // Al cambiar de reporte se resetea lo que es de la pantalla y no del dato: la
+  // foto cargada y la página del carrusel. El reporte en sí lo cambia la caché,
+  // porque su clave incluye el id.
   useEffect(() => {
-    // Reset stale data so previous report's image/content doesn't flash
-    setReport(null);
-    setLoading(true);
     setImgLoaded(false);
     setActivePage(0);
-    void fetchReport();
   }, [id]);
 
   useEffect(() => {
@@ -150,31 +166,27 @@ export default function ReportDetailScreen() {
     }
   }, [report]);
 
-  async function fetchReport() {
-    try {
-      const data = await getReport(Number(id));
-      setReport(data);
-    } catch {
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = query.isPending;
 
   async function handleLike() {
     if (!report) return;
     try {
       if (report.is_liked) {
         await unlikeReport(report.id);
-        setReport((r) =>
+        setReport((r: ReportDetail | null) =>
           r ? { ...r, is_liked: false, like_count: r.like_count - 1 } : r,
         );
       } else {
         await likeReport(report.id);
-        setReport((r) =>
+        setReport((r: ReportDetail | null) =>
           r ? { ...r, is_liked: true, like_count: r.like_count + 1 } : r,
         );
       }
+      // Un me gusta puede **validar el reporte** al cruzar el umbral (US-040):
+      // lo que cambia no es solo un contador, es el estado, y eso se ve en el
+      // feed, en el mapa y en el perfil. El ajuste local de arriba mueve el
+      // corazón en el acto; esto pone al día todo lo demás.
+      invalidateReports();
     } catch {
       Alert.alert("Error", "No se pudo procesar el like.");
     }
@@ -185,7 +197,7 @@ export default function ReportDetailScreen() {
     setSubmitting(true);
     try {
       const newComment = await addComment(report.id, commentText.trim());
-      setReport((r) =>
+      setReport((r: ReportDetail | null) =>
         r
           ? {
               ...r,
@@ -281,7 +293,7 @@ export default function ReportDetailScreen() {
       await deleteComment(commentId);
       // Se saca de la lista en el momento, sin volver a pedir el reporte: lo
       // único que cambió es que ese comentario ya no está.
-      setReport((prev) =>
+      setReport((prev: ReportDetail | null) =>
         prev === null
           ? prev
           : {
@@ -299,6 +311,7 @@ export default function ReportDetailScreen() {
   async function handleDelete() {
     try {
       await deleteReport(Number(id));
+      invalidateReports();
       router.back();
     } catch (err: unknown) {
       // El servidor lo rechaza si el municipio lo tomó mientras la pantalla
@@ -455,7 +468,15 @@ export default function ReportDetailScreen() {
         )}
 
         {showValidationActions && (
-          <ValidationActions reportId={report.id} onCompleted={() => void fetchReport()} />
+          <ValidationActions
+            reportId={report.id}
+            onCompleted={() => {
+              // Validar o rechazar cambia el estado: se refresca el detalle y
+              // todo lo que lo lista.
+              void query.refetch();
+              invalidateReports();
+            }}
+          />
         )}
 
         <View style={styles.section}>

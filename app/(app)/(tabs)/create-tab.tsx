@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
+import { useInvalidateReports } from "../../../src/queries/reports";
 import {
   createReport,
   geocodeAddress,
@@ -42,6 +43,7 @@ const CATEGORIES: { value: ReportCategory; label: string; icon: string }[] = [
 const SCROLL_BOTTOM_PADDING = 120;
 
 export default function CreateReportTab() {
+  const invalidateReports = useInvalidateReports();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
@@ -312,6 +314,9 @@ export default function CreateReportTab() {
       if (address) form.append("address", address);
 
       await createReport(form);
+      // El feed, el mapa y el perfil muestran este reporte: sin invalidarlos, el
+      // alta no se veía hasta que venciera la caché.
+      invalidateReports();
       Alert.alert("¡Reporte enviado!", "Tu reporte fue creado correctamente.", [
         {
           text: "OK",
