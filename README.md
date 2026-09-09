@@ -627,8 +627,9 @@ Lo que cambia por rol, y por qué:
 `close-report/[id].tsx` es la única pantalla de carga de imagen que **no**
 ofrece el selector de galería que sí ofrecen el alta y la edición de un reporte.
 La evidencia tiene que corresponder al trabajo efectivamente ejecutado, y una
-imagen de la galería puede ser de cualquier momento y de cualquier lugar. Lo
-mismo vale para la foto de la apelación de US-048.
+imagen de la galería puede ser de cualquier momento y de cualquier lugar. La
+regla es de **esta** pantalla y no de toda foto de evidencia: la apelación de
+US-048 sí acepta galería, y por qué está más abajo.
 
 Foto, descripción y ubicación son las tres obligatorias, y por motivos
 distintos: sin foto no hay evidencia de que el trabajo se hizo, sin descripción
@@ -658,6 +659,18 @@ mientras decide si le conviene hacerlo ahora.
 El plazo restante se muestra junto a la evidencia. Durante esa ventana el
 reporte **no** se oculta del feed ni del mapa: se ve con su estado diferenciado
 y con la resolución publicada.
+
+**La foto se puede sacar en el momento o elegir de la galería**, igual que en el
+alta y en la edición de un reporte, y a diferencia del cierre del operario. Los
+dos casos parecen el mismo —una foto que prueba el estado del problema— pero no
+lo son: el operario certifica su **propio** trabajo, así que la foto del momento
+es parte de esa certificación y va junto con la verificación de que está parado
+en el lugar. Quien objeta es el vecino, que se entera del cierre por una
+notificación y puede no estar frente al problema en ese momento; exigirle cámara
+no agrega garantía y le pone un viaje entre él y su derecho a objetar.
+
+Reemplazar la foto ya elegida ofrece **los dos** orígenes: quien se equivocó no
+tiene por qué volver al que usó la primera vez.
 
 ### «En proceso (objetado)» no es un estado nuevo
 
