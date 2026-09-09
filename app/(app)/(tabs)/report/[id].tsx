@@ -489,10 +489,10 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
-        {/* Editar y eliminar son del autor, y solo mientras nadie más miró el
-            reporte: hasta que un validador lo confirma en terreno. Quién y
-            cuándo lo decide el servidor con `can_edit`: la app no replica la
-            regla de estados. */}
+        {/* Editar y eliminar son del autor, y solo mientras el reporte sigue
+            sin validar —lo confirme un validador en terreno (US-036) o lo
+            confirmen los vecinos (US-040)—. Quién y cuándo lo decide el
+            servidor con `can_edit`: la app no replica la regla de estados. */}
         {report.can_edit && (
           <View style={styles.ownerActions}>
             <Pressable
@@ -513,10 +513,15 @@ export default function ReportDetailScreen() {
         )}
 
         {/* Al autor se le explica por qué dejó de poder editarlo, en lugar de
-            que los botones desaparezcan sin motivo. */}
+            que los botones desaparezcan sin motivo.
+
+            No se nombra quién validó: desde US-040 el reporte también se valida
+            por las confirmaciones de los vecinos, y decir "un validador" le
+            atribuía a una persona algo que no hizo —la misma trampa que el
+            aviso de cambio de estado—. */}
         {isAuthor && !report.can_edit && (
           <Text style={styles.ownerLocked}>
-            Este reporte ya pasó por un validador, así que no se puede editar ni
+            Este reporte ya fue validado, así que no se puede editar ni
             eliminar.
           </Text>
         )}
