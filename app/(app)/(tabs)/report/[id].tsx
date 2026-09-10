@@ -571,57 +571,87 @@ export default function ReportDetailScreen() {
         {report.resolution_evidences.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Resolución del municipio</Text>
-            {report.resolution_evidences.map((evidence) => (
-              <View key={evidence.id} style={styles.resolutionCard}>
-                <View style={styles.officialHeader}>
-                  <Ionicons name="hammer" size={14} color="#16a34a" />
-                  <Text style={styles.resolutionArea}>
-                    {evidence.operational_area ?? "Área operativa"}
-                  </Text>
-                  <Text style={styles.officialDate}>
-                    {new Date(evidence.created_at).toLocaleDateString("es-AR")}
-                  </Text>
-                </View>
-                <Text style={styles.officialText}>{evidence.description}</Text>
-                {evidence.photo && (
-                  <Image
-                    source={{ uri: evidence.photo }}
-                    style={styles.resolutionPhoto}
-                  />
-                )}
-              </View>
-            ))}
-            {report.resolution_appeals.map((appeal) => (
-              <View key={appeal.id} style={styles.appealCard}>
-                <View style={styles.officialHeader}>
-                  <Ionicons name="alert-circle" size={14} color="#c62828" />
-                  {/* La objeción la ve cualquier vecino, no solo quien la
-                      hizo: en segunda persona le decía "objetaste" a todo el
-                      que abriera el reporte. Quien objeta es siempre el autor
-                      —US-048 no habilita a nadie más—, así que para el resto
-                      alcanza con nombrarlo. */}
-                  <Text style={styles.appealTitle}>
-                    {isAuthor
-                      ? "Objetaste este cierre"
-                      : "El vecino que reportó objetó el cierre"}
-                  </Text>
-                  <Text style={styles.officialDate}>
-                    {new Date(appeal.created_at).toLocaleDateString("es-AR")}
-                  </Text>
-                </View>
-                <Text style={styles.officialText}>{appeal.reason}</Text>
-                {/* La foto de la objeción **no se mostraba**, aunque el backend
-                    la manda y el vecino la sube al objetar. Es la mitad que
-                    faltaba: la gracia del hilo es comparar la foto del cierre
-                    con la del estado real, y con una sola no hay comparación. */}
-                {appeal.photo && (
-                  <Image
-                    source={{ uri: appeal.photo }}
-                    style={styles.resolutionPhoto}
-                  />
-                )}
-              </View>
-            ))}
+            {/* Una sola línea de tiempo, ordenada por fecha. Antes eran dos
+                listas seguidas —todos los cierres y después todas las
+                objeciones— y con una apelación en el medio el hilo quedaba al
+                revés de como pasó: los dos cierres juntos y la objeción al
+                final, como si el vecino hubiera objetado el trabajo final.
+
+                El orden real es cierre → objeción → cierre, y así se lee. Se
+                ordena por `created_at` y no por el vínculo evidencia-objeción
+                porque ese vínculo no viaja en la respuesta del ciudadano; la
+                fecha alcanza y es lo que de verdad define la secuencia. */}
+            {[
+              ...report.resolution_evidences.map((evidence) => ({
+                kind: "evidence" as const,
+                at: evidence.created_at,
+                evidence,
+              })),
+              ...report.resolution_appeals.map((appeal) => ({
+                kind: "appeal" as const,
+                at: appeal.created_at,
+                appeal,
+              })),
+            ]
+              .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+              .map((entry) =>
+                entry.kind === "evidence" ? (
+                  <View key={`e${entry.evidence.id}`} style={styles.resolutionCard}>
+                    <View style={styles.officialHeader}>
+                      <Ionicons name="hammer" size={14} color="#16a34a" />
+                      <Text style={styles.resolutionArea}>
+                        {entry.evidence.operational_area ?? "Área operativa"}
+                      </Text>
+                      <Text style={styles.officialDate}>
+                        {new Date(entry.evidence.created_at).toLocaleDateString(
+                          "es-AR",
+                        )}
+                      </Text>
+                    </View>
+                    <Text style={styles.officialText}>
+                      {entry.evidence.description}
+                    </Text>
+                    {entry.evidence.photo && (
+                      <Image
+                        source={{ uri: entry.evidence.photo }}
+                        style={styles.resolutionPhoto}
+                      />
+                    )}
+                  </View>
+                ) : (
+                  <View key={`a${entry.appeal.id}`} style={styles.appealCard}>
+                    <View style={styles.officialHeader}>
+                      <Ionicons name="alert-circle" size={14} color="#c62828" />
+                      {/* La objeción la ve cualquier vecino, no solo quien la
+                          hizo: en segunda persona le decía "objetaste" a todo
+                          el que abriera el reporte. Quien objeta es siempre el
+                          autor —US-048 no habilita a nadie más—, así que para
+                          el resto alcanza con nombrarlo. */}
+                      <Text style={styles.appealTitle}>
+                        {isAuthor
+                          ? "Objetaste este cierre"
+                          : "El vecino que reportó objetó el cierre"}
+                      </Text>
+                      <Text style={styles.officialDate}>
+                        {new Date(entry.appeal.created_at).toLocaleDateString(
+                          "es-AR",
+                        )}
+                      </Text>
+                    </View>
+                    <Text style={styles.officialText}>{entry.appeal.reason}</Text>
+                    {/* La foto de la objeción **no se mostraba**, aunque el
+                        backend la manda y el vecino la sube al objetar. Es la
+                        mitad que faltaba: la gracia del hilo es comparar la
+                        foto del cierre con la del estado real. */}
+                    {entry.appeal.photo && (
+                      <Image
+                        source={{ uri: entry.appeal.photo }}
+                        style={styles.resolutionPhoto}
+                      />
+                    )}
+                  </View>
+                ),
+              )}
 
             {/* El plazo y la acción de objetar son del autor y solo mientras
                 corre la ventana. Las dos condiciones las decide el servidor con

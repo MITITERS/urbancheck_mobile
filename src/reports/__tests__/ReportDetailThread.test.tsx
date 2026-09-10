@@ -158,6 +158,58 @@ beforeEach(() => {
 });
 
 describe("hilo de resolución del detalle", () => {
+  it("va en orden: cierre, objeción, cierre final", async () => {
+    // El caso de una apelación: el operario cierra, el vecino objeta, el
+    // operario vuelve a cerrar. Antes se pintaban las dos listas seguidas
+    // —los dos cierres y después la objeción— y el hilo quedaba al revés de
+    // como pasó: parecía que el vecino objetó el trabajo final.
+    mockedGet.mockResolvedValue(
+      detail({
+        resolution_evidences: [
+          {
+            id: 1,
+            photo: CLOSURE_PHOTO,
+            description: "Primer cierre.",
+            created_at: "2026-09-09T13:00:00Z",
+            operational_area: "Obras Públicas",
+          },
+          {
+            id: 2,
+            photo: "https://example.test/cierre-2.jpg",
+            description: "Cierre final.",
+            created_at: "2026-09-09T15:00:00Z",
+            operational_area: "Obras Públicas",
+          },
+        ],
+        resolution_appeals: [
+          {
+            id: 1,
+            photo: APPEAL_PHOTO,
+            reason: "Sigue igual.",
+            created_at: "2026-09-09T14:00:00Z",
+          },
+        ],
+      }) as never,
+    );
+
+    renderDetail();
+    await screen.findByText("Primer cierre.");
+
+    // La objeción queda **entre** los dos cierres, no al final.
+    const textos = ["Primer cierre.", "Sigue igual.", "Cierre final."].map(
+      (t) => screen.getByText(t),
+    );
+    const orden = renderedPhotos();
+    expect(orden).toEqual([
+      "https://example.test/reporte.jpg",
+      CLOSURE_PHOTO,
+      APPEAL_PHOTO,
+      "https://example.test/cierre-2.jpg",
+    ]);
+    expect(textos).toHaveLength(3);
+  });
+
+
   it("muestra la foto del cierre y la de la objeción, para poder compararlas", async () => {
     renderDetail();
 
