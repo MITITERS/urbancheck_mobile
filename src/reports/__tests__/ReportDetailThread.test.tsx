@@ -157,6 +157,48 @@ beforeEach(() => {
   mockedGet.mockResolvedValue(detail() as never);
 });
 
+describe("ubicación del reporte", () => {
+  it("muestra la calle, no las coordenadas", async () => {
+    // **Con coordenadas cargadas**, que es el caso real y el que fallaba: la
+    // versión vieja las prefería y pintaba «-32.410300, -63.240000», que no le
+    // dice nada a nadie. Sin coordenadas el bug no se ve.
+    mockedGet.mockResolvedValue(
+      detail({ latitude: "-32.410300", longitude: "-63.240000" }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(/Buenos Aires 100/)).toBeTruthy();
+    expect(screen.queryByText(/-32\.410300/)).toBeNull();
+  });
+
+  it("acorta la cola administrativa del geocodificador", async () => {
+    mockedGet.mockResolvedValue(
+      detail({
+        address:
+          "442, La Rioja, General Güemes, Villa María, Pedanía Villa María, " +
+          "Departamento General San Martín, Córdoba, X5900, Argentina",
+      }) as never,
+    );
+
+    renderDetail();
+
+    // Tres tramos alcanzan para ubicarlo; el resto empuja el alto sin informar.
+    expect(await screen.findByText(/442, La Rioja, General Güemes/)).toBeTruthy();
+    expect(screen.queryByText(/Argentina/)).toBeNull();
+  });
+
+  it("sin dirección cae a las coordenadas, que es mejor que nada", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ address: "", latitude: "-32.410300", longitude: "-63.240000" }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(/-32\.410300/)).toBeTruthy();
+  });
+});
+
 describe("hilo de resolución del detalle", () => {
   it("va en orden: cierre, objeción, cierre final", async () => {
     // El caso de una apelación: el operario cierra, el vecino objeta, el

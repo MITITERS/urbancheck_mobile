@@ -38,7 +38,11 @@ import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
 import { useKeyboardOffset } from "../../../../src/components/useKeyboardVisible";
-import { STATUS_LABEL, reportStatusLabel } from "../../../../src/reports/labels";
+import {
+  STATUS_LABEL,
+  reportStatusLabel,
+  shortAddress,
+} from "../../../../src/reports/labels";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
 import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
@@ -500,12 +504,21 @@ export default function ReportDetailScreen() {
             </Text>{" "}
             • {new Date(report.created_at).toLocaleDateString("es-AR")}
           </Text>
-          {(report.latitude || report.address) && (
-            <Text style={styles.location}>
+          {/* La dirección primero y las coordenadas solo como último recurso.
+              Estaba al revés: con coordenadas cargadas —o sea, casi siempre—
+              mostraba «-32.410300, -63.240000», que no le dice nada a nadie, y
+              la calle quedaba escondida.
+
+              Va acortada con `shortAddress()`: el geocodificador devuelve la
+              jerarquía entera —municipio, pedanía, departamento, provincia,
+              país y código postal— y en un renglón esa cola no informa. El
+              mapa de acá arriba ya ubica el punto exacto. */}
+          {(report.address || report.latitude) && (
+            <Text style={styles.location} numberOfLines={2}>
               📍{" "}
-              {report.latitude
-                ? `${report.latitude}, ${report.longitude}`
-                : report.address}
+              {report.address
+                ? shortAddress(report.address)
+                : `${report.latitude}, ${report.longitude}`}
             </Text>
           )}
         </View>
