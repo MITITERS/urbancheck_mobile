@@ -1,15 +1,11 @@
-import {
-  render,
-  screen,
-  userEvent,
-  waitFor,
-} from "@testing-library/react-native";
+import { screen, userEvent, waitFor } from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import ProfileScreen from "../../../app/(app)/(tabs)/profile";
-import { listMyReports } from "../../api/reports";
-import { getMe, type UserProfile } from "../../api/users";
+import { api } from "../../api/client";
+import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -22,19 +18,51 @@ jest.mock("@expo/vector-icons", () => {
   return { Ionicons: View };
 });
 
-jest.mock("../../api/users", () => ({
-  getMe: jest.fn(),
-  // La regla de quién participa como vecino es la de verdad: es lo que decide
-  // qué secciones existen en esta pantalla.
-  participatesAsCitizen: jest.requireActual("../../api/users").participatesAsCitizen,
+// Se mockea el **transporte**, no los módulos de la API: así corren de verdad
+// los hooks de caché, los fetchers y las reglas de rol, que es donde vive el
+// comportamiento. Cada endpoint se resuelve por su URL.
+jest.mock("../../api/client", () => ({
+  ...jest.requireActual("../../api/client"),
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-jest.mock("../../api/reports", () => ({ listMyReports: jest.fn() }));
+
 jest.mock("../../api/auth", () => ({ logout: jest.fn() }));
 jest.mock("../../auth/AuthContext", () => ({ useAuth: jest.fn() }));
 
-const mockedGetMe = getMe as jest.MockedFunction<typeof getMe>;
-const mockedListMyReports = listMyReports as jest.MockedFunction<typeof listMyReports>;
+const mockedGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+
+const ME_URL = "/api/users/me/";
+const MY_REPORTS_URL = "/api/reports/?mine=true";
+const HISTORY_URL = "/api/operator/reports/history/";
+
+/** Respuestas por endpoint. Lo que no se declare responde una lista vacía. */
+function respondWith(routes: Record<string, unknown>) {
+  mockedGet.mockImplementation((url: string) => {
+    const match = Object.keys(routes).find((prefix) => url.startsWith(prefix));
+    if (match) return Promise.resolve(routes[match]) as never;
+    return Promise.resolve(page([])) as never;
+  });
+}
+
+/** Una respuesta paginada del backend. */
+function page(results: unknown[]) {
+  return { count: results.length, next: null, previous: null, results };
+}
+
+/** Quién dice el servidor que sos, y qué le contesta al resto de la pantalla. */
+function signedInAs(profile: UserProfile, routes: Record<string, unknown> = {}) {
+  mockedUseAuth.mockReturnValue({
+    user: profile,
+    token: "t",
+    isLoading: false,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    setUser: jest.fn(),
+    refreshUser: jest.fn(),
+  });
+  respondWith({ [ME_URL]: profile, ...routes });
+}
 
 const METRICS: Metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -53,6 +81,19 @@ const CITIZEN: UserProfile = {
   url: "/api/users/1/",
 };
 
+const OPERATOR: UserProfile = {
+  id: 7,
+  name: "Ramiro Paz",
+  email: "ramiro@villamaria.gob.ar",
+  avatar: null,
+  role: "operario",
+  municipality: { id: 4, name: "Villa María" },
+  must_change_password: false,
+  is_public: true,
+  operational_area: { id: 2, name: "Alumbrado", is_active: true },
+  url: "/api/users/7/",
+};
+
 function report(id: number, status: UserReportStatus) {
   return {
     id,
@@ -67,12 +108,30 @@ function report(id: number, status: UserReportStatus) {
     like_count: 0,
     comment_count: 0,
     created_at: "2026-08-27T10:00:00Z",
+    has_official_response: false,
+    archived_at: null,
+    area_assigned_at: null,
+    appeal_count: 0,
   };
 }
-type UserReportStatus = "reportado" | "en_proceso" | "resuelto";
+type UserReportStatus =
+  | "reportado"
+  | "en_proceso"
+  | "resuelto"
+  | "resuelto_pendiente_confirmacion";
+
+/** Un trabajo cerrado, tal como lo devuelve el historial del operario. */
+function work(id: number, status: UserReportStatus, resolvedAt: string) {
+  return { ...report(id, status), resolved_at: resolvedAt };
+}
+
+/** Entra a la pantalla como operario, con el historial que se le indique. */
+function asOperator(results: ReturnType<typeof work>[]) {
+  signedInAs(OPERATOR, { [HISTORY_URL]: page(results) });
+}
 
 function renderProfile() {
-  return render(
+  return renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ProfileScreen />
     </SafeAreaProvider>,
@@ -80,40 +139,24 @@ function renderProfile() {
 }
 
 beforeEach(() => {
-  mockedUseAuth.mockReturnValue({
-    user: CITIZEN,
-    token: "t",
-    isLoading: false,
-    signIn: jest.fn(),
-    signOut: jest.fn(),
-    setUser: jest.fn(),
-    refreshUser: jest.fn(),
-  });
-  mockedGetMe.mockResolvedValue(CITIZEN);
-  mockedListMyReports.mockResolvedValue({
-    count: 0,
-    next: null,
-    previous: null,
-    results: [],
-  });
+  signedInAs(CITIZEN);
 });
 
 describe("perfil", () => {
   it("resume la actividad con las cifras de la misma lista que muestra", async () => {
-    mockedListMyReports.mockResolvedValue({
-      count: 3,
-      next: null,
-      previous: null,
-      results: [
+    respondWith({ [ME_URL]: CITIZEN, [MY_REPORTS_URL]: page([
         report(1, "reportado"),
         report(2, "en_proceso"),
         report(3, "resuelto"),
-      ],
-    });
+      ]) });
 
     renderProfile();
 
     expect(await screen.findByText("Mis reportes")).toBeTruthy();
+    // El perfil y la lista son **dos consultas independientes**: el encabezado
+    // aparece antes que las tarjetas, así que hay que esperar a la lista en vez
+    // de dar por hecho que ya llegó con él.
+    expect(await screen.findByText("Reporte 2")).toBeTruthy();
     // Las etiquetas del resumen, en plural, no se confunden con las de estado
     // de cada tarjeta ("Resuelto", "En proceso").
     expect(screen.getByText("Reportes")).toBeTruthy();
@@ -136,31 +179,21 @@ describe("perfil", () => {
       role: "validador",
       municipality: { id: 4, name: "Villa María" },
     };
-    mockedGetMe.mockResolvedValue(validator);
-    mockedUseAuth.mockReturnValue({
-      user: validator,
-      token: "t",
-      isLoading: false,
-      signIn: jest.fn(),
-      signOut: jest.fn(),
-      setUser: jest.fn(),
-      refreshUser: jest.fn(),
-    });
+    signedInAs(validator);
 
     renderProfile();
 
     expect(await screen.findByText("Validador")).toBeTruthy();
     expect(screen.queryByText("Mis reportes")).toBeNull();
-    await waitFor(() => expect(mockedListMyReports).not.toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockedGet).not.toHaveBeenCalledWith(
+        expect.stringContaining("mine=true"),
+      ),
+    );
   });
 
   it("«Mis reportes» se pliega y se despliega", async () => {
-    mockedListMyReports.mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [report(1, "reportado")],
-    });
+    respondWith({ [ME_URL]: CITIZEN, [MY_REPORTS_URL]: page([report(1, "reportado")]) });
     const user = userEvent.setup();
 
     renderProfile();
@@ -182,5 +215,85 @@ describe("perfil", () => {
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.getByText("Notificaciones")).toBeTruthy();
     expect(screen.getByText("Cerrar sesión")).toBeTruthy();
+  });
+});
+
+/**
+ * US-046 — el operario ve en su perfil los trabajos que cerró, como el vecino
+ * ve los que reportó. Misma sección plegable y mismo resumen de tres cifras;
+ * lo que cambia es de dónde sale la lista y qué mide cada número.
+ */
+describe("perfil del operario", () => {
+  it("lista los trabajos que cerró en vez de reportes propios", async () => {
+    asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Trabajos resueltos")).toBeTruthy();
+    expect(screen.getByText("Reporte 1")).toBeTruthy();
+    // El operario no reporta: pedirle la lista del vecino sería pedir algo que
+    // siempre viene vacío.
+    await waitFor(() =>
+      expect(mockedGet).not.toHaveBeenCalledWith(
+        expect.stringContaining("mine=true"),
+      ),
+    );
+    expect(screen.queryByText("Mis reportes")).toBeNull();
+  });
+
+  it("el resumen cuenta cierres, no reportes", async () => {
+    asOperator([
+      work(1, "resuelto", "2026-09-05T12:00:00Z"),
+      work(2, "resuelto_pendiente_confirmacion", "2026-09-06T12:00:00Z"),
+      // Objetado por el vecino (US-048): volvió a gestión, así que suma en el
+      // total pero no en las otras dos cifras.
+      work(3, "en_proceso", "2026-09-07T12:00:00Z"),
+    ]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Cerrados")).toBeTruthy();
+    expect(screen.getByText("A confirmar")).toBeTruthy();
+    expect(screen.getByText("Confirmados")).toBeTruthy();
+    // Las etiquetas del vecino no aparecen: mide otra cosa.
+    expect(screen.queryByText("Reportes")).toBeNull();
+  });
+
+  it("cada fila muestra la fecha de su cierre, no la del reporte", async () => {
+    asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Cerrado 05/09/2026")).toBeTruthy();
+    // 27/08 es el `created_at` del reporte: al operario no le dice nada.
+    expect(screen.queryByText("27/08/2026")).toBeNull();
+  });
+
+  it("sin cierres, lo manda a su bandeja y no a crear un reporte", async () => {
+    asOperator([]);
+
+    renderProfile();
+
+    expect(
+      await screen.findByText("Todavía no cerraste ningún trabajo"),
+    ).toBeTruthy();
+    expect(screen.getByText("Ver mis trabajos")).toBeTruthy();
+    expect(screen.queryByText("Crear mi primer reporte")).toBeNull();
+  });
+
+  it("«Trabajos resueltos» se pliega y se despliega", async () => {
+    asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
+    const user = userEvent.setup();
+
+    renderProfile();
+    expect(await screen.findByText("Reporte 1")).toBeTruthy();
+
+    await user.press(screen.getByText("Trabajos resueltos"));
+    expect(screen.queryByText("Reporte 1")).toBeNull();
+    // Plegada tampoco aparece el vacío: la lista está guardada, no vacía.
+    expect(screen.queryByText("Todavía no cerraste ningún trabajo")).toBeNull();
+
+    await user.press(screen.getByText("Trabajos resueltos"));
+    expect(await screen.findByText("Reporte 1")).toBeTruthy();
   });
 });

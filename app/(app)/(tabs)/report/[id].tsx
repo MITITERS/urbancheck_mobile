@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,39 +19,43 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useQueryClient } from "@tanstack/react-query";
+
 import { imageSource } from "../../../../src/api/client";
 import {
   addComment,
   deleteComment,
   deleteReport,
-  getReport,
   likeReport,
   type Comment,
   type ReportDetail,
   unlikeReport,
 } from "../../../../src/api/reports";
+import { reportKeys } from "../../../../src/lib/queryKeys";
+import { useInvalidateReports, useReport } from "../../../../src/queries/reports";
 import { describeApiError } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
 import { useKeyboardOffset } from "../../../../src/components/useKeyboardVisible";
+import {
+  STATUS_LABEL,
+  reportStatusLabel,
+  shortAddress,
+} from "../../../../src/reports/labels";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
 import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
-const STATUS_LABEL: Record<string, string> = {
-  pendiente_validacion: "Pendiente de validación",
-  reportado: "Reportado",
-  en_proceso: "En proceso",
-  resuelto: "Resuelto",
-  cancelado: "Cancelado",
-  archivado: "Archivado",
-};
-
 // Pasos del flujo principal (happy path) que se van desbloqueando.
+//
+// El cierre pendiente de confirmación de US-046 es un paso más y no un desvío:
+// todo camino a *Resuelto* pasa por ahí, así que la línea de tiempo lo muestra
+// como cualquier otro avance en lugar de saltearlo.
 const TIMELINE_STEPS = [
   "pendiente_validacion",
   "reportado",
   "en_proceso",
+  "resuelto_pendiente_confirmacion",
   "resuelto",
 ] as const;
 
@@ -79,8 +83,22 @@ export default function ReportDetailScreen() {
   // Cuánto tapa el teclado de lo que hay anclado abajo. Ya viene descontado lo
   // que la ventana se achicó sola, si es que se achicó.
   const keyboardOffset = useKeyboardOffset();
-  const [report, setReport] = useState<ReportDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const invalidateReports = useInvalidateReports();
+  const query = useReport(Number(id));
+  const report = query.data ?? null;
+
+  /** Reescribe el reporte en la caché, que es de donde la pantalla lo lee. */
+  const setReport = useCallback(
+    (update: (current: ReportDetail | null) => ReportDetail | null) => {
+      queryClient.setQueryData(
+        reportKeys.detail(Number(id)),
+        (current: ReportDetail | undefined) => update(current ?? null) ?? undefined,
+      );
+    },
+    [id, queryClient],
+  );
+
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activePage, setActivePage] = useState(0);
@@ -130,13 +148,12 @@ export default function ReportDetailScreen() {
     setIsEnlarged(!isEnlarged);
   }
 
+  // Al cambiar de reporte se resetea lo que es de la pantalla y no del dato: la
+  // foto cargada y la página del carrusel. El reporte en sí lo cambia la caché,
+  // porque su clave incluye el id.
   useEffect(() => {
-    // Reset stale data so previous report's image/content doesn't flash
-    setReport(null);
-    setLoading(true);
     setImgLoaded(false);
     setActivePage(0);
-    void fetchReport();
   }, [id]);
 
   useEffect(() => {
@@ -153,31 +170,27 @@ export default function ReportDetailScreen() {
     }
   }, [report]);
 
-  async function fetchReport() {
-    try {
-      const data = await getReport(Number(id));
-      setReport(data);
-    } catch {
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = query.isPending;
 
   async function handleLike() {
     if (!report) return;
     try {
       if (report.is_liked) {
         await unlikeReport(report.id);
-        setReport((r) =>
+        setReport((r: ReportDetail | null) =>
           r ? { ...r, is_liked: false, like_count: r.like_count - 1 } : r,
         );
       } else {
         await likeReport(report.id);
-        setReport((r) =>
+        setReport((r: ReportDetail | null) =>
           r ? { ...r, is_liked: true, like_count: r.like_count + 1 } : r,
         );
       }
+      // Un me gusta puede **validar el reporte** al cruzar el umbral (US-040):
+      // lo que cambia no es solo un contador, es el estado, y eso se ve en el
+      // feed, en el mapa y en el perfil. El ajuste local de arriba mueve el
+      // corazón en el acto; esto pone al día todo lo demás.
+      invalidateReports();
     } catch {
       Alert.alert("Error", "No se pudo procesar el like.");
     }
@@ -188,7 +201,7 @@ export default function ReportDetailScreen() {
     setSubmitting(true);
     try {
       const newComment = await addComment(report.id, commentText.trim());
-      setReport((r) =>
+      setReport((r: ReportDetail | null) =>
         r
           ? {
               ...r,
@@ -284,7 +297,7 @@ export default function ReportDetailScreen() {
       await deleteComment(commentId);
       // Se saca de la lista en el momento, sin volver a pedir el reporte: lo
       // único que cambió es que ese comentario ya no está.
-      setReport((prev) =>
+      setReport((prev: ReportDetail | null) =>
         prev === null
           ? prev
           : {
@@ -302,6 +315,7 @@ export default function ReportDetailScreen() {
   async function handleDelete() {
     try {
       await deleteReport(Number(id));
+      invalidateReports();
       router.back();
     } catch (err: unknown) {
       // El servidor lo rechaza si el municipio lo tomó mientras la pantalla
@@ -458,7 +472,15 @@ export default function ReportDetailScreen() {
         )}
 
         {showValidationActions && (
-          <ValidationActions reportId={report.id} onCompleted={() => void fetchReport()} />
+          <ValidationActions
+            reportId={report.id}
+            onCompleted={() => {
+              // Validar o rechazar cambia el estado: se refresca el detalle y
+              // todo lo que lo lista.
+              void query.refetch();
+              invalidateReports();
+            }}
+          />
         )}
 
         <View style={styles.section}>
@@ -467,7 +489,7 @@ export default function ReportDetailScreen() {
               {CATEGORY_LABEL[report.category] ?? report.category}
             </Text>
             <Text style={styles.status}>
-              {STATUS_LABEL[report.status] ?? report.status}
+              {reportStatusLabel(report)}
             </Text>
           </View>
           <Text style={styles.description}>{report.description}</Text>
@@ -482,20 +504,29 @@ export default function ReportDetailScreen() {
             </Text>{" "}
             • {new Date(report.created_at).toLocaleDateString("es-AR")}
           </Text>
-          {(report.latitude || report.address) && (
-            <Text style={styles.location}>
+          {/* La dirección primero y las coordenadas solo como último recurso.
+              Estaba al revés: con coordenadas cargadas —o sea, casi siempre—
+              mostraba «-32.410300, -63.240000», que no le dice nada a nadie, y
+              la calle quedaba escondida.
+
+              Va acortada con `shortAddress()`: el geocodificador devuelve la
+              jerarquía entera —municipio, pedanía, departamento, provincia,
+              país y código postal— y en un renglón esa cola no informa. El
+              mapa de acá arriba ya ubica el punto exacto. */}
+          {(report.address || report.latitude) && (
+            <Text style={styles.location} numberOfLines={2}>
               📍{" "}
-              {report.latitude
-                ? `${report.latitude}, ${report.longitude}`
-                : report.address}
+              {report.address
+                ? shortAddress(report.address)
+                : `${report.latitude}, ${report.longitude}`}
             </Text>
           )}
         </View>
 
-        {/* Editar y eliminar son del autor, y solo mientras nadie más miró el
-            reporte: hasta que un validador lo confirma en terreno. Quién y
-            cuándo lo decide el servidor con `can_edit`: la app no replica la
-            regla de estados. */}
+        {/* Editar y eliminar son del autor, y solo mientras el reporte sigue
+            sin validar —lo confirme un validador en terreno (US-036) o lo
+            confirmen los vecinos (US-040)—. Quién y cuándo lo decide el
+            servidor con `can_edit`: la app no replica la regla de estados. */}
         {report.can_edit && (
           <View style={styles.ownerActions}>
             <Pressable
@@ -516,10 +547,15 @@ export default function ReportDetailScreen() {
         )}
 
         {/* Al autor se le explica por qué dejó de poder editarlo, en lugar de
-            que los botones desaparezcan sin motivo. */}
+            que los botones desaparezcan sin motivo.
+
+            No se nombra quién validó: desde US-040 el reporte también se valida
+            por las confirmaciones de los vecinos, y decir "un validador" le
+            atribuía a una persona algo que no hizo —la misma trampa que el
+            aviso de cambio de estado—. */}
         {isAuthor && !report.can_edit && (
           <Text style={styles.ownerLocked}>
-            Este reporte ya pasó por un validador, así que no se puede editar ni
+            Este reporte ya fue validado, así que no se puede editar ni
             eliminar.
           </Text>
         )}
@@ -535,6 +571,156 @@ export default function ReportDetailScreen() {
           // saca es poder tocarlo.
           <View style={styles.likeCount}>
             <Text style={styles.likeCountText}>♡ {report.like_count}</Text>
+          </View>
+        )}
+
+        {/* La evidencia de resolución (US-046) y la objeción del vecino
+            (US-048). Va antes que las respuestas oficiales porque es lo último
+            que pasó, y con tratamiento propio: un parte de trabajo no es un
+            compromiso institucional ni un comentario de un vecino.
+
+            Firma el **área operativa**, no la persona: la identidad del
+            operario se ve únicamente en el panel (escenario 12). */}
+        {report.resolution_evidences.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Resolución del municipio</Text>
+            {/* Una sola línea de tiempo, ordenada por fecha. Antes eran dos
+                listas seguidas —todos los cierres y después todas las
+                objeciones— y con una apelación en el medio el hilo quedaba al
+                revés de como pasó: los dos cierres juntos y la objeción al
+                final, como si el vecino hubiera objetado el trabajo final.
+
+                El orden real es cierre → objeción → cierre, y así se lee. Se
+                ordena por `created_at` y no por el vínculo evidencia-objeción
+                porque ese vínculo no viaja en la respuesta del ciudadano; la
+                fecha alcanza y es lo que de verdad define la secuencia. */}
+            {[
+              ...report.resolution_evidences.map((evidence) => ({
+                kind: "evidence" as const,
+                at: evidence.created_at,
+                evidence,
+              })),
+              ...report.resolution_appeals.map((appeal) => ({
+                kind: "appeal" as const,
+                at: appeal.created_at,
+                appeal,
+              })),
+            ]
+              .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+              .map((entry) =>
+                entry.kind === "evidence" ? (
+                  <View key={`e${entry.evidence.id}`} style={styles.resolutionCard}>
+                    <View style={styles.officialHeader}>
+                      <Ionicons name="hammer" size={14} color="#16a34a" />
+                      <Text style={styles.resolutionArea}>
+                        {entry.evidence.operational_area ?? "Área operativa"}
+                      </Text>
+                      <Text style={styles.officialDate}>
+                        {new Date(entry.evidence.created_at).toLocaleDateString(
+                          "es-AR",
+                        )}
+                      </Text>
+                    </View>
+                    <Text style={styles.officialText}>
+                      {entry.evidence.description}
+                    </Text>
+                    {entry.evidence.photo && (
+                      <Image
+                        source={{ uri: entry.evidence.photo }}
+                        style={styles.resolutionPhoto}
+                      />
+                    )}
+                  </View>
+                ) : (
+                  <View key={`a${entry.appeal.id}`} style={styles.appealCard}>
+                    <View style={styles.officialHeader}>
+                      <Ionicons name="alert-circle" size={14} color="#c62828" />
+                      {/* La objeción la ve cualquier vecino, no solo quien la
+                          hizo: en segunda persona le decía "objetaste" a todo
+                          el que abriera el reporte. Quien objeta es siempre el
+                          autor —US-048 no habilita a nadie más—, así que para
+                          el resto alcanza con nombrarlo. */}
+                      <Text style={styles.appealTitle}>
+                        {isAuthor
+                          ? "Objetaste este cierre"
+                          : "El vecino que reportó objetó el cierre"}
+                      </Text>
+                      <Text style={styles.officialDate}>
+                        {new Date(entry.appeal.created_at).toLocaleDateString(
+                          "es-AR",
+                        )}
+                      </Text>
+                    </View>
+                    <Text style={styles.officialText}>{entry.appeal.reason}</Text>
+                    {/* La foto de la objeción **no se mostraba**, aunque el
+                        backend la manda y el vecino la sube al objetar. Es la
+                        mitad que faltaba: la gracia del hilo es comparar la
+                        foto del cierre con la del estado real. */}
+                    {entry.appeal.photo && (
+                      <Image
+                        source={{ uri: entry.appeal.photo }}
+                        style={styles.resolutionPhoto}
+                      />
+                    )}
+                  </View>
+                ),
+              )}
+
+            {/* El plazo y la acción de objetar son del autor y solo mientras
+                corre la ventana. Las dos condiciones las decide el servidor con
+                `can_appeal`: la app no replica la regla (US-048). */}
+            {/* El plazo se le explica a cada uno desde donde le toca: al
+                autor, como algo que puede hacer; al resto, como el estado del
+                trámite. Antes le decía "tenés tiempo de objetar" a cualquiera
+                que abriera el reporte. */}
+            {report.objection_deadline && (
+              <Text style={styles.deadline}>
+                {isAuthor
+                  ? `Tenés tiempo de objetar el cierre hasta el ${new Date(
+                      report.objection_deadline,
+                    ).toLocaleDateString("es-AR")}. Si no lo objetás, el reporte queda confirmado como resuelto.`
+                  : `El vecino que reportó puede objetar el cierre hasta el ${new Date(
+                      report.objection_deadline,
+                    ).toLocaleDateString("es-AR")}. Si no lo objeta, el reporte queda confirmado como resuelto.`}
+              </Text>
+            )}
+            {report.can_appeal && (
+              <Pressable
+                style={styles.appealBtn}
+                onPress={() => router.push(`/(app)/appeal-report/${report.id}`)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="alert-circle-outline" size={18} color="#c62828" />
+                <Text style={styles.appealBtnText}>El problema sigue: objetar</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* El hilo institucional (US-024).
+            Va antes del historial y de los comentarios, y con un tratamiento
+            visual propio: un compromiso del municipio no es un comentario de un
+            vecino ni un parte de trabajo, y el escenario 10 pide justamente que
+            los tres bloques no puedan confundirse.
+            Quien firma es la municipalidad: la identidad del agente que la
+            publicó se ve únicamente en el panel. */}
+        {report.official_responses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Respuestas oficiales</Text>
+            {report.official_responses.map((response) => (
+              <View key={response.id} style={styles.officialCard}>
+                <View style={styles.officialHeader}>
+                  <Ionicons name="business" size={14} color="#1a73e8" />
+                  <Text style={styles.officialMunicipality}>
+                    {response.municipality}
+                  </Text>
+                  <Text style={styles.officialDate}>
+                    {new Date(response.created_at).toLocaleDateString("es-AR")}
+                  </Text>
+                </View>
+                <Text style={styles.officialText}>{response.text}</Text>
+              </View>
+            ))}
           </View>
         )}
 
@@ -643,7 +829,7 @@ export default function ReportDetailScreen() {
                         },
                       ]}
                     >
-                      {STATUS_LABEL[report.status]}
+                      {reportStatusLabel(report)}
                       {reachedAt[report.status]
                         ? ` • ${new Date(
                             reachedAt[report.status],
@@ -765,6 +951,79 @@ export default function ReportDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Sin filete lateral: el borde de un solo lado corría el contenido tres
+  // píxeles respecto del otro margen —la foto quedaba con 15 a la izquierda y
+  // 12 a la derecha— y pisaba la esquina redondeada por la que pasaba. El color
+  // ya lo dan el ícono y el título; el contorno completo solo cierra la
+  // tarjeta.
+  resolutionCard: {
+    borderWidth: 1,
+    borderColor: "#c8e6c9",
+    backgroundColor: "#e8f5e9",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 6,
+  },
+  resolutionArea: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#16a34a",
+    textTransform: "uppercase",
+  },
+  resolutionPhoto: {
+    width: "100%",
+    height: 180,
+    borderRadius: 6,
+    backgroundColor: "#eceff1",
+  },
+  appealCard: {
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
+    backgroundColor: "#ffebee",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 6,
+  },
+  appealTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#c62828",
+    textTransform: "uppercase",
+  },
+  deadline: { fontSize: 13, color: "#78909c", marginTop: 4 },
+  appealBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
+    backgroundColor: "#fff5f5",
+  },
+  appealBtnText: { color: "#c62828", fontWeight: "700", fontSize: 15 },
+  officialCard: {
+    borderWidth: 1,
+    borderColor: "#c6dafc",
+    backgroundColor: "#e8f0fe",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 6,
+  },
+  officialHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  officialMunicipality: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1a73e8",
+    textTransform: "uppercase",
+  },
+  officialDate: { fontSize: 12, color: "#78909c" },
+  officialText: { fontSize: 15, lineHeight: 22, color: "#263238" },
   ownerActions: {
     flexDirection: "row",
     gap: 10,

@@ -11,8 +11,15 @@ import MapTab from "../../../app/(app)/(tabs)/map";
 import { listMapReports } from "../../api/reports";
 import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
 
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  // El mapa refresca al volver a la pestaña; en el test alcanza con un efecto
+  // normal. El require va adentro: la fábrica se hoistea sobre los imports.
+  useFocusEffect: (callback: () => void) =>
+    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+}));
 
 jest.mock("react-native-maps", () => {
   const React = jest.requireActual("react");
@@ -87,7 +94,7 @@ const METRICS: Metrics = {
 };
 
 function renderMap() {
-  return render(
+  return renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <MapTab />
     </SafeAreaProvider>,

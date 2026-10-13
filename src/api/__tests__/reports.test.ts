@@ -131,3 +131,29 @@ describe("reports api", () => {
     );
   });
 });
+
+describe("respuestas oficiales en el detalle (US-024)", () => {
+  it("viajan aparte de los comentarios, como bloque propio", async () => {
+    // Escenario 10: un compromiso institucional no es un comentario de vecino,
+    // y la app los presenta separados porque el contrato ya los separa.
+    mockedApi.get.mockResolvedValue({
+      id: 7,
+      comments: [],
+      official_responses: [
+        {
+          id: 1,
+          text: "Lo reparamos en 15 días.",
+          created_at: "2026-09-01T10:00:00Z",
+          municipality: "Villa María",
+        },
+      ],
+    });
+
+    const detail = await getReport(7);
+
+    expect(detail.official_responses).toHaveLength(1);
+    // Firma la municipalidad: la identidad del agente no llega al ciudadano.
+    expect(detail.official_responses[0].municipality).toBe("Villa María");
+    expect(detail.official_responses[0]).not.toHaveProperty("author");
+  });
+});

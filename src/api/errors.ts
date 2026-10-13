@@ -44,6 +44,28 @@ const NETWORK = {
     "No pudimos comunicarnos con el servidor. Revisá tu conexión e intentá de nuevo.",
 };
 
+/**
+ * Cómo se ve una falla de red de verdad, según la plataforma.
+ *
+ * Existe porque antes **cualquier** `Error` se reportaba como "sin conexión", y
+ * eso hacía indistinguible un problema de red de uno del dispositivo —una foto
+ * que no se pudo leer, un permiso que falló—. El síntoma es el mismo en
+ * pantalla y las causas no tienen nada que ver, así que el usuario probaba con
+ * otra red y volvía a fallar.
+ */
+const NETWORK_FAILURES = [
+  // React Native, iOS y Android.
+  "Network request failed",
+  // `fetch` del navegador, que usa el panel.
+  "Failed to fetch",
+  "NetworkError",
+  "Load failed",
+];
+
+function isNetworkFailure(error: Error): boolean {
+  return NETWORK_FAILURES.some((needle) => error.message.includes(needle));
+}
+
 const SESSION_EXPIRED = {
   tone: "error" as const,
   title: "Tu sesión expiró",
@@ -67,7 +89,16 @@ export function describeApiError(
   fallbackTitle = "Algo salió mal",
 ): ApiErrorDescription {
   if (error instanceof Error) {
-    return error.message === "SESSION_EXPIRED" ? SESSION_EXPIRED : NETWORK;
+    if (error.message === "SESSION_EXPIRED") return SESSION_EXPIRED;
+    if (isNetworkFailure(error)) return NETWORK;
+    // Un error del dispositivo —la foto que no se pudo leer, la ubicación que
+    // no se pudo obtener— no es un problema de red y decirlo como si lo fuera
+    // manda a buscar la causa donde no está. Se muestra lo que realmente pasó.
+    return {
+      tone: "error",
+      title: fallbackTitle,
+      message: error.message,
+    };
   }
 
   if (error && typeof error === "object") {

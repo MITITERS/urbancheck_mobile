@@ -9,6 +9,8 @@ import React, {
 
 import { getSession } from "../api/auth";
 import { setSessionToken, setUnauthorizedHandler } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { getMe, type UserProfile } from "../api/users";
 
 const SECURE_STORE_KEY = "urbancheck_session_token";
@@ -35,11 +37,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading: true,
   });
 
+  const queryClient = useQueryClient();
+
   const signOut = useCallback(async () => {
     setSessionToken(null);
     await SecureStore.deleteItemAsync(SECURE_STORE_KEY).catch(() => {});
     setState({ token: null, user: null, isLoading: false });
-  }, []);
+    // **Se vacía la caché entera.** Sin esto, quien entre después en el mismo
+    // teléfono vería los reportes, los avisos y el perfil de la sesión
+    // anterior mientras llegan los suyos: la caché sobrevive al cierre de
+    // sesión porque vive en memoria del proceso, no en la sesión.
+    queryClient.clear();
+  }, [queryClient]);
 
   useEffect(() => {
     setUnauthorizedHandler(signOut);

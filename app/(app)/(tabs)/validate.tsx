@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,11 +13,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
-import {
-  formatDistance,
-  listPendingValidation,
-  type PendingReport,
-} from "../../../src/api/validation";
+import { formatDistance, type PendingReport } from "../../../src/api/validation";
+import { validationKeys } from "../../../src/lib/queryKeys";
+import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import { usePendingValidation } from "../../../src/queries/validation";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
 import { useValidatorLocation } from "../../../src/validation/useValidatorLocation";
 
@@ -36,29 +35,18 @@ import { useValidatorLocation } from "../../../src/validation/useValidatorLocati
 export default function ValidateTab() {
   const router = useRouter();
   const { coords, permission, reason, request } = useValidatorLocation();
-  const [reports, setReports] = useState<PendingReport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // La ubicación se pide una vez al entrar; no se re-consulta en cada scroll.
+  const pending = usePendingValidation(coords, 1, permission !== "checking");
+  // Después de validar o rechazar, el reporte tiene que salir de la bandeja al
+  // volver acá. Refresca por detrás, sin tapar la lista.
+  useRefetchOnFocus(validationKeys.lists());
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const data = await listPendingValidation(coords);
-      setReports(data.results);
-    } catch {
-      setError("No pudimos cargar la bandeja. Probá de nuevo.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [coords]);
-
-  useEffect(() => {
-    // La ubicación se pide una vez al entrar; no se re-consulta en cada scroll.
-    if (permission === "checking") return;
-    void load();
-  }, [load, permission]);
+  const reports: PendingReport[] = pending.data?.results ?? [];
+  const loading = pending.isPending && permission !== "checking";
+  const error = pending.isError
+    ? "No pudimos cargar la bandeja. Probá de nuevo."
+    : null;
+  const load = () => void pending.refetch();
 
   if (loading) {
     return (
@@ -98,11 +86,9 @@ export default function ValidateTab() {
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                void load();
-              }}
+              // El gesto fuerza el pedido, venza o no: es una orden explícita.
+              refreshing={pending.isRefetching}
+              onRefresh={load}
             />
           }
           ListEmptyComponent={

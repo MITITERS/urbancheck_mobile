@@ -1,5 +1,4 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,10 +12,15 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
 import { describeApiError } from "../../../src/api/errors";
-import { listReportsByAuthor, type Report } from "../../../src/api/reports";
-import { getPublicProfile, type PublicProfile } from "../../../src/api/users";
+import { type Report } from "../../../src/api/reports";
+import { useReportsByAuthor } from "../../../src/queries/reports";
+import { usePublicProfile } from "../../../src/queries/users";
 import { useAuth } from "../../../src/auth/AuthContext";
-import { CATEGORY_LABEL, STATUS_COLOR, STATUS_LABEL } from "../../../src/reports/labels";
+import {
+  CATEGORY_LABEL,
+  STATUS_COLOR,
+  reportStatusLabel,
+} from "../../../src/reports/labels";
 
 function formatMonth(isoString: string) {
   const date = new Date(isoString);
@@ -35,37 +39,19 @@ export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const isMe = user !== null && user.id === Number(id);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void getPublicProfile(Number(id))
-      .then(async (data) => {
-        if (cancelled) return;
-        setProfile(data);
-        if (!data.is_public) {
-          setReports([]);
-          return;
-        }
-        const { results } = await listReportsByAuthor(Number(id));
-        if (!cancelled) setReports(results);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(describeApiError(err, "No pudimos abrir el perfil").message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  const profileQuery = usePublicProfile(Number(id));
+  const profile = profileQuery.data ?? null;
+  // Los reportes solo se piden si el perfil es público: pedirlos igual sería un
+  // viaje al servidor cuya respuesta ya sabemos que va a venir vacía.
+  const reportsQuery = useReportsByAuthor(Number(id), 1, profile?.is_public === true);
+  const reports: Report[] = profile?.is_public ? (reportsQuery.data?.results ?? []) : [];
+
+  const loading = profileQuery.isPending;
+  const error = profileQuery.isError
+    ? describeApiError(profileQuery.error, "No pudimos abrir el perfil").message
+    : null;
 
   if (loading) {
     return (
@@ -159,7 +145,7 @@ export default function PublicProfileScreen() {
             <View style={styles.cardFooter}>
               <View style={[styles.dot, { backgroundColor: STATUS_COLOR[item.status] }]} />
               <Text style={styles.cardStatus}>
-                {STATUS_LABEL[item.status] ?? item.status}
+                {reportStatusLabel(item)}
               </Text>
             </View>
           </View>
