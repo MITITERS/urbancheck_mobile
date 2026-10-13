@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
+import { RemovedPhoto } from "../../../src/reports/RemovedPhoto";
 import { describeApiError } from "../../../src/api/errors";
 import { type Report } from "../../../src/api/reports";
 import { useReportsByAuthor } from "../../../src/queries/reports";
@@ -134,7 +135,11 @@ export default function PublicProfileScreen() {
           style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
         >
-          <Image source={imageSource(item.photo)} style={styles.cardPhoto} />
+          {item.photo || !item.photo_removed_at ? (
+            <Image source={imageSource(item.photo)} style={styles.cardPhoto} />
+          ) : (
+            <RemovedPhoto style={styles.cardPhoto} compact />
+          )}
           <View style={styles.cardBody}>
             <Text style={styles.cardCategory}>
               {CATEGORY_LABEL[item.category] ?? item.category}

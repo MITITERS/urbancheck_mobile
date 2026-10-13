@@ -25,8 +25,14 @@ import ReportFilterBar, {
 } from "../../../src/components/ReportFilterBar";
 import { useDebouncedValue } from "../../../src/hooks/useDebouncedValue";
 import { reportKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  PUBLIC_LIST_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
+import { ComplaintModal } from "../../../src/reports/ComplaintModal";
+import { canReportReport } from "../../../src/reports/complaints";
 import { reportStatusLabel } from "../../../src/reports/labels";
+import { RemovedPhoto } from "../../../src/reports/RemovedPhoto";
 import { useCurrentLocation } from "../../../src/location/useCurrentLocation";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -53,14 +59,27 @@ const OUT_OF_COVERAGE_BODY =
   "UrbanCheck, así que no hay reportes para mostrarte. Si te moviste recién, " +
   "deslizá para actualizar.";
 
-function ReportCard({ item }: { item: Report }) {
+function ReportCard({
+  item,
+  onReport,
+}: {
+  item: Report;
+  /** Abre el formulario de denuncia; ausente si no se le ofrece (US-021). */
+  onReport?: () => void;
+}) {
   const router = useRouter();
   return (
     <Pressable
       style={styles.card}
       onPress={() => router.push(`/(app)/(tabs)/report/${item.id}`)}
     >
-      <Image source={imageSource(item.photo)} style={styles.photo} />
+      {item.photo || !item.photo_removed_at ? (
+        <Image source={imageSource(item.photo)} style={styles.photo} />
+      ) : (
+        // La foto se retiró por protección de datos (US-043): el reporte sigue
+        // publicado sin ella.
+        <RemovedPhoto style={styles.photo} />
+      )}
       <View style={styles.cardBody}>
         <Text style={styles.category}>{CATEGORY_LABEL[item.category] ?? item.category}</Text>
         <Text style={styles.description} numberOfLines={2}>
@@ -77,9 +96,23 @@ function ReportCard({ item }: { item: Report }) {
         )}
         <View style={styles.row}>
           <Text style={styles.meta}>{reportStatusLabel(item)}</Text>
-          <Text style={styles.meta}>
-            ♥ {item.like_count}  💬 {item.comment_count}
-          </Text>
+          <View style={styles.cardActions}>
+            <Text style={styles.meta}>
+              ♥ {item.like_count}  💬 {item.comment_count}
+            </Text>
+            {/* Denunciar desde la tarjeta (US-021). No se dibuja sobre un
+                reporte propio ni en estado final: lo decide `canReportReport`. */}
+            {onReport && (
+              <Pressable
+                onPress={onReport}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Denunciar reporte"
+              >
+                <Ionicons name="flag-outline" size={15} color="#888" />
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
     </Pressable>
@@ -111,6 +144,9 @@ export default function FeedScreen() {
   });
 
   const [filters, setFilters] = useState<ReportFilterState>(EMPTY_FILTERS);
+  // El reporte que se está denunciando desde su tarjeta (US-021). Un solo
+  // formulario para toda la lista, no uno por tarjeta.
+  const [complaintTarget, setComplaintTarget] = useState<number | null>(null);
   // La búsqueda se retrasa para no disparar una petición por tecla; las
   // categorías y los estados son un toque, así que van directo.
   const search = useDebouncedValue(filters.search, 400);
@@ -140,7 +176,7 @@ export default function FeedScreen() {
   );
   // Al volver a la pestaña se refresca lo que venció, conservando el scroll y
   // las páginas ya cargadas: antes se volvía a la primera y a un spinner.
-  useRefetchOnFocus(reportKeys.lists());
+  useRefetchOnFocus(reportKeys.lists(), { pollMs: PUBLIC_LIST_POLL_MS });
 
   const pages = feed.data?.pages ?? [];
   const reports: Report[] = pages.flatMap(
@@ -222,7 +258,14 @@ export default function FeedScreen() {
       <FlatList
         data={reports}
         keyExtractor={(r) => String(r.id)}
-        renderItem={({ item }) => <ReportCard item={item} />}
+        renderItem={({ item }) => (
+          <ReportCard
+            item={item}
+            onReport={
+              canReportReport(item, user) ? () => setComplaintTarget(item.id) : undefined
+            }
+          />
+        )}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
         refreshControl={
@@ -273,6 +316,10 @@ export default function FeedScreen() {
         }
       />
       )}
+      <ComplaintModal
+        reportId={complaintTarget}
+        onClose={() => setComplaintTarget(null)}
+      />
     </View>
   );
 }
@@ -320,6 +367,7 @@ const styles = StyleSheet.create({
   category: { fontWeight: "bold", color: "#1a73e8", marginBottom: 4 },
   description: { fontSize: 14, color: "#333", marginBottom: 8 },
   row: { flexDirection: "row", justifyContent: "space-between" },
+  cardActions: { flexDirection: "row", alignItems: "center", gap: 12 },
   meta: { fontSize: 12, color: "#888" },
   emptyText: { textAlign: "center", marginTop: 40, color: "#888" },
   clearFilters: {

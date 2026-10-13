@@ -16,7 +16,10 @@ import { imageSource } from "../../../src/api/client";
 import { type FeedCoverage, type ReportMarker } from "../../../src/api/reports";
 import { useMapReports } from "../../../src/queries/reports";
 import { reportKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  PUBLIC_LIST_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
 import { participatesAsCitizen } from "../../../src/api/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
@@ -140,7 +143,7 @@ export default function MapTab() {
     activeFilters,
     canQuery && permission !== "checking",
   );
-  useRefetchOnFocus(reportKeys.lists());
+  useRefetchOnFocus(reportKeys.lists(), { pollMs: PUBLIC_LIST_POLL_MS });
 
   const markers: ReportMarker[] = canQuery ? (map.data?.results ?? []) : [];
   const coverage: FeedCoverage | null = canQuery ? (map.data?.coverage ?? null) : null;

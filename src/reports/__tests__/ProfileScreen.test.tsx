@@ -94,10 +94,17 @@ const OPERATOR: UserProfile = {
   url: "/api/users/7/",
 };
 
-function report(id: number, status: UserReportStatus) {
+function report(
+  id: number,
+  status: UserReportStatus,
+  photoStatus: "pendiente" | "procesada" | "fallida" = "procesada",
+) {
   return {
     id,
-    photo: "https://example.test/r.jpg",
+    photo: photoStatus === "procesada" ? "https://example.test/r.jpg" : null,
+    photo_removed_at: null,
+    under_privacy_review: false,
+    photo_status: photoStatus,
     description: `Reporte ${id}`,
     category: "bache" as const,
     latitude: null,
@@ -295,5 +302,37 @@ describe("perfil del operario", () => {
 
     await user.press(screen.getByText("Trabajos resueltos"));
     expect(await screen.findByText("Reporte 1")).toBeTruthy();
+  });
+});
+
+describe("ProfileScreen mientras la imagen se difumina (US-042)", () => {
+  it("distingue el que se está procesando del que ya está publicado", async () => {
+    // Escenario 3: este listado es el único lugar donde el autor encuentra un
+    // reporte que todavía no es público, y tiene que decirlo explícitamente.
+    signedInAs(CITIZEN, {
+      [MY_REPORTS_URL]: page([
+        report(1, "reportado", "pendiente"),
+        report(2, "reportado"),
+      ]),
+    });
+
+    renderProfile();
+
+    expect(await screen.findByText(/Procesando imagen/)).toBeTruthy();
+    // El publicado no arrastra ningún sufijo.
+    const badges = screen.getAllByText(/Reportado/);
+    expect(badges.some((badge) => !/Procesando/.test(badge.props.children))).toBe(
+      true,
+    );
+  });
+
+  it("dice que el que falló no llegó a publicarse", async () => {
+    signedInAs(CITIZEN, {
+      [MY_REPORTS_URL]: page([report(3, "reportado", "fallida")]),
+    });
+
+    renderProfile();
+
+    expect(await screen.findByText(/Sin publicar/)).toBeTruthy();
   });
 });

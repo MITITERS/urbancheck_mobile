@@ -89,6 +89,9 @@ function detail(overrides: Partial<ReportDetail> = {}): ReportDetail {
     id: 7,
     number: 32,
     photo: "https://example.test/reporte.jpg",
+    photo_removed_at: null,
+    photo_status: "procesada" as const,
+    under_privacy_review: false,
     description: "Vereda rota",
     category: "vereda",
     latitude: null,
@@ -110,6 +113,8 @@ function detail(overrides: Partial<ReportDetail> = {}): ReportDetail {
       {
         id: 1,
         photo: CLOSURE_PHOTO,
+        photo_removed_at: null,
+        photo_status: "procesada" as const,
         description: "Se repuso la baldosa.",
         created_at: "2026-09-09T13:46:00Z",
         operational_area: "Obras Públicas",
@@ -119,6 +124,7 @@ function detail(overrides: Partial<ReportDetail> = {}): ReportDetail {
       {
         id: 1,
         photo: APPEAL_PHOTO,
+        photo_status: "procesada" as const,
         reason: "Sigue igual.",
         created_at: "2026-09-09T13:47:00Z",
       },
@@ -211,6 +217,8 @@ describe("hilo de resolución del detalle", () => {
           {
             id: 1,
             photo: CLOSURE_PHOTO,
+            photo_removed_at: null,
+            photo_status: "procesada" as const,
             description: "Primer cierre.",
             created_at: "2026-09-09T13:00:00Z",
             operational_area: "Obras Públicas",
@@ -218,6 +226,8 @@ describe("hilo de resolución del detalle", () => {
           {
             id: 2,
             photo: "https://example.test/cierre-2.jpg",
+            photo_removed_at: null,
+            photo_status: "procesada" as const,
             description: "Cierre final.",
             created_at: "2026-09-09T15:00:00Z",
             operational_area: "Obras Públicas",
@@ -227,6 +237,7 @@ describe("hilo de resolución del detalle", () => {
           {
             id: 1,
             photo: APPEAL_PHOTO,
+            photo_status: "procesada" as const,
             reason: "Sigue igual.",
             created_at: "2026-09-09T14:00:00Z",
           },
@@ -272,6 +283,7 @@ describe("hilo de resolución del detalle", () => {
           {
             id: 1,
             photo: "",
+            photo_status: "procesada" as const,
             reason: "Sigue igual.",
             created_at: "2026-09-09T13:47:00Z",
           },
@@ -283,5 +295,93 @@ describe("hilo de resolución del detalle", () => {
 
     expect(await screen.findByText("Sigue igual.")).toBeTruthy();
     expect(renderedPhotos()).not.toContain(APPEAL_PHOTO);
+  });
+});
+
+/**
+ * El hilo institucional del detalle ciudadano (US-024).
+ *
+ * Tres bloques distintos conviven en la misma pantalla —la descripción del
+ * vecino, la respuesta oficial del municipio y el parte de trabajo del
+ * operario— y el escenario 10 pide que no puedan confundirse entre sí ni con
+ * los comentarios. Quien firma la respuesta ante el vecino es la municipalidad:
+ * la identidad del agente vive solo en el panel (escenario 11).
+ */
+describe("respuestas oficiales en el detalle del vecino", () => {
+  const RESPONSES = [
+    {
+      id: 1,
+      text: "Enviamos la cuadrilla el lunes.",
+      created_at: "2026-09-02T09:00:00Z",
+      municipality: "Villa María",
+    },
+    {
+      id: 2,
+      text: "El trabajo se reprogramó para el jueves por la lluvia.",
+      created_at: "2026-09-04T09:00:00Z",
+      municipality: "Villa María",
+    },
+  ];
+
+  it("firma la municipalidad y la fecha, y nunca al agente que la escribió", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ official_responses: [RESPONSES[0]], has_official_response: true }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
+    expect(screen.getByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText("Villa María")).toBeTruthy();
+    expect(screen.getByText("2/9/2026")).toBeTruthy();
+  });
+
+  it("acumula el hilo en orden: la segunda respuesta no pisa a la primera", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ official_responses: RESPONSES, has_official_response: true }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText(RESPONSES[1].text)).toBeTruthy();
+  });
+
+  it("el bloque institucional no se mezcla con los comentarios de los vecinos", async () => {
+    mockedGet.mockResolvedValue(
+      detail({
+        official_responses: [RESPONSES[0]],
+        has_official_response: true,
+        comments: [
+          {
+            id: 9,
+            text: "Yo también me caí ahí.",
+            created_at: "2026-09-03T09:00:00Z",
+            author: { id: 4, name: "Otro vecino", avatar: null },
+            is_mine: false,
+            can_delete: false,
+          },
+        ],
+      }) as never,
+    );
+
+    renderDetail();
+
+    // Cada uno bajo su propio título: el compromiso del municipio no queda
+    // colgando del listado de comentarios.
+    expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
+    expect(screen.getByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText("Yo también me caí ahí.")).toBeTruthy();
+    // Y el parte de trabajo del operario sigue siendo un tercer bloque.
+    expect(screen.getByText("Se repuso la baldosa.")).toBeTruthy();
+  });
+
+  it("un reporte sin respuestas no deja el bloque vacío en la pantalla", async () => {
+    mockedGet.mockResolvedValue(detail({ official_responses: [] }) as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+    expect(screen.queryByText("Respuestas oficiales")).toBeNull();
   });
 });

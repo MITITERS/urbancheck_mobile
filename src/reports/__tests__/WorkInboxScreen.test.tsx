@@ -44,6 +44,9 @@ const mockedList = {
 const WORK = {
   id: 7,
   photo: "https://example.test/report.jpg",
+  photo_removed_at: null,
+  photo_status: "procesada" as const,
+  under_privacy_review: false,
   description: "Bache enorme en la esquina",
   category: "bache" as const,
   latitude: "-32.41",

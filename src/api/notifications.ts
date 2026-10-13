@@ -20,7 +20,18 @@ export type NotificationKind =
   // Aviso previo a que venza el plazo para objetar un cierre (US-047).
   | "proxima_confirmacion"
   // Le llega al agente y al operario cuando el vecino objeta (US-048).
-  | "apelacion_cierre";
+  | "apelacion_cierre"
+  // Se retiró una foto del reporte por protección de datos (US-043).
+  | "imagen_retirada"
+  // El reporte se ocultó por una denuncia, o volvió a publicarse (US-043).
+  | "reporte_en_revision"
+  | "reporte_restituido"
+  // El resultado de una denuncia, para quien la presentó.
+  | "denuncia_resuelta"
+  // El acuse de una denuncia, para quien la presentó (US-021).
+  | "denuncia_recibida"
+  // Al autor: su reporte recibió una denuncia. No dice de quién (US-021).
+  | "reporte_denunciado";
 
 export interface Notification {
   id: number;

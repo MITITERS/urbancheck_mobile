@@ -21,6 +21,15 @@ export type ReportStatus =
   | "cancelado"
   | "archivado";
 
+/**
+ * En qué anda el difuminado de una imagen (US-042).
+ *
+ * Un reporte solo es público cuando llega a `procesada`. En `pendiente` y en
+ * `fallida` lo ven únicamente su autor y el panel municipal, así que estos dos
+ * valores solo aparecen en el historial propio y en el detalle del autor.
+ */
+export type PhotoStatus = "pendiente" | "procesada" | "fallida";
+
 export interface ReportAuthor {
   id: number;
   name: string;
@@ -59,7 +68,11 @@ export interface OfficialResponse {
  */
 export interface ResolutionEvidence {
   id: number;
-  photo: string;
+  /** Nula si se retiró por protección de datos (US-043, escenario 11). */
+  photo: string | null;
+  photo_removed_at: string | null;
+  /** El difuminado de la foto del cierre (US-042, escenario 8). */
+  photo_status: PhotoStatus;
   description: string;
   created_at: string;
   /** Nombre del área que ejecutó el trabajo. */
@@ -69,7 +82,9 @@ export interface ResolutionEvidence {
 /** La objeción del autor a un cierre que no resolvió el problema (US-048). */
 export interface ResolutionAppeal {
   id: number;
-  photo: string;
+  /** Nula mientras el difuminado no termina (US-042). */
+  photo: string | null;
+  photo_status: PhotoStatus;
   reason: string;
   created_at: string;
 }
@@ -93,7 +108,21 @@ export interface Comment {
 
 export interface Report {
   id: number;
-  photo: string;
+  /** Nula si se retiró por protección de datos (US-043). */
+  photo: string | null;
+  /** Cuándo se retiró: es lo que distingue "retirada" de "sin foto". */
+  photo_removed_at: string | null;
+  /**
+   * Hay una denuncia por dato personal sin resolver (US-043). Solo el autor lo
+   * ve en `true`: para cualquier otro, un reporte retenido no aparece.
+   */
+  under_privacy_review: boolean;
+  /**
+   * El difuminado de la imagen (US-042). Mientras no sea `"procesada"` el
+   * reporte no está publicado y `photo` viaja en null: no hay que confundirlo
+   * con una foto retirada, que además trae `photo_removed_at`.
+   */
+  photo_status: PhotoStatus;
   description: string;
   category: ReportCategory;
   latitude: string | null;
@@ -247,7 +276,7 @@ export function listReportsByAuthor(authorId: number, page = 1) {
 /** Marcadores geolocalizados, sin paginar: el mapa los necesita todos. */
 export interface ReportMarker {
   id: number;
-  photo: string;
+  photo: string | null;
   category: ReportCategory;
   status: ReportStatus;
   latitude: string;
@@ -291,6 +320,50 @@ export function createReport(data: FormData) {
 }
 
 /**
+ * El reclamo que ya describe el problema que se quería reportar (US-032).
+ *
+ * Trae lo necesario para ofrecer sumarse sin otra llamada: si quien reporta ya
+ * lo apoya, si es el autor y a qué distancia está del punto cargado.
+ */
+export interface ExistingReport extends Report {
+  number: number;
+  is_liked: boolean;
+  is_author: boolean;
+  /** Metros hasta el punto que se quiso reportar. */
+  distance_meters: number | null;
+}
+
+/**
+ * Lo que responde el backend cuando el problema ya está reportado: un `409`
+ * con código propio. El reporte nuevo **no se creó**.
+ */
+export interface ReportAlreadyExists {
+  status: 409;
+  code: "report_already_exists";
+  detail: string;
+  existing_report: ExistingReport;
+}
+
+/**
+ * Si el error de `createReport` es que el problema ya estaba reportado.
+ *
+ * Mira el código y no solo el `409`: otro conflicto no trae el reclamo
+ * existente, y tratarlo como este rompería la pantalla que lo muestra.
+ */
+export function isReportAlreadyExists(
+  error: unknown,
+): error is ReportAlreadyExists {
+  if (!error || typeof error !== "object") return false;
+  const data = error as Record<string, unknown>;
+  return (
+    data.status === 409 &&
+    data.code === "report_already_exists" &&
+    typeof data.existing_report === "object" &&
+    data.existing_report !== null
+  );
+}
+
+/**
  * Edita un reporte propio (US-018): descripción, categoría y foto.
  *
  * La ubicación no se edita: cambiarla convertiría el reporte en otro distinto y
@@ -320,6 +393,116 @@ export function getComments(id: number) {
 
 export function addComment(id: number, text: string) {
   return api.post<Comment>(`/api/reports/${id}/comments/`, { text });
+}
+
+/** El acuse de una denuncia por dato personal visible (US-043, escenario 1). */
+export interface PrivacyRequestReceipt {
+  id: number;
+  report: number;
+  evidence: number | null;
+  reason: "dato_personal";
+  status: "pendiente";
+  received_at: string;
+  deadline: string;
+  /** El texto de confirmación, con el plazo tal como lo configura el backend. */
+  detail: string;
+}
+
+/**
+ * Denuncia una imagen que muestra un rostro o una patente sin difuminar
+ * (US-043). Sin `evidenceId` es la foto del reporte; con él, la de ese cierre.
+ *
+ * El reporte queda oculto para todos menos su autor en el mismo momento: no
+ * hay umbral, basta esta denuncia.
+ */
+export function requestPrivacyReview(reportId: number, evidenceId?: number) {
+  return api.post<PrivacyRequestReceipt>(
+    `/api/reports/${reportId}/privacy-request/`,
+    evidenceId === undefined ? {} : { evidence: evidenceId },
+  );
+}
+
+/**
+ * Los dos `409` de la denuncia, por código: ya hay una en curso del mismo
+ * vecino sobre esa imagen (escenario 9), o la imagen ya se retiró.
+ */
+export function privacyRequestConflict(
+  error: unknown,
+): "privacy_request_pending" | "image_already_removed" | null {
+  if (!error || typeof error !== "object") return null;
+  const data = error as Record<string, unknown>;
+  if (data.status !== 409) return null;
+  return data.code === "privacy_request_pending" || data.code === "image_already_removed"
+    ? data.code
+    : null;
+}
+
+/** A quién le llega una denuncia: lo decide su motivo (US-021, escenario 3). */
+export type ComplaintRecipient = "agente_municipal" | "admin_plataforma";
+
+/** Un motivo del catálogo del botón *Denunciar* (US-021, escenario 2). */
+export interface ComplaintReason {
+  value: string;
+  label: string;
+  recipient: ComplaintRecipient;
+}
+
+/** El acuse de una denuncia (US-021, escenario 1). */
+export interface ComplaintReceipt {
+  id: number;
+  report: number;
+  reason: string;
+  recipient: ComplaintRecipient;
+  comment: string;
+  received_at: string;
+  /**
+   * El texto de confirmación, que distingue al destinatario: la revisión del
+   * municipio, o el plazo de la RN-12 si el motivo es un dato personal.
+   */
+  detail: string;
+}
+
+/**
+ * El catálogo de motivos. Lo sirve el backend para que la app no tenga una
+ * copia: el motivo y su destinatario se declaran una sola vez, allá.
+ */
+export function listComplaintReasons() {
+  return api.get<ComplaintReason[]>("/api/reports/complaint-reasons/");
+}
+
+/**
+ * Denuncia un reporte (US-021). El comentario es opcional y solo se manda si
+ * tiene algo.
+ *
+ * No oculta nada ni cambia el estado del reporte, salvo el motivo de dato
+ * personal, que lo retiene hasta que se revisa (US-043).
+ */
+export function fileComplaint(reportId: number, reason: string, comment = "") {
+  const text = comment.trim();
+  return api.post<ComplaintReceipt>(
+    `/api/reports/${reportId}/complaints/`,
+    text ? { reason, comment: text } : { reason },
+  );
+}
+
+const COMPLAINT_CONFLICTS = [
+  "complaint_already_filed",
+  "report_not_public",
+  "image_already_removed",
+] as const;
+
+export type ComplaintConflict = (typeof COMPLAINT_CONFLICTS)[number];
+
+/**
+ * Los `409` de una denuncia, por código: ya la presentó por ese motivo
+ * (escenario 6), el reporte dejó de estar publicado (escenario 8), o la imagen
+ * ya se retiró.
+ */
+export function complaintConflict(error: unknown): ComplaintConflict | null {
+  if (!error || typeof error !== "object") return null;
+  const data = error as Record<string, unknown>;
+  if (data.status !== 409) return null;
+  return COMPLAINT_CONFLICTS.find((code) => code === data.code) ?? null;
 }
 
 /** Borra un comentario (US-009). Lo permite su autor o el dueño del reporte. */

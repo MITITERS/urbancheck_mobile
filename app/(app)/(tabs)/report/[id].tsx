@@ -32,6 +32,10 @@ import {
   unlikeReport,
 } from "../../../../src/api/reports";
 import { reportKeys } from "../../../../src/lib/queryKeys";
+import {
+  PUBLIC_LIST_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../../src/lib/useRefetchOnFocus";
 import { useInvalidateReports, useReport } from "../../../../src/queries/reports";
 import { describeApiError } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
@@ -43,6 +47,11 @@ import {
   reportStatusLabel,
   shortAddress,
 } from "../../../../src/reports/labels";
+import { ProcessingPhoto } from "../../../../src/reports/ProcessingPhoto";
+import { RemovedPhoto } from "../../../../src/reports/RemovedPhoto";
+import { ComplaintModal } from "../../../../src/reports/ComplaintModal";
+import { canReportReport } from "../../../../src/reports/complaints";
+import { usePrivacyReview } from "../../../../src/reports/usePrivacyReview";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
 import { ValidationActions } from "../../../../src/validation/ValidationActions";
 
@@ -86,7 +95,29 @@ export default function ReportDetailScreen() {
   const queryClient = useQueryClient();
   const invalidateReports = useInvalidateReports();
   const query = useReport(Number(id));
-  const report = query.data ?? null;
+  // Un 404 sobre un reporte que se venía mostrando es que dejó de estar
+  // disponible: lo ocultó una denuncia por dato personal (US-043) o lo borró su
+  // autor. React Query conserva el dato anterior cuando el pedido falla, así
+  // que sin esto la pantalla seguía mostrando lo que ya no se puede ver.
+  const unavailable =
+    query.isError && (query.error as { status?: number } | null)?.status === 404;
+  const report = unavailable ? null : (query.data ?? null);
+  // Denunciar una imagen con un dato personal visible (US-043). Para quien no
+  // es el autor, el reporte deja de verse en ese momento: se vuelve atrás. El
+  // autor lo sigue viendo, marcado como en revisión.
+  const privacyReview = usePrivacyReview({
+    reportId: Number(id),
+    onSubmitted: () => {
+      if (report && user?.id === report.author.id) {
+        void query.refetch();
+      } else {
+        router.back();
+      }
+    },
+  });
+
+  // El formulario de *Denunciar* (US-021), abierto o no.
+  const [isReporting, setIsReporting] = useState(false);
 
   /** Reescribe el reporte en la caché, que es de donde la pantalla lo lee. */
   const setReport = useCallback(
@@ -172,6 +203,44 @@ export default function ReportDetailScreen() {
 
   const loading = query.isPending;
 
+  // El detalle queda montado dentro de la pestaña: volver a él no lo pide de
+  // nuevo, y mostraba lo que ya no es cierto. Se pide siempre al volver y,
+  // mientras hay una denuncia en revisión, también cada tanto: la decisión la
+  // toma otra persona desde el panel y nada le avisa a esta pantalla (US-043).
+  const underReview = report?.under_privacy_review === true;
+  // Lo mismo mientras la imagen se difumina (US-042): lo resuelve una tarea
+  // del servidor, y sin esto el autor se queda mirando "procesando" sobre un
+  // reporte que ya se publicó.
+  const photoProcessing = report?.photo_status === "pendiente";
+  const waitingOnTheServer = underReview || photoProcessing;
+  useRefetchOnFocus(reportKeys.detail(Number(id)), {
+    onlyStale: false,
+    pollMs: waitingOnTheServer ? PUBLIC_LIST_POLL_MS : undefined,
+  });
+  // Cuando la revisión termina, "Mis reportes" y el feed también cambian: el
+  // reporte deja de figurar en revisión y vuelve a verse para todos.
+  const wasUnderReview = useRef(underReview);
+  useEffect(() => {
+    if (wasUnderReview.current && !underReview && report) invalidateReports();
+    wasUnderReview.current = underReview;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [underReview]);
+  // Y cuando el difuminado termina, el reporte entra al feed y al mapa: los
+  // dos venían sin traerlo y su caché no tiene por qué saberlo (US-042).
+  const wasProcessing = useRef(photoProcessing);
+  useEffect(() => {
+    if (wasProcessing.current && !photoProcessing && report) invalidateReports();
+    wasProcessing.current = photoProcessing;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoProcessing]);
+
+  // Si ya no está disponible, tampoco tiene que seguir en el feed ni en el
+  // mapa de donde se lo abrió.
+  useEffect(() => {
+    if (unavailable) invalidateReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unavailable]);
+
   async function handleLike() {
     if (!report) return;
     try {
@@ -235,7 +304,11 @@ export default function ReportDetailScreen() {
   if (!report) {
     return (
       <View style={styles.center}>
-        <Text>Reporte no encontrado.</Text>
+        <Text>
+          {unavailable
+            ? "Este reporte ya no está disponible."
+            : "Reporte no encontrado."}
+        </Text>
       </View>
     );
   }
@@ -259,6 +332,49 @@ export default function ReportDetailScreen() {
    */
   const composerBottom = keyboardOffset > 0 ? keyboardOffset : tabBarInset;
   const isAuthor = user !== null && user.id === report.author.id;
+  const canReport = canReportReport(report, user);
+
+  // La foto, o el aviso de por qué no está: retirada por protección de datos
+  // (US-043), o todavía en el difuminado (US-042). Es la misma en las dos
+  // variantes de la cabecera, con mapa y sin él.
+  const photoSlide = report.photo ? (
+    <>
+      <Image
+        source={imageSource(report.photo)}
+        style={{ width, height: "100%" }}
+        onLoadStart={() => setImgLoaded(false)}
+        onLoad={() => setImgLoaded(true)}
+      />
+      {!imgLoaded && (
+        <View style={styles.photoSkeleton}>
+          <ActivityIndicator color="#bbb" />
+        </View>
+      )}
+      {/* Siempre disponible: antes solo aparecía si la foto era vertical, y
+          con una apaisada —o si `Image.getSize` fallaba, que es fácil detrás de
+          un túnel— no había forma de ampliarla. */}
+      <Pressable
+        style={styles.resizeBtn}
+        onPress={toggleEnlarged}
+        accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
+      >
+        <Ionicons
+          name={isEnlarged ? "contract-outline" : "resize-outline"}
+          size={20}
+          color="#333"
+        />
+      </Pressable>
+    </>
+  ) : report.photo_removed_at ? (
+    <RemovedPhoto style={{ width, height: "100%" }} />
+  ) : report.photo_status !== "procesada" ? (
+    // Retirada tiene precedencia: si la foto se sacó por protección de datos,
+    // en qué quedó el difuminado ya no le importa a nadie.
+    <ProcessingPhoto
+      failed={report.photo_status === "fallida"}
+      style={{ width, height: "100%" }}
+    />
+  ) : null;
 
   function confirmDelete() {
     Alert.alert(
@@ -362,31 +478,7 @@ export default function ReportDetailScreen() {
               style={styles.horizontalScroll}
             >
               <View style={{ width, height: "100%", position: "relative" }}>
-                <Image
-                  source={imageSource(report.photo)}
-                  style={{ width, height: "100%" }}
-                  onLoadStart={() => setImgLoaded(false)}
-                  onLoad={() => setImgLoaded(true)}
-                />
-                {!imgLoaded && (
-                  <View style={styles.photoSkeleton}>
-                    <ActivityIndicator color="#bbb" />
-                  </View>
-                )}
-                {/* Siempre disponible: antes solo aparecía si la foto era
-                    vertical, y con una apaisada —o si `Image.getSize` fallaba,
-                    que es fácil detrás de un túnel— no había forma de ampliarla. */}
-                <Pressable
-                  style={styles.resizeBtn}
-                  onPress={toggleEnlarged}
-                  accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
-                >
-                  <Ionicons
-                    name={isEnlarged ? "contract-outline" : "resize-outline"}
-                    size={20}
-                    color="#333"
-                  />
-                </Pressable>
+                {photoSlide}
               </View>
               <View style={{ width, height: "100%", position: "relative" }}>
                 <MapView
@@ -446,28 +538,7 @@ export default function ReportDetailScreen() {
           </Animated.View>
         ) : (
           <Animated.View style={[styles.mediaContainer, { height: containerHeight }]}>
-            <Image
-              source={imageSource(report.photo)}
-              style={{ width, height: "100%" }}
-              onLoadStart={() => setImgLoaded(false)}
-              onLoad={() => setImgLoaded(true)}
-            />
-            {!imgLoaded && (
-              <View style={styles.photoSkeleton}>
-                <ActivityIndicator color="#bbb" />
-              </View>
-            )}
-            <Pressable
-              style={styles.resizeBtn}
-              onPress={toggleEnlarged}
-              accessibilityLabel={isEnlarged ? "Achicar la foto" : "Ampliar la foto"}
-            >
-              <Ionicons
-                name={isEnlarged ? "contract-outline" : "resize-outline"}
-                size={20}
-                color="#333"
-              />
-            </Pressable>
+            {photoSlide}
           </Animated.View>
         )}
 
@@ -523,6 +594,55 @@ export default function ReportDetailScreen() {
           )}
         </View>
 
+        {/* Solo el autor lo ve en `true`: para cualquier otro, un reporte en
+            revisión directamente no se abre (US-043). */}
+        {/* Retirado por protección de datos (US-043): solo el autor llega
+            acá, y tiene que saber que nadie más lo ve y qué puede hacer. */}
+        {report.photo_removed_at && (
+          <View style={styles.privacyNotice}>
+            <Ionicons name="eye-off-outline" size={16} color="#92400e" />
+            <Text style={styles.privacyNoticeText}>
+              Retiramos este reporte porque su foto mostraba un rostro o una
+              patente sin difuminar. Ya no lo ve ningún vecino. Si el problema
+              sigue, podés reportarlo de nuevo con otra foto.
+            </Text>
+          </View>
+        )}
+
+        {/* Todavía no se publicó porque su imagen sigue en el difuminado, o
+            porque no se pudo procesar (US-042, escenarios 3 y 5). Solo el
+            autor llega acá, y tiene que saber que nadie más lo ve. */}
+        {report.photo_status === "pendiente" && !report.photo_removed_at && (
+          <View style={styles.privacyNotice}>
+            <Ionicons name="time-outline" size={16} color="#92400e" />
+            <Text style={styles.privacyNoticeText}>
+              Estamos difuminando los rostros y las patentes de tu foto. Hasta
+              que termine, tu reporte no aparece en el feed ni en el mapa.
+            </Text>
+          </View>
+        )}
+
+        {report.photo_status === "fallida" && !report.photo_removed_at && (
+          <View style={styles.privacyNotice}>
+            <Ionicons name="alert-circle-outline" size={16} color="#92400e" />
+            <Text style={styles.privacyNoticeText}>
+              No pudimos procesar tu foto, así que el reporte no llegó a
+              publicarse. Editalo y cargá otra imagen para volver a intentarlo.
+            </Text>
+          </View>
+        )}
+
+        {report.under_privacy_review && (
+          <View style={styles.privacyNotice}>
+            <Ionicons name="eye-off-outline" size={16} color="#92400e" />
+            <Text style={styles.privacyNoticeText}>
+              Tu reporte está oculto mientras revisamos una denuncia sobre su
+              imagen. Si muestra un dato personal, retiramos la foto y el
+              reporte vuelve a publicarse sin ella.
+            </Text>
+          </View>
+        )}
+
         {/* Editar y eliminar son del autor, y solo mientras el reporte sigue
             sin validar —lo confirme un validador en terreno (US-036) o lo
             confirmen los vecinos (US-040)—. Quién y cuándo lo decide el
@@ -558,6 +678,36 @@ export default function ReportDetailScreen() {
             Este reporte ya fue validado, así que no se puede editar ni
             eliminar.
           </Text>
+        )}
+
+        {/* Denunciar el reporte (US-021): motivo obligatorio y comentario
+            opcional. No se ofrece sobre el reporte propio ni en estado final. */}
+        {canReport && (
+          <Pressable
+            style={styles.reportImageBtn}
+            onPress={() => setIsReporting(true)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="flag-outline" size={15} color="#6b7280" />
+            <Text style={styles.reportImageBtnText}>Denunciar</Text>
+          </Pressable>
+        )}
+
+        {/* Denunciar la foto (US-043). A quien no es el autor ya se lo ofrece
+            el botón de arriba, con el motivo de dato personal entre los suyos.
+            Al autor US-021 no le deja denunciar su reporte, pero US-043 sí
+            pedir la revisión de su propia foto: la RN-12 habilita a cualquiera.
+            Las cuentas de trabajo usan su cuenta personal. */}
+        {canParticipate && isAuthor && report.photo && !report.under_privacy_review && (
+          <Pressable
+            style={styles.reportImageBtn}
+            onPress={() => privacyReview.report()}
+            disabled={privacyReview.isSubmitting}
+            accessibilityRole="button"
+          >
+            <Ionicons name="flag-outline" size={15} color="#6b7280" />
+            <Text style={styles.reportImageBtnText}>Denunciar imagen</Text>
+          </Pressable>
         )}
 
         {canParticipate ? (
@@ -624,12 +774,40 @@ export default function ReportDetailScreen() {
                     <Text style={styles.officialText}>
                       {entry.evidence.description}
                     </Text>
-                    {entry.evidence.photo && (
+                    {entry.evidence.photo ? (
                       <Image
-                        source={{ uri: entry.evidence.photo }}
+                        source={imageSource(entry.evidence.photo)}
                         style={styles.resolutionPhoto}
                       />
+                    ) : (
+                      entry.evidence.photo_removed_at ? (
+                        <RemovedPhoto style={styles.resolutionPhoto} />
+                      ) : (
+                        entry.evidence.photo_status !== "procesada" && (
+                          <ProcessingPhoto
+                            failed={entry.evidence.photo_status === "fallida"}
+                            style={styles.resolutionPhoto}
+                          />
+                        )
+                      )
                     )}
+                    {/* La foto del cierre también se denuncia (US-043,
+                        escenario 11): la sube un operario y puede mostrar a
+                        un tercero igual que la del vecino. */}
+                    {canParticipate &&
+                      entry.evidence.photo &&
+                      !report.under_privacy_review && (
+                        <Pressable
+                          style={styles.reportEvidenceBtn}
+                          onPress={() => privacyReview.report(entry.evidence.id)}
+                          disabled={privacyReview.isSubmitting}
+                          accessibilityRole="button"
+                          accessibilityLabel="Denunciar la foto del cierre"
+                        >
+                          <Ionicons name="flag-outline" size={13} color="#6b7280" />
+                          <Text style={styles.reportImageBtnText}>Denunciar foto</Text>
+                        </Pressable>
+                      )}
                   </View>
                 ) : (
                   <View key={`a${entry.appeal.id}`} style={styles.appealCard}>
@@ -946,6 +1124,16 @@ export default function ReportDetailScreen() {
           </Pressable>
         </View>
       )}
+      <ComplaintModal
+        reportId={isReporting ? report.id : null}
+        onClose={() => setIsReporting(false)}
+        // Con el motivo de dato personal el reporte deja de verse para quien
+        // lo denunció: se vuelve atrás, igual que en US-043. Una denuncia de
+        // contenido no cambia nada y la pantalla queda donde estaba.
+        onSubmitted={(receipt) => {
+          if (receipt.recipient === "admin_plataforma") router.back();
+        }}
+      />
     </View>
   );
 }
@@ -1052,6 +1240,34 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   photo: { width: "100%", height: 240 },
+  privacyNotice: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#fef3c7",
+  },
+  privacyNoticeText: { flex: 1, fontSize: 13, color: "#92400e", lineHeight: 18 },
+  reportImageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 4,
+  },
+  reportEvidenceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    marginTop: 8,
+  },
+  reportImageBtnText: { fontSize: 13, color: "#6b7280" },
   mediaContainer: {
     position: "relative",
     width: "100%",

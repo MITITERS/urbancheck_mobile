@@ -12,17 +12,18 @@ import { useRefetchOnFocus } from "../useRefetchOnFocus";
  * lo que hacía la app antes y lo que la volvía lenta.
  */
 
-let focusCallback: (() => void) | null = null;
+let focusCallback: (() => (() => void) | void) | null = null;
 
 jest.mock("expo-router", () => ({
-  useFocusEffect: (callback: () => void) => {
+  useFocusEffect: (callback: () => (() => void) | void) => {
     focusCallback = callback;
   },
 }));
 
-/** Simula volver a la pantalla. */
-function focusScreen() {
-  focusCallback?.();
+/** Simula volver a la pantalla; devuelve cómo salir de ella. */
+function focusScreen(): () => void {
+  const cleanup = focusCallback?.();
+  return typeof cleanup === "function" ? cleanup : () => {};
 }
 
 function wrapperFor(client: QueryClient) {
@@ -40,14 +41,19 @@ const FEED_KEY = ["reportes", "list", {}] as const;
  * alcanza consultas que algún componente esté mirando: sin el `useQuery`
  * montado, el test pasaría sin probar nada.
  */
-function mountFeedWith(watched: readonly unknown[], staleTime: number, queryFn: jest.Mock) {
+function mountFeedWith(
+  watched: readonly unknown[],
+  staleTime: number,
+  queryFn: jest.Mock,
+  pollMs?: number,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime } },
   });
   const view = renderHook(
     () => {
       useQuery({ queryKey: FEED_KEY, queryFn });
-      useRefetchOnFocus(watched);
+      useRefetchOnFocus(watched, { pollMs });
     },
     { wrapper: wrapperFor(client) },
   );
@@ -90,5 +96,38 @@ describe("useRefetchOnFocus", () => {
     focusScreen();
 
     await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+  });
+
+  describe("con pollMs (US-043)", () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("mientras la pantalla está a la vista, vuelve a pedir aunque esté fresco", async () => {
+      // Lo que otro vecino hizo —denunciar un reporte— no cambia nada en esta
+      // caché: el dato "fresco" puede estar mostrando algo que ya se ocultó.
+      jest.useFakeTimers();
+      const queryFn = jest.fn().mockResolvedValue({ results: [] });
+      mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
+      await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+
+      focusScreen();
+      jest.advanceTimersByTime(30_000);
+
+      await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+    });
+
+    it("deja de pedir al salir de la pantalla", async () => {
+      jest.useFakeTimers();
+      const queryFn = jest.fn().mockResolvedValue({ results: [] });
+      mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
+      await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+
+      const leave = focusScreen();
+      leave();
+      jest.advanceTimersByTime(90_000);
+
+      expect(queryFn).toHaveBeenCalledTimes(1);
+    });
   });
 });

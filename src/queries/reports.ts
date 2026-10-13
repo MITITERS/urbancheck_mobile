@@ -18,6 +18,7 @@ import {
 import {
   getReport,
   likeReport,
+  listComplaintReasons,
   listMapReports,
   listMyReports,
   listReports,
@@ -26,7 +27,7 @@ import {
   type ReportFilters,
 } from "../api/reports";
 import type { Coordinates } from "../location/coordinates";
-import { reportKeys, userKeys } from "../lib/queryKeys";
+import { complaintReasonKeys, reportKeys, userKeys } from "../lib/queryKeys";
 
 /**
  * El feed, cacheado por página, ubicación y filtros.
@@ -104,6 +105,19 @@ export function useToggleLike() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: reportKeys.all });
     },
+  });
+}
+
+/**
+ * Los motivos del botón *Denunciar* (US-021). Solo se piden cuando el vecino
+ * abre el formulario, y no se vuelven a pedir en la sesión: es un catálogo.
+ */
+export function useComplaintReasons(enabled = true) {
+  return useQuery({
+    queryKey: complaintReasonKeys.lists(),
+    queryFn: listComplaintReasons,
+    enabled,
+    staleTime: Infinity,
   });
 }
 
