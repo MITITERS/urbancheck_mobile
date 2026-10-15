@@ -81,7 +81,7 @@ function lastAlert(): { title: string; message: string } {
 }
 
 describe("límites de intentos en las pantallas de cuenta", () => {
-  it("CP-SEC05-51 · login: el bloqueo dice que hay que esperar, no que la contraseña está mal", async () => {
+  it("CP-SEC05-M01 · login: el bloqueo dice que hay que esperar, no que la contraseña está mal", async () => {
     (login as jest.Mock).mockRejectedValue(LOGIN_LOCKED);
     const user = userEvent.setup();
     renderWithProviders(<LoginScreen />);
@@ -96,7 +96,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
     expect(lastAlert().message).not.toMatch(/incorrect/i);
   });
 
-  it("CP-SEC05-52 · registro: el tope por IP se explica igual", async () => {
+  it("CP-SEC05-M02 · registro: el tope por IP se explica igual", async () => {
     (signup as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
     renderWithProviders(<RegisterScreen />);
@@ -114,7 +114,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
     expect(lastAlert().title).toBe("Demasiados intentos");
   });
 
-  it("CP-SEC05-53 · recuperación: el tope por cuenta no se confunde con un email inválido", async () => {
+  it("CP-SEC05-M03 · recuperación: el tope por cuenta no se confunde con un email inválido", async () => {
     (requestPasswordReset as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
     renderWithProviders(<ForgotPasswordScreen />);
@@ -126,7 +126,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
     expect(screen.queryByText(/Verificá la dirección/)).toBeNull();
   });
 
-  it("CP-SEC05-54 · restablecer la contraseña: el tope se explica", async () => {
+  it("CP-SEC05-M04 · restablecer la contraseña: el tope se explica", async () => {
     (resetPassword as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
     renderWithProviders(<ResetPasswordScreen />);
@@ -142,7 +142,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
     expect(lastAlert().title).toBe("Demasiados intentos");
   });
 
-  it("CP-SEC05-55 · cambiar la contraseña: el tope se explica en la pantalla", async () => {
+  it("CP-SEC05-M05 · cambiar la contraseña: el tope se explica en la pantalla", async () => {
     (changePassword as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
     renderWithProviders(<ChangePasswordScreen />);

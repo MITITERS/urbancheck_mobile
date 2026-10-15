@@ -306,7 +306,7 @@ describe("perfil del operario", () => {
 });
 
 describe("ProfileScreen mientras la imagen se difumina (US-042)", () => {
-  it("CP-042-53 (US-042 E3) · distingue el que se está procesando del que ya está publicado", async () => {
+  it("CP-042-M03 (US-042 E3) · distingue el que se está procesando del que ya está publicado", async () => {
     // Escenario 3: este listado es el único lugar donde el autor encuentra un
     // reporte que todavía no es público, y tiene que decirlo explícitamente.
     signedInAs(CITIZEN, {
@@ -326,7 +326,7 @@ describe("ProfileScreen mientras la imagen se difumina (US-042)", () => {
     );
   });
 
-  it("CP-042-54 (US-042 E5) · dice que el que falló no llegó a publicarse", async () => {
+  it("CP-042-M04 (US-042 E5) · dice que el que falló no llegó a publicarse", async () => {
     signedInAs(CITIZEN, {
       [MY_REPORTS_URL]: page([report(3, "reportado", "fallida")]),
     });

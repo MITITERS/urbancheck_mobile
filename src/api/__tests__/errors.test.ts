@@ -84,7 +84,7 @@ describe("describeApiError", () => {
 });
 
 describe("límites de intentos y de tasa (429)", () => {
-  it("CP-SEC05-56 · usa el mensaje en castellano del servidor, con el tiempo de espera", () => {
+  it("CP-SEC05-M06 · usa el mensaje en castellano del servidor, con el tiempo de espera", () => {
     const result = describeApiError({
       status: 429,
       code: "throttled",
@@ -97,7 +97,7 @@ describe("límites de intentos y de tasa (429)", () => {
     expect(result.message).toMatch(/5 minutos/);
   });
 
-  it("CP-SEC05-57 · al bloqueo de allauth, en inglés, le pone un texto propio", () => {
+  it("CP-SEC05-M07 · al bloqueo de allauth, en inglés, le pone un texto propio", () => {
     const result = describeApiError({
       status: 429,
       errors: [{ code: "too_many_login_attempts", message: "Too many failed login attempts." }],
@@ -108,14 +108,14 @@ describe("límites de intentos y de tasa (429)", () => {
     expect(result.message).not.toMatch(/Too many/);
   });
 
-  it("CP-SEC05-58 · no se confunde con un error de campo", () => {
+  it("CP-SEC05-M08 · no se confunde con un error de campo", () => {
     const result = describeApiError({ status: 429, email: ["no importa"] });
 
     expect(result.field).toBeUndefined();
     expect(result.title).toBe("Demasiados intentos");
   });
 
-  it("CP-SEC05-59 · isRateLimited reconoce solo el 429", () => {
+  it("CP-SEC05-M09 · isRateLimited reconoce solo el 429", () => {
     expect(isRateLimited({ status: 429 })).toBe(true);
     expect(isRateLimited({ status: 400 })).toBe(false);
     expect(isRateLimited(new Error("x"))).toBe(false);

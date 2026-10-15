@@ -92,7 +92,7 @@ beforeEach(() => {
 });
 
 describe("Denunciar un reporte (US-021)", () => {
-  it("CP-021-51 (US-021 E2) · ofrece los tres motivos que manda el servidor", async () => {
+  it("CP-021-M01 (US-021 E2) · ofrece los tres motivos que manda el servidor", async () => {
     renderModal();
 
     for (const reason of REASONS) {
@@ -108,7 +108,7 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(screen.queryByText("Enviar denuncia")).toBeNull();
   });
 
-  it("CP-021-52 (US-021 E4) · sin motivo no manda nada y dice que es obligatorio", async () => {
+  it("CP-021-M02 (US-021 E4) · sin motivo no manda nada y dice que es obligatorio", async () => {
     renderModal();
     await screen.findByText("Reporte falso o inexistente");
 
@@ -119,7 +119,7 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("CP-021-53 (US-021 E4) · al elegir un motivo se va el aviso de que faltaba", async () => {
+  it("CP-021-M03 (US-021 E4) · al elegir un motivo se va el aviso de que faltaba", async () => {
     renderModal();
     await screen.findByText("Reporte falso o inexistente");
     await send();
@@ -129,7 +129,7 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(screen.queryByText(REASON_REQUIRED_MESSAGE)).toBeNull();
   });
 
-  it("CP-021-54 (US-021 E1) · con el motivo solo, denuncia sin comentario", async () => {
+  it("CP-021-M04 (US-021 E1) · con el motivo solo, denuncia sin comentario", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
     renderModal();
 
@@ -141,7 +141,7 @@ describe("Denunciar un reporte (US-021)", () => {
     });
   });
 
-  it("CP-021-55 (US-021 E1) · manda el comentario cuando se escribe uno", async () => {
+  it("CP-021-M05 (US-021 E1) · manda el comentario cuando se escribe uno", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
     renderModal();
 
@@ -158,7 +158,7 @@ describe("Denunciar un reporte (US-021)", () => {
     });
   });
 
-  it("CP-021-56 (US-021 E3) · una denuncia de contenido confirma la revisión del municipio", async () => {
+  it("CP-021-M06 (US-021 E3) · una denuncia de contenido confirma la revisión del municipio", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
     renderModal();
 
@@ -172,7 +172,7 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("CP-021-57 (US-021 E3) · CP-043-51 (US-043 E1) · una de dato personal confirma el plazo de 24 horas", async () => {
+  it("CP-021-M07 (US-021 E3) · CP-043-M01 (US-043 E1) · una de dato personal confirma el plazo de 24 horas", async () => {
     mockedPost.mockResolvedValue(PLATFORM_RECEIPT);
     renderModal();
 
@@ -212,7 +212,7 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: reportKeys.all });
   });
 
-  it("CP-021-58 (US-021 E6) · si ya lo denunció por ese motivo, lo dice sin registrar otra", async () => {
+  it("CP-021-M08 (US-021 E6) · si ya lo denunció por ese motivo, lo dice sin registrar otra", async () => {
     mockedPost.mockRejectedValue({
       status: 409,
       code: "complaint_already_filed",

@@ -43,7 +43,7 @@ function renderModal(report: ExistingReport | null = EXISTING) {
 }
 
 describe("ExistingReportModal (US-032)", () => {
-  it("CP-032-51 (US-032 E1) · shows the existing report card", () => {
+  it("CP-032-M01 (US-032 E1) · shows the existing report card", () => {
     renderModal();
 
     expect(screen.getByText("Este problema ya fue reportado")).toBeTruthy();
@@ -53,7 +53,7 @@ describe("ExistingReportModal (US-032)", () => {
     expect(screen.getByText("3 vecinos lo apoyan")).toBeTruthy();
   });
 
-  it("CP-032-52 (US-032 E1) · never calls it a duplicate", () => {
+  it("CP-032-M02 (US-032 E1) · never calls it a duplicate", () => {
     for (const report of [
       EXISTING,
       { ...EXISTING, is_liked: true },
@@ -72,7 +72,7 @@ describe("ExistingReportModal (US-032)", () => {
     }
   });
 
-  it("CP-032-53 (US-032 E2) · offers to join and joins", async () => {
+  it("CP-032-M03 (US-032 E2) · offers to join and joins", async () => {
     const { onJoin } = renderModal();
 
     await userEvent.press(screen.getByText("Sumar mi apoyo"));
@@ -80,7 +80,7 @@ describe("ExistingReportModal (US-032)", () => {
     expect(onJoin).toHaveBeenCalledTimes(1);
   });
 
-  it("CP-032-54 (US-032 E3) · goes back to the form without joining", async () => {
+  it("CP-032-M04 (US-032 E3) · goes back to the form without joining", async () => {
     const { onBack, onJoin } = renderModal();
 
     await userEvent.press(screen.getByText("Volver"));
@@ -89,7 +89,7 @@ describe("ExistingReportModal (US-032)", () => {
     expect(onJoin).not.toHaveBeenCalled();
   });
 
-  it("CP-032-55 (US-032 E4) · does not offer to join to someone already supporting it", async () => {
+  it("CP-032-M05 (US-032 E4) · does not offer to join to someone already supporting it", async () => {
     const { onOpen } = renderModal({ ...EXISTING, is_liked: true });
 
     expect(screen.getByText("Ya estás apoyando este reclamo")).toBeTruthy();
@@ -99,7 +99,7 @@ describe("ExistingReportModal (US-032)", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("CP-032-56 (US-032 E5) · takes the author to their own report without offering to join", async () => {
+  it("CP-032-M06 (US-032 E5) · takes the author to their own report without offering to join", async () => {
     const { onOpen } = renderModal({ ...EXISTING, is_author: true });
 
     expect(screen.getByText("Ya reportaste este problema")).toBeTruthy();

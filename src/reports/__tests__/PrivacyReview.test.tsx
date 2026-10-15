@@ -154,7 +154,7 @@ beforeEach(() => {
 });
 
 describe("Denunciar imagen (US-043)", () => {
-  it("CP-043-53 (US-043 E3) · el autor puede pedir la revisión de su propia foto", async () => {
+  it("CP-043-M03 (US-043 E3) · el autor puede pedir la revisión de su propia foto", async () => {
     signIn(profile({ id: AUTHOR.id }));
     renderDetail();
 
@@ -179,7 +179,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(mockedPost).not.toHaveBeenCalled();
   });
 
-  it("CP-043-54 (US-043 E1) · con el motivo elegido, denuncia y confirma la revisión en el plazo", async () => {
+  it("CP-043-M04 (US-043 E1) · con el motivo elegido, denuncia y confirma la revisión en el plazo", async () => {
     mockedPost.mockResolvedValue({
       id: 1,
       detail: "Recibimos tu solicitud. La revisión se hace dentro de las 24 horas.",
@@ -216,7 +216,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(mockBack).toHaveBeenCalled();
   });
 
-  it("CP-043-55 (US-043 E9) · una segunda denuncia sobre la misma imagen dice que ya está en curso", async () => {
+  it("CP-043-M05 (US-043 E9) · una segunda denuncia sobre la misma imagen dice que ya está en curso", async () => {
     mockedPost.mockRejectedValue({
       status: 409,
       code: "privacy_request_pending",
@@ -237,7 +237,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(mockBack).not.toHaveBeenCalled();
   });
 
-  it("CP-043-56 (US-043 E11) · la foto de un cierre se denuncia indicando cuál", async () => {
+  it("CP-043-M06 (US-043 E11) · la foto de un cierre se denuncia indicando cuál", async () => {
     mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
     renderDetail();
 
@@ -253,7 +253,7 @@ describe("Denunciar imagen (US-043)", () => {
     });
   });
 
-  it("CP-043-57 (US-043 E1) · la foto de una objeción se denuncia indicando cuál", async () => {
+  it("CP-043-M07 (US-043 E1) · la foto de una objeción se denuncia indicando cuál", async () => {
     mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
     renderDetail(
       detail({
@@ -282,7 +282,7 @@ describe("Denunciar imagen (US-043)", () => {
     });
   });
 
-  it("CP-043-58 (US-043 E11) · la foto retirada de una objeción se muestra como retirada", async () => {
+  it("CP-043-M08 (US-043 E11) · la foto retirada de una objeción se muestra como retirada", async () => {
     renderDetail(
       detail({
         resolution_appeals: [
@@ -313,7 +313,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(screen.queryByText("Denunciar imagen")).toBeNull();
   });
 
-  it("CP-043-59 (US-043 E2) · el autor ve su reporte marcado como en revisión, sin volver a denunciar", async () => {
+  it("CP-043-M09 (US-043 E2) · el autor ve su reporte marcado como en revisión, sin volver a denunciar", async () => {
     signIn(profile({ id: AUTHOR.id }));
     renderDetail(detail({ under_privacy_review: true }));
 
@@ -321,7 +321,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(screen.queryByText("Denunciar imagen")).toBeNull();
   });
 
-  it("CP-043-60 (US-043 E5) · una foto retirada se muestra como retirada y no se puede denunciar", async () => {
+  it("CP-043-M10 (US-043 E5) · una foto retirada se muestra como retirada y no se puede denunciar", async () => {
     renderDetail(
       detail({
         photo: null,
@@ -353,7 +353,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(screen.queryByLabelText("Denunciar la foto del cierre")).toBeNull();
   });
 
-  it("CP-043-61 (US-043 E2) · si el reporte se ocultó mientras estaba abierto, deja de mostrarlo", async () => {
+  it("CP-043-M11 (US-043 E2) · si el reporte se ocultó mientras estaba abierto, deja de mostrarlo", async () => {
     // El 404 llega con el dato viejo todavía en la caché: React Query lo
     // conserva, y la pantalla lo seguía mostrando.
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
@@ -367,7 +367,7 @@ describe("Denunciar imagen (US-043)", () => {
     expect(screen.queryByText("Vereda rota")).toBeNull();
   });
 
-  it("CP-043-62 (US-043 E6) · cuando se desestima la denuncia, el cartel del autor se va solo", async () => {
+  it("CP-043-M12 (US-043 E6) · cuando se desestima la denuncia, el cartel del autor se va solo", async () => {
     // La decisión la toma el admin desde el panel: nada le avisa a esta
     // pantalla, que seguía diciendo "tu reporte está oculto" ya resuelto.
     jest.useFakeTimers();
@@ -419,7 +419,7 @@ describe("Denunciar desde el detalle (US-021)", () => {
     });
   }
 
-  it("CP-021-59 (US-021 E7) · el autor no tiene la acción sobre su propio reporte", async () => {
+  it("CP-021-M09 (US-021 E7) · el autor no tiene la acción sobre su propio reporte", async () => {
     signIn(profile({ id: AUTHOR.id }));
     renderDetail();
 
@@ -428,7 +428,7 @@ describe("Denunciar desde el detalle (US-021)", () => {
   });
 
   it.each(["cancelado", "archivado"] as const)(
-    "CP-021-60 (US-021 E8) · sobre un reporte %s no se ofrece",
+    "CP-021-M10 (US-021 E8) · sobre un reporte %s no se ofrece",
     async (status) => {
       renderDetail(detail({ status }));
 
@@ -445,7 +445,7 @@ describe("Denunciar desde el detalle (US-021)", () => {
     expect(screen.queryByText("Denunciar")).toBeNull();
   });
 
-  it("CP-021-61 (US-021 E5) · una denuncia de contenido deja al vecino en el reporte", async () => {
+  it("CP-021-M11 (US-021 E5) · una denuncia de contenido deja al vecino en el reporte", async () => {
     renderDetailWithReasons();
 
     await reportAs("Reporte falso o inexistente", {
@@ -463,7 +463,7 @@ describe("Denunciar desde el detalle (US-021)", () => {
     expect(mockBack).not.toHaveBeenCalled();
   });
 
-  it("CP-043-52 (US-043 E2) · una de dato personal lo saca: el reporte acaba de ocultarse", async () => {
+  it("CP-043-M02 (US-043 E2) · una de dato personal lo saca: el reporte acaba de ocultarse", async () => {
     renderDetailWithReasons();
 
     await reportAs("Dato personal visible", {
