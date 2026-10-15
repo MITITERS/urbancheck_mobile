@@ -150,7 +150,7 @@ beforeEach(() => {
 });
 
 describe("CreateReportTab when the problem is already reported (US-032)", () => {
-  it("shows the existing report instead of an error", async () => {
+  it("CP-032-57 (US-032 E1) · shows the existing report instead of an error", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
     renderScreen();
 
@@ -160,7 +160,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
     expect(screen.getByText("Sumar mi apoyo")).toBeTruthy();
   });
 
-  it("joins with a like and opens the existing report", async () => {
+  it("CP-032-58 (US-032 E2) · joins with a like and opens the existing report", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
     mockedLikeReport.mockResolvedValueOnce({ liked: true, like_count: 4 });
     renderScreen();
@@ -172,7 +172,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
     expect(mockedLikeReport).toHaveBeenCalledWith(42);
   });
 
-  it("goes back keeping what was loaded, without liking", async () => {
+  it("CP-032-59 (US-032 E3) · goes back keeping what was loaded, without liking", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
     renderScreen();
 
@@ -188,7 +188,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it("takes the author to their report without liking", async () => {
+  it("CP-032-60 (US-032 E5) · takes the author to their report without liking", async () => {
     mockedCreateReport.mockRejectedValueOnce(
       alreadyExists({ ...EXISTING, is_author: true }),
     );
@@ -232,7 +232,7 @@ describe("CreateReportTab when the photo still has to be blurred (US-042)", () =
     return alerts[0];
   }
 
-  it("says the image is being processed instead of claiming it is published", async () => {
+  it("CP-042-51 (US-042 E3) · says the image is being processed instead of claiming it is published", async () => {
     const confirmation = await submitAndReadTheConfirmation();
 
     // El reporte se envió, eso es cierto y se dice.
@@ -244,7 +244,7 @@ describe("CreateReportTab when the photo still has to be blurred (US-042)", () =
     expect(confirmation.message).not.toMatch(/creado correctamente/i);
   });
 
-  it("does not offer to join a report that is still being processed", async () => {
+  it("CP-042-52 (US-042 E7) · does not offer to join a report that is still being processed", async () => {
     // Bloquea el alta igual —el problema ya está reportado—, pero todavía no
     // se puede abrir ni apoyar: para este vecino no existe.
     mockedCreateReport.mockRejectedValueOnce(
