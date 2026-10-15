@@ -104,7 +104,7 @@ export default function RegisterScreen() {
       const data2 = currentErr as Record<string, unknown>;
       if (data2?.errors) {
         const mapped: Record<string, string> = {};
-        for (const e of data2.errors as Array<{ param?: string; message: string }>) {
+        for (const e of data2.errors as { param?: string; message: string }[]) {
           if (e.param) mapped[e.param] = e.message;
         }
         if (Object.keys(mapped).length > 0) {

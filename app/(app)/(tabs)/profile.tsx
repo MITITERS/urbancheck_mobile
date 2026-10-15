@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -172,7 +172,9 @@ export default function ProfileScreen() {
   // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
   // se lee como que no hay reportes, y el contador no alcanza para desmentirlo.
   const [reportsOpen, setReportsOpen] = useState(true);
-  const chevronSpin = useRef(new Animated.Value(1)).current;
+  // Se crea una sola vez: el inicializador perezoso de `useState` evita leer
+  // una ref durante el render.
+  const [chevronSpin] = useState(() => new Animated.Value(1));
 
   function toggleReports() {
     const opening = !reportsOpen;

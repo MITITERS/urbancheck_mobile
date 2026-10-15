@@ -27,9 +27,9 @@ function focusScreen(): () => void {
 }
 
 function wrapperFor(client: QueryClient) {
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  };
 }
 
 const FEED_KEY = ["reportes", "list", {}] as const;

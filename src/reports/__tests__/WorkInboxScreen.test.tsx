@@ -11,9 +11,9 @@ const mockedPush = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockedPush }),
   // La pantalla carga al enfocarse; en el test alcanza con un efecto normal.
-  // El require va adentro: la fábrica del mock se hoistea sobre los imports.
+  // El `requireActual` va adentro: la fábrica del mock se hoistea sobre los imports.
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 // Los iconos no son lo que se prueba acá, y `expo-font` —del que dependen— no

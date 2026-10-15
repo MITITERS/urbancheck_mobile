@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -110,6 +110,7 @@ export default function MapTab() {
   function selectMarker(id: string) {
     const marker = markers.find((item) => String(item.id) === id);
     if (!marker) return;
+    // eslint-disable-next-line react-hooks/purity -- selectMarker solo corre desde los handlers de toque del mapa y del marcador, nunca durante el render
     selectedAt.current = Date.now();
     setSelected(marker);
   }
@@ -153,6 +154,7 @@ export default function MapTab() {
   // La ficha abierta puede ser de un marcador que el filtro nuevo ya no
   // devuelve: quedaría flotando sobre un mapa donde ese punto no está.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- la ficha abierta se descarta cuando el marcador ya no viene en los datos nuevos, que llegan asincrónicos
     setSelected((current) =>
       current && markers.some((marker) => marker.id === current.id) ? current : null,
     );
@@ -166,6 +168,7 @@ export default function MapTab() {
   useEffect(() => {
     if (permission === "checking" || region !== null) return;
     if (coords) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- la región inicial depende del permiso y de la ubicación, que se resuelven después del primer render
       setRegion({
         ...coords,
         latitudeDelta: MARKER_DELTA,

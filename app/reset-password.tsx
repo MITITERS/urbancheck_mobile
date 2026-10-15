@@ -60,7 +60,7 @@ export default function ResetPasswordScreen() {
       }
       const data = err as Record<string, unknown>;
       if (data?.errors) {
-        const errors = data.errors as Array<{ param?: string; code?: string; message: string }>;
+        const errors = data.errors as { param?: string; code?: string; message: string }[];
         const mapped: Record<string, string> = {};
         for (const e of errors) {
           if (e.param) mapped[e.param] = e.message;

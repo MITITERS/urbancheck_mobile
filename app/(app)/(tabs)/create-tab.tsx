@@ -174,7 +174,7 @@ export default function CreateReportTab() {
       if (!result.canceled && result.assets[0]) {
         await applyPhotoAsset(result.assets[0]);
       }
-    } catch (err) {
+    } catch {
       setNotice({
         tone: "error",
         title: "No pudimos abrir la galería",
@@ -198,7 +198,7 @@ export default function CreateReportTab() {
       if (!result.canceled && result.assets[0]) {
         await applyPhotoAsset(result.assets[0]);
       }
-    } catch (err) {
+    } catch {
       setNotice({
         tone: "error",
         title: "No pudimos abrir la cámara",
@@ -248,6 +248,7 @@ export default function CreateReportTab() {
   // buscar en cada pulsación de tecla.
   useEffect(() => {
     if (locationMode !== "manual") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- vaciar las sugerencias al salir del modo manual sincroniza la lista con el modo elegido; no hay un valor derivable en el render
       setSuggestions([]);
       return;
     }

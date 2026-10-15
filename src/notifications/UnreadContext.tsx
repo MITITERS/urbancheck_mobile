@@ -77,6 +77,7 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- el contador se pide al montar y en cada intervalo: es una sincronización con el servidor
     void refreshUnread();
 
     const interval = setInterval(() => {

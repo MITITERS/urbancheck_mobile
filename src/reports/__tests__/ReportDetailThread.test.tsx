@@ -20,13 +20,13 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
   useLocalSearchParams: () => ({ id: "7" }),
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("react-native-maps", () => {
   const React = jest.requireActual("react");
   const { View } = jest.requireActual("react-native");
-  const MapView = React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
+  const MapView = React.forwardRef(function MapView(props: Record<string, unknown>, ref: unknown) {
     React.useImperativeHandle(ref, () => ({ animateToRegion: jest.fn() }));
     return React.createElement(View, props);
   });

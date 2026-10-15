@@ -59,7 +59,7 @@ export default function LoginScreen() {
         // El servidor contestó y rechazó las credenciales: eso sí es un
         // usuario o una contraseña que no coinciden.
         const mapped: Record<string, string> = {};
-        for (const e of data2.errors as Array<{ param?: string; message: string }>) {
+        for (const e of data2.errors as { param?: string; message: string }[]) {
           if (e.param) mapped[e.param] = e.message;
         }
         if (Object.keys(mapped).length > 0) {

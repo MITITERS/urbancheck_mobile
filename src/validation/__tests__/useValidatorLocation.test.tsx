@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Text } from "react-native";
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 
@@ -28,13 +29,18 @@ const MOVED = { latitude: -32.4111, longitude: -63.2444 };
 let current: ReturnType<typeof useValidatorLocation>;
 
 function Probe() {
-  current = useValidatorLocation();
+  const location = useValidatorLocation();
+  // Se publica en un efecto y no durante el render: escribir una variable de
+  // afuera mientras se renderiza es un efecto secundario.
+  useEffect(() => {
+    current = location;
+  });
   return (
     <>
-      <Text testID="permission">{current.permission}</Text>
-      <Text testID="reason">{current.reason ?? "—"}</Text>
+      <Text testID="permission">{location.permission}</Text>
+      <Text testID="reason">{location.reason ?? "—"}</Text>
       <Text testID="coords">
-        {current.coords ? `${current.coords.latitude},${current.coords.longitude}` : "—"}
+        {location.coords ? `${location.coords.latitude},${location.coords.longitude}` : "—"}
       </Text>
     </>
   );

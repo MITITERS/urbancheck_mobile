@@ -1,5 +1,4 @@
 import {
-  render,
   screen,
   userEvent,
   waitFor,
@@ -18,9 +17,9 @@ import { renderWithProviders } from "../../test/renderWithProviders";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
   // La pantalla carga al enfocarse; en el test alcanza con un efecto normal.
-  // El require va adentro: la fábrica del mock se hoistea sobre los imports.
+  // El `requireActual` va adentro: la fábrica del mock se hoistea sobre los imports.
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("expo-location", () => ({

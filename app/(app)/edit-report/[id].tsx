@@ -16,11 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../../src/api/client";
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
-import {
-  updateReport,
-  type ReportCategory,
-  type ReportDetail,
-} from "../../../src/api/reports";
+import { updateReport, type ReportCategory } from "../../../src/api/reports";
 import { Notice } from "../../../src/components/Notice";
 import { useInvalidateReports, useReport } from "../../../src/queries/reports";
 import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
@@ -85,6 +81,7 @@ export default function EditReportScreen() {
 
   useEffect(() => {
     if (query.isError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- el formulario se siembra una sola vez con el reporte que llega de la red
       setNotice(describeApiError(query.error, "No pudimos abrir el reporte"));
     }
   }, [query.error, query.isError]);

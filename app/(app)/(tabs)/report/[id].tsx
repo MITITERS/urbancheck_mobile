@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  FlatList,
   Image,
   Keyboard,
   PanResponder,
@@ -142,11 +141,14 @@ export default function ReportDetailScreen() {
   // que no hay ninguno. El desplegable es para poder achicar la sección cuando
   // la conversación se hace larga, no para ocultarla.
   const [commentsOpen, setCommentsOpen] = useState(true);
-  const chevronSpin = useRef(new Animated.Value(1)).current;
-  const containerHeight = useRef(new Animated.Value(240)).current;
+  // Valores que se crean una sola vez y viven lo que la pantalla: el
+  // inicializador perezoso de `useState` hace lo mismo que `useRef(...).current`
+  // sin leer una ref durante el render.
+  const [chevronSpin] = useState(() => new Animated.Value(1));
+  const [containerHeight] = useState(() => new Animated.Value(240));
 
   // Left-edge swipe-back gesture (bottom-tabs has no native back gesture).
-  const swipeBack = useRef(
+  const [swipeBack] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, g) => {
         const startX = evt.nativeEvent.pageX - g.dx;
@@ -158,7 +160,7 @@ export default function ReportDetailScreen() {
         }
       },
     }),
-  ).current;
+  );
 
   function toggleComments() {
     const opening = !commentsOpen;
@@ -183,6 +185,7 @@ export default function ReportDetailScreen() {
   // foto cargada y la página del carrusel. El reporte en sí lo cambia la caché,
   // porque su clave incluye el id.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetear la foto cargada y la página del carrusel al cambiar de reporte
     setImgLoaded(false);
     setActivePage(0);
   }, [id]);

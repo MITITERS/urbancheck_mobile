@@ -65,6 +65,7 @@ export function ComplaintModal({ reportId, onClose, onSubmitted }: Props) {
   // Cada denuncia arranca en blanco: lo elegido para un reporte no puede
   // quedar marcado al abrir el formulario sobre otro.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- cada denuncia arranca en blanco al abrir el formulario sobre otro reporte
     setReason(null);
     setComment("");
     setMissingReason(false);

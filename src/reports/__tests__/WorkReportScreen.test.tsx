@@ -12,9 +12,9 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockedPush, back: jest.fn() }),
   useLocalSearchParams: () => ({ id: "7" }),
   // La pantalla refresca al enfocarse; en el test alcanza con un efecto normal.
-  // El require va adentro: la fábrica del mock se hoistea sobre los imports.
+  // El `requireActual` va adentro: la fábrica del mock se hoistea sobre los imports.
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("react-native-maps", () => {

@@ -10,7 +10,7 @@ import { renderWithProviders } from "../../test/renderWithProviders";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("@expo/vector-icons", () => {

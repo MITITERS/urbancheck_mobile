@@ -21,10 +21,18 @@ jest.mock("expo-router", () => {
     return React.createElement(React.Fragment, null, children);
   }
   // El guard es el comportamiento: con `false`, los hijos no se declaran.
-  Tabs.Protected = ({ guard, children }: { guard: boolean; children: React.ReactNode }) =>
-    guard ? React.createElement(React.Fragment, null, children) : null;
-  Tabs.Screen = ({ name }: { name: string }) =>
-    React.createElement(Text, null, `ruta:${name}`);
+  Tabs.Protected = function Protected({
+    guard,
+    children,
+  }: {
+    guard: boolean;
+    children: React.ReactNode;
+  }) {
+    return guard ? React.createElement(React.Fragment, null, children) : null;
+  };
+  Tabs.Screen = function Screen({ name }: { name: string }) {
+    return React.createElement(Text, null, `ruta:${name}`);
+  };
 
   return { Tabs, useRouter: () => ({ back: jest.fn(), push: jest.fn() }) };
 });

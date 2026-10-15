@@ -64,6 +64,7 @@ export function useKeyboardOffset(): number {
   useEffect(() => {
     // Se toma como referencia el alto con el teclado cerrado, y se vuelve a
     // tomar cada vez que se cierra: así una rotación no deja el valor viejo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- el alto de referencia se mide de la ventana cuando el teclado se cierra
     if (keyboardHeight === 0) setHeightWithoutKeyboard(windowHeight);
   }, [keyboardHeight, windowHeight]);
 
