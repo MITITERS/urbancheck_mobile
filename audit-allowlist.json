@@ -1,0 +1,14 @@
+[
+  {
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "reason": "Sin versión corregida publicada (3.0.3 es la última y está afectada). Llega por micromatch desde Metro, Jest y las herramientas de Expo, que corren en la máquina de desarrollo o en el build; no viaja en el bundle de la app.",
+    "reviewed": "2026-10-15"
+  },
+  {
+    "advisory": "GHSA-86w9-cpqp-85rv",
+    "package": "node-forge",
+    "reason": "Sin versión corregida publicada (1.4.0 es la última y está afectada). Solo la usa @expo/cli para los certificados de firma de código del servidor de desarrollo; no viaja en el bundle de la app.",
+    "reviewed": "2026-10-15"
+  }
+]

@@ -1,0 +1,56 @@
+name: CI
+
+# Etapas de seguridad del Sprint 5 (deuda del Sprint 4). Corre en cada pull
+# request, contra cualquier rama, y en cada push a develop y main.
+on:
+  pull_request:
+  push:
+    branches: ['develop', 'main']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ESLint, tsc, npm audit y Jest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: ESLint
+        run: npm run lint
+      - name: tsc --noEmit
+        run: npm run typecheck
+      # `npm audit --audit-level=high` más las excepciones revisadas de
+      # audit-allowlist.json (advertencias sin versión corregida publicada).
+      - name: npm audit (altas y críticas)
+        run: node scripts/audit-gate.mjs
+      - name: Jest
+        run: npx jest --ci
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # El binario y no la acción oficial, que pide licencia en repos de una
+      # organización. El checksum está fijado acá y no se baja del mismo lugar.
+      - name: Instalar gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - run: ./gitleaks git . --redact --verbose
