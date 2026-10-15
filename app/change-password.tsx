@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { changePassword } from "../src/api/auth";
+import { describeApiError, isRateLimited } from "../src/api/errors";
 import { useAuth } from "../src/auth/AuthContext";
 import { PasswordInput } from "../src/components/PasswordInput";
 
@@ -57,6 +58,10 @@ export default function ChangePasswordScreen() {
       await changePassword(current, next);
       await refreshUser();
     } catch (err) {
+      if (isRateLimited(err)) {
+        setError(describeApiError(err).message);
+        return;
+      }
       const detail = (err as { errors?: { message?: string }[] })?.errors?.[0]?.message;
       setError(detail ?? "No pudimos cambiar la contraseña. Revisá los datos.");
     } finally {

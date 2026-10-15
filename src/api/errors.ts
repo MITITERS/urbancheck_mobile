@@ -66,6 +66,38 @@ function isNetworkFailure(error: Error): boolean {
   return NETWORK_FAILURES.some((needle) => error.message.includes(needle));
 }
 
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+/**
+ * Si el servidor frenó la operación por límite de intentos o de tasa (Sprint 5).
+ *
+ * Lo devuelven tanto allauth —login fallido, recuperación, registro— como la
+ * API —reportes, comentarios, denuncias—. Las pantallas de allauth lo miran
+ * antes que `errors`: el bloqueo de login trae un error sin `param` y se leía
+ * como "email o contraseña incorrectos", que manda a revisar justo lo que no
+ * está mal.
+ */
+export function isRateLimited(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    (error as { status?: unknown }).status === HTTP_TOO_MANY_REQUESTS
+  );
+}
+
+function rateLimited(data: Record<string, unknown>): ApiErrorDescription {
+  // El de la API ya viene en castellano y con el tiempo de espera; el de
+  // allauth no, así que se usa el propio.
+  const detail = data.code === "throttled" ? firstMessage(data.detail) : null;
+  return {
+    tone: "warning",
+    title: "Demasiados intentos",
+    message:
+      detail ??
+      "Hiciste demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.",
+  };
+}
+
 const SESSION_EXPIRED = {
   tone: "error" as const,
   title: "Tu sesión expiró",
@@ -103,6 +135,7 @@ export function describeApiError(
 
   if (error && typeof error === "object") {
     const data = error as Record<string, unknown>;
+    if (isRateLimited(data)) return rateLimited(data);
 
     // `detail` y `non_field_errors` hablan de la operación entera, no de un
     // campo: no hay dónde marcarlos en el formulario.

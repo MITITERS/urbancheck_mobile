@@ -17,6 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { resetPassword } from "../src/api/auth";
+import { describeApiError, isRateLimited } from "../src/api/errors";
 
 export default function ResetPasswordScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
@@ -59,6 +60,11 @@ export default function ResetPasswordScreen() {
         return;
       }
       const data = err as Record<string, unknown>;
+      if (isRateLimited(err)) {
+        const described = describeApiError(err, "No se pudo cambiar la contraseña");
+        Alert.alert(described.title, described.message);
+        return;
+      }
       if (data?.errors) {
         const errors = data.errors as { param?: string; code?: string; message: string }[];
         const mapped: Record<string, string> = {};

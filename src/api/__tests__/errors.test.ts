@@ -1,4 +1,4 @@
-import { describeApiError } from "../errors";
+import { describeApiError, isRateLimited } from "../errors";
 
 describe("describeApiError", () => {
   it("saca el mensaje del campo, no el objeto entero", () => {
@@ -80,6 +80,46 @@ describe("describeApiError", () => {
 
     expect(described.title).toBe("No pudimos guardar");
     expect(described.message).toMatch(/probá de nuevo/i);
+  });
+});
+
+describe("límites de intentos y de tasa (429)", () => {
+  it("usa el mensaje en castellano del servidor, con el tiempo de espera", () => {
+    const result = describeApiError({
+      status: 429,
+      code: "throttled",
+      detail: "Hiciste demasiadas solicitudes seguidas. Probá de nuevo en 5 minutos.",
+      retry_after: 300,
+    });
+
+    expect(result.title).toBe("Demasiados intentos");
+    expect(result.tone).toBe("warning");
+    expect(result.message).toMatch(/5 minutos/);
+  });
+
+  it("al bloqueo de allauth, en inglés, le pone un texto propio", () => {
+    const result = describeApiError({
+      status: 429,
+      errors: [{ code: "too_many_login_attempts", message: "Too many failed login attempts." }],
+    });
+
+    expect(result.title).toBe("Demasiados intentos");
+    expect(result.message).toMatch(/Esperá unos minutos/);
+    expect(result.message).not.toMatch(/Too many/);
+  });
+
+  it("no se confunde con un error de campo", () => {
+    const result = describeApiError({ status: 429, email: ["no importa"] });
+
+    expect(result.field).toBeUndefined();
+    expect(result.title).toBe("Demasiados intentos");
+  });
+
+  it("isRateLimited reconoce solo el 429", () => {
+    expect(isRateLimited({ status: 429 })).toBe(true);
+    expect(isRateLimited({ status: 400 })).toBe(false);
+    expect(isRateLimited(new Error("x"))).toBe(false);
+    expect(isRateLimited(null)).toBe(false);
   });
 });
 

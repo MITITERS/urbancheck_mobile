@@ -18,7 +18,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 
 import { login, logout } from "../../src/api/auth";
-import { describeApiError } from "../../src/api/errors";
+import { describeApiError, isRateLimited } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
 
 export default function LoginScreen() {
@@ -55,7 +55,12 @@ export default function LoginScreen() {
         }
       }
       const data2 = currentErr as Record<string, unknown>;
-      if (data2?.errors) {
+      if (isRateLimited(currentErr)) {
+        // La cuenta quedó frenada por intentos fallidos: no es una contraseña
+        // mal escrita, y decirlo así haría que se siga probando.
+        const described = describeApiError(currentErr, "No pudimos iniciar sesión");
+        Alert.alert(described.title, described.message);
+      } else if (data2?.errors) {
         // El servidor contestó y rechazó las credenciales: eso sí es un
         // usuario o una contraseña que no coinciden.
         const mapped: Record<string, string> = {};
