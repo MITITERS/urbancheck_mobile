@@ -253,6 +253,58 @@ describe("Denunciar imagen (US-043)", () => {
     });
   });
 
+  it("la foto de una objeción se denuncia indicando cuál", async () => {
+    mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
+    renderDetail(
+      detail({
+        resolution_appeals: [
+          {
+            id: 9,
+            photo: "https://example.test/objecion.jpg",
+            photo_status: "procesada" as const,
+            photo_removed_at: null,
+            reason: "Sigue igual.",
+            created_at: "2026-09-10T09:00:00Z",
+          },
+        ],
+      }),
+    );
+
+    fireEvent.press(await screen.findByLabelText("Denunciar la foto de la objeción"));
+    await act(async () => {
+      lastAlertButtons(alert)
+        .find((b) => b.text === PERSONAL_DATA_REASON)
+        ?.onPress?.();
+    });
+
+    expect(mockedPost).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {
+      appeal: 9,
+    });
+  });
+
+  it("la foto retirada de una objeción se muestra como retirada", async () => {
+    renderDetail(
+      detail({
+        resolution_appeals: [
+          {
+            id: 9,
+            photo: null,
+            photo_status: "procesada" as const,
+            photo_removed_at: "2026-09-11T10:00:00Z",
+            reason: "Sigue igual.",
+            created_at: "2026-09-10T09:00:00Z",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      await screen.findByLabelText("Imagen retirada por protección de datos"),
+    ).toBeTruthy();
+    expect(screen.getByText("Sigue igual.")).toBeTruthy();
+    expect(screen.queryByLabelText("Denunciar la foto de la objeción")).toBeNull();
+  });
+
   it("una cuenta de trabajo no tiene el botón", async () => {
     signIn(profile({ role: "validador" }));
     renderDetail();

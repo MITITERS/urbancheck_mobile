@@ -802,7 +802,9 @@ export default function ReportDetailScreen() {
                       !report.under_privacy_review && (
                         <Pressable
                           style={styles.reportEvidenceBtn}
-                          onPress={() => privacyReview.report(entry.evidence.id)}
+                          onPress={() =>
+                            privacyReview.report({ evidence: entry.evidence.id })
+                          }
                           disabled={privacyReview.isSubmitting}
                           accessibilityRole="button"
                           accessibilityLabel="Denunciar la foto del cierre"
@@ -837,12 +839,37 @@ export default function ReportDetailScreen() {
                         backend la manda y el vecino la sube al objetar. Es la
                         mitad que faltaba: la gracia del hilo es comparar la
                         foto del cierre con la del estado real. */}
-                    {entry.appeal.photo && (
+                    {entry.appeal.photo ? (
                       <Image
-                        source={{ uri: entry.appeal.photo }}
+                        source={imageSource(entry.appeal.photo)}
                         style={styles.resolutionPhoto}
                       />
+                    ) : entry.appeal.photo_removed_at ? (
+                      <RemovedPhoto style={styles.resolutionPhoto} />
+                    ) : (
+                      entry.appeal.photo_status !== "procesada" && (
+                        <ProcessingPhoto
+                          failed={entry.appeal.photo_status === "fallida"}
+                          style={styles.resolutionPhoto}
+                        />
+                      )
                     )}
+                    {/* La foto de la objeción también se denuncia (US-043,
+                        escenario 1): cualquiera puede ver en ella a un tercero. */}
+                    {canParticipate &&
+                      entry.appeal.photo &&
+                      !report.under_privacy_review && (
+                        <Pressable
+                          style={styles.reportEvidenceBtn}
+                          onPress={() => privacyReview.report({ appeal: entry.appeal.id })}
+                          disabled={privacyReview.isSubmitting}
+                          accessibilityRole="button"
+                          accessibilityLabel="Denunciar la foto de la objeción"
+                        >
+                          <Ionicons name="flag-outline" size={13} color="#6b7280" />
+                          <Text style={styles.reportImageBtnText}>Denunciar foto</Text>
+                        </Pressable>
+                      )}
                   </View>
                 ),
               )}

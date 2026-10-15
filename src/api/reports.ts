@@ -82,9 +82,11 @@ export interface ResolutionEvidence {
 /** La objeción del autor a un cierre que no resolvió el problema (US-048). */
 export interface ResolutionAppeal {
   id: number;
-  /** Nula mientras el difuminado no termina (US-042). */
+  /** Nula mientras el difuminado no termina (US-042) o si se retiró (US-043). */
   photo: string | null;
   photo_status: PhotoStatus;
+  /** La foto se retiró por protección de datos (US-043, escenario 1). */
+  photo_removed_at: string | null;
   reason: string;
   created_at: string;
 }
@@ -400,6 +402,7 @@ export interface PrivacyRequestReceipt {
   id: number;
   report: number;
   evidence: number | null;
+  appeal: number | null;
   reason: "dato_personal";
   status: "pendiente";
   received_at: string;
@@ -409,16 +412,22 @@ export interface PrivacyRequestReceipt {
 }
 
 /**
+ * Qué imagen se denuncia: sin nada, la foto del reporte; con `evidence`, la de
+ * ese cierre del operario; con `appeal`, la de esa objeción del autor.
+ */
+export type PrivacyTarget = { evidence: number } | { appeal: number };
+
+/**
  * Denuncia una imagen que muestra un rostro o una patente sin difuminar
- * (US-043). Sin `evidenceId` es la foto del reporte; con él, la de ese cierre.
+ * (US-043).
  *
  * El reporte queda oculto para todos menos su autor en el mismo momento: no
  * hay umbral, basta esta denuncia.
  */
-export function requestPrivacyReview(reportId: number, evidenceId?: number) {
+export function requestPrivacyReview(reportId: number, target?: PrivacyTarget) {
   return api.post<PrivacyRequestReceipt>(
     `/api/reports/${reportId}/privacy-request/`,
-    evidenceId === undefined ? {} : { evidence: evidenceId },
+    target ?? {},
   );
 }
 

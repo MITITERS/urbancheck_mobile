@@ -205,9 +205,16 @@ describe("denuncia por dato personal visible (US-043)", () => {
   });
 
   it("denuncia la foto de un cierre indicando cuál", () => {
-    requestPrivacyReview(7, 3);
+    requestPrivacyReview(7, { evidence: 3 });
     expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {
       evidence: 3,
+    });
+  });
+
+  it("denuncia la foto de una objeción indicando cuál", () => {
+    requestPrivacyReview(7, { appeal: 5 });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {
+      appeal: 5,
     });
   });
 

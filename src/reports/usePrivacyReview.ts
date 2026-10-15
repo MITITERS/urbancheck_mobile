@@ -2,7 +2,11 @@ import { useState } from "react";
 import { Alert } from "react-native";
 
 import { describeApiError } from "../api/errors";
-import { privacyRequestConflict, requestPrivacyReview } from "../api/reports";
+import {
+  privacyRequestConflict,
+  requestPrivacyReview,
+  type PrivacyTarget,
+} from "../api/reports";
 import { useInvalidateReports } from "../queries/reports";
 
 /**
@@ -10,8 +14,8 @@ import { useInvalidateReports } from "../queries/reports";
  *
  * El botón *Denunciar* de US-021 (`ComplaintModal`) ofrece este mismo motivo
  * junto a los de contenido, con el catálogo que manda el servidor. Este hook
- * queda para lo que aquel no cubre: la foto de un cierre del operario, y el
- * autor que pide la revisión de su propia foto.
+ * queda para lo que aquel no cubre: la foto de un cierre del operario, la de
+ * una objeción del autor, y el autor que pide la revisión de su propia foto.
  */
 export const PERSONAL_DATA_REASON =
   "Muestra un rostro o una patente sin difuminar";
@@ -38,10 +42,10 @@ export function usePrivacyReview({
   const invalidateReports = useInvalidateReports();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function submit(evidenceId?: number) {
+  async function submit(target?: PrivacyTarget) {
     setIsSubmitting(true);
     try {
-      const receipt = await requestPrivacyReview(reportId, evidenceId);
+      const receipt = await requestPrivacyReview(reportId, target);
       // El reporte sale del feed y del mapa en el mismo momento.
       invalidateReports();
       Alert.alert("Solicitud recibida", receipt.detail, [
@@ -61,14 +65,14 @@ export function usePrivacyReview({
     }
   }
 
-  /** Abre la elección de motivo. Sin `evidenceId`, es la foto del reporte. */
-  function report(evidenceId?: number) {
+  /** Abre la elección de motivo. Sin `target`, es la foto del reporte. */
+  function report(target?: PrivacyTarget) {
     if (isSubmitting) return;
     Alert.alert(
       "Denunciar imagen",
       "¿Qué problema tiene esta imagen? El reporte se oculta mientras la revisamos.",
       [
-        { text: PERSONAL_DATA_REASON, onPress: () => void submit(evidenceId) },
+        { text: PERSONAL_DATA_REASON, onPress: () => void submit(target) },
         { text: "Cancelar", style: "cancel" },
       ],
     );
