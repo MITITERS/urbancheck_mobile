@@ -6,6 +6,9 @@ API vive en `urbancheck_backend`.
 
 ## Levantar el proyecto
 
+Node 22 LTS: es la versión de `.nvmrc`, de `engines` y del CI (C-17). Con nvm,
+`nvm use` la toma de `.nvmrc`.
+
 ```bash
 npm install
 npx expo start
