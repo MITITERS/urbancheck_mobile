@@ -419,6 +419,19 @@ Mientras el backend informe `must_change_password: true`, el guard del layout
 raíz deja accesible **solo** la pantalla de cambio de contraseña. Vive ahí y no
 en cada pantalla para que no se pueda saltear navegando a una ruta directa.
 
+### Términos y condiciones (RN-10, C-23)
+
+Si hay términos publicados (`GET /api/terms/current/`; un `404` es que no hay),
+el registro muestra una casilla y un enlace al texto, y no deja crear la cuenta
+sin marcarla. Se manda la versión aceptada junto con la aceptación: si cambió
+mientras tanto, el backend la rechaza y la app recarga la vigente.
+
+El vecino con `must_accept_terms: true` —cuenta anterior a la publicación, o
+versión nueva— queda frenado por el mismo guard del layout raíz en la pantalla
+`accept-terms`, que solo deja aceptar o cerrar sesión. Va después de la
+contraseña temporal y antes del tutorial. Las cuentas de trabajo no pasan por
+ahí. Sin términos publicados no aparece nada de esto.
+
 ### Las fotos y el túnel de desarrollo
 
 `imageSource()` (en `src/api/client.ts`) es lo que va en el `source` de toda

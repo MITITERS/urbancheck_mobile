@@ -12,12 +12,21 @@ function RootStack() {
   // (US-017). El guard vive acá y no en cada pantalla para que no se pueda
   // saltear navegando directo a una ruta.
   const mustChangePassword = !!token && user?.must_change_password === true;
+  // Términos y condiciones (RN-10): el vecino que no aceptó la versión vigente
+  // —cuenta anterior a su publicación, o versión nueva— solo ve esa pantalla.
+  // Va después de la contraseña temporal y antes del tutorial.
+  const mustAcceptTerms =
+    !!token &&
+    !mustChangePassword &&
+    participatesAsCitizen(user) &&
+    user?.must_accept_terms === true;
   // Tutorial de bienvenida (US-051): solo el vecino, y solo mientras su cuenta
   // no lo tenga marcado. Las cuentas preexistentes ya vienen marcadas desde la
   // migración. Se decide acá, junto con la navegación por rol, y no en el feed.
   const needsOnboarding =
     !!token &&
     !mustChangePassword &&
+    !mustAcceptTerms &&
     participatesAsCitizen(user) &&
     !user?.onboarding_completed_at;
 
@@ -26,13 +35,21 @@ function RootStack() {
       <Stack.Protected guard={mustChangePassword}>
         <Stack.Screen name="change-password" options={{ headerShown: false }} />
       </Stack.Protected>
+      <Stack.Protected guard={mustAcceptTerms}>
+        <Stack.Screen
+          name="accept-terms"
+          options={{ headerShown: false, gestureEnabled: false }}
+        />
+      </Stack.Protected>
       <Stack.Protected guard={needsOnboarding}>
         <Stack.Screen
           name="onboarding"
           options={{ headerShown: false, gestureEnabled: false }}
         />
       </Stack.Protected>
-      <Stack.Protected guard={!!token && !mustChangePassword && !needsOnboarding}>
+      <Stack.Protected
+        guard={!!token && !mustChangePassword && !mustAcceptTerms && !needsOnboarding}
+      >
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!token}>

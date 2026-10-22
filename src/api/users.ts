@@ -36,6 +36,12 @@ export interface UserProfile {
    * entrar desde otro dispositivo no lo vuelve a mostrar.
    */
   onboarding_completed_at: string | null;
+  /**
+   * RN-10: el vecino todavía no aceptó la versión vigente de los términos y
+   * condiciones. Mientras sea true, la app solo le muestra esa pantalla.
+   * Opcional porque un backend anterior no lo manda: sin el campo, no se exige.
+   */
+  must_accept_terms?: boolean;
   /** US-027: si es false, el perfil público solo muestra nombre y avatar. */
   is_public: boolean;
   /** Solo para el rol operario: el área cuyos reportes ve (US-044). */
@@ -146,4 +152,32 @@ export function participatesAsCitizen(user: UserProfile | null): boolean {
  */
 export function isOperator(user: UserProfile | null): boolean {
   return user !== null && user.role === "operario";
+}
+
+/** Una versión publicada de los términos y condiciones (RN-10). */
+export interface TermsOfService {
+  version: string;
+  text: string;
+  published_at: string;
+}
+
+/**
+ * Los términos vigentes, o `null` si todavía no hay ninguna versión publicada
+ * (el backend responde 404): en ese caso no hay nada que aceptar.
+ */
+export async function getCurrentTerms(): Promise<TermsOfService | null> {
+  try {
+    return await api.get<TermsOfService>("/api/terms/current/");
+  } catch (err) {
+    if ((err as { status?: number })?.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Registra que el vecino aceptó `version` (RN-10). El servidor responde 400 si
+ * ya no es la vigente: se publicó otra mientras la leía.
+ */
+export function acceptTerms(version: string) {
+  return api.post<UserProfile>("/api/users/me/accept-terms/", { version });
 }

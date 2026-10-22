@@ -4,6 +4,9 @@ export interface SignupData {
   email: string;
   password: string;
   name: string;
+  /** RN-10: solo cuando hay términos publicados; van juntos. */
+  accept_terms?: boolean;
+  terms_version?: string;
 }
 
 export interface LoginData {
