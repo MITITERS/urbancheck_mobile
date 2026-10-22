@@ -1007,3 +1007,8 @@ Antes de seguir sumando trabajo a esta rama conviene decidir qué pasa con la
 otra: un merge de `develop` va a chocar en los mismos archivos, y cuanto más
 tiempo pase, peor. Comparar `git log --oneline origin/develop ^HEAD` da la lista
 completa.
+
+## Licencia
+
+Propietaria, todos los derechos reservados: ver [`LICENSE`](LICENSE). Es la
+misma en los tres repositorios de UrbanCheck (C-14).
