@@ -19,14 +19,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { describeApiError, type ApiErrorDescription } from "../../../src/api/errors";
-import { useInvalidateReports } from "../../../src/queries/reports";
+import { useInvalidateReports, useToggleLike } from "../../../src/queries/reports";
 import {
   createReport,
   geocodeAddress,
+  isReportAlreadyExists,
+  type ExistingReport,
   type GeocodeResult,
   type ReportCategory,
 } from "../../../src/api/reports";
 import { Notice } from "../../../src/components/Notice";
+import { ExistingReportModal } from "../../../src/reports/ExistingReportModal";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
 import { useKeyboardAwareScroll } from "../../../src/components/useKeyboardAwareScroll";
 
@@ -44,6 +47,7 @@ const SCROLL_BOTTOM_PADDING = 120;
 
 export default function CreateReportTab() {
   const invalidateReports = useInvalidateReports();
+  const toggleLike = useToggleLike();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
@@ -92,6 +96,9 @@ export default function CreateReportTab() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
+  // El reclamo que ya describe el problema, cuando el backend no creó el
+  // reporte por eso (US-032).
+  const [existingReport, setExistingReport] = useState<ExistingReport | null>(null);
 
   /**
    * Intenta extraer coordenadas GPS del EXIF de una imagen.
@@ -167,7 +174,7 @@ export default function CreateReportTab() {
       if (!result.canceled && result.assets[0]) {
         await applyPhotoAsset(result.assets[0]);
       }
-    } catch (err) {
+    } catch {
       setNotice({
         tone: "error",
         title: "No pudimos abrir la galería",
@@ -191,7 +198,7 @@ export default function CreateReportTab() {
       if (!result.canceled && result.assets[0]) {
         await applyPhotoAsset(result.assets[0]);
       }
-    } catch (err) {
+    } catch {
       setNotice({
         tone: "error",
         title: "No pudimos abrir la cámara",
@@ -241,6 +248,7 @@ export default function CreateReportTab() {
   // buscar en cada pulsación de tecla.
   useEffect(() => {
     if (locationMode !== "manual") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- vaciar las sugerencias al salir del modo manual sincroniza la lista con el modo elegido; no hay un valor derivable en el render
       setSuggestions([]);
       return;
     }
@@ -287,6 +295,45 @@ export default function CreateReportTab() {
     Keyboard.dismiss();
   }
 
+  function resetForm() {
+    setPhoto(null);
+    setDescription("");
+    setCategory("bache");
+    setLatitude(null);
+    setLongitude(null);
+    setAddress("");
+    setLocationMode("gps");
+    setLocationFromPhoto(false);
+    setSuggestions([]);
+  }
+
+  /** Lleva al reclamo existente; lo cargado ya no hace falta (US-032). */
+  function openExistingReport(report: ExistingReport) {
+    setExistingReport(null);
+    resetForm();
+    router.push(`/(app)/(tabs)/report/${report.id}`);
+  }
+
+  /**
+   * Sumarse es el me gusta de siempre, no un apoyo aparte: es lo que cuenta
+   * para la validación colectiva (US-040).
+   */
+  function joinExistingReport(report: ExistingReport) {
+    toggleLike.mutate(
+      { id: report.id, liked: false },
+      {
+        onSuccess: () => {
+          invalidateReports();
+          openExistingReport(report);
+        },
+        onError: (err) => {
+          setExistingReport(null);
+          setNotice(describeApiError(err, "No pudimos sumar tu apoyo"));
+        },
+      },
+    );
+  }
+
   async function handleSubmit() {
     const newErrors: Record<string, string> = {};
     if (!photo) newErrors.photo = "La foto es obligatoria.";
@@ -317,26 +364,34 @@ export default function CreateReportTab() {
       // El feed, el mapa y el perfil muestran este reporte: sin invalidarlos, el
       // alta no se veía hasta que venciera la caché.
       invalidateReports();
-      Alert.alert("¡Reporte enviado!", "Tu reporte fue creado correctamente.", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Reset state
-            setPhoto(null);
-            setDescription("");
-            setCategory("bache");
-            setLatitude(null);
-            setLongitude(null);
-            setAddress("");
-            setLocationMode("gps");
-            setLocationFromPhoto(false);
-            setSuggestions([]);
-            // Redirect to Feed tab
-            router.push("/(app)/(tabs)");
+      // El reporte todavía **no** está publicado: su imagen entra a la cola de
+      // difuminado y recién al terminar aparece en el feed y en el mapa
+      // (US-042). Decirle al vecino "se creó correctamente" y que después no lo
+      // encuentre es mentirle, así que se le cuenta qué está pasando.
+      Alert.alert(
+        "¡Reporte enviado!",
+        "Estamos difuminando los rostros y las patentes de la foto. " +
+          "Cuando termine, tu reporte se publica en el feed y en el mapa. " +
+          "Mientras tanto lo ves en tu perfil.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              resetForm();
+              // Redirect to Feed tab
+              router.push("/(app)/(tabs)");
+            },
           },
-        },
-      ]);
+        ],
+      );
     } catch (err: unknown) {
+      // El problema ya estaba reportado (US-032): el reporte no se creó y se
+      // ofrece sumarse al existente. No es un error que corregir en el
+      // formulario, así que no pasa por el aviso genérico.
+      if (isReportAlreadyExists(err)) {
+        setExistingReport(err.existing_report);
+        return;
+      }
       const described = describeApiError(err, "No pudimos enviar el reporte");
       // El campo queda marcado en rojo aunque se cierre el aviso: si el
       // problema es la ubicación, hay que poder ver cuál corregir.
@@ -357,6 +412,13 @@ export default function CreateReportTab() {
         title={notice?.title ?? ""}
         message={notice?.message ?? ""}
         onClose={() => setNotice(null)}
+      />
+      <ExistingReportModal
+        report={existingReport}
+        busy={toggleLike.isPending}
+        onJoin={() => existingReport && joinExistingReport(existingReport)}
+        onOpen={() => existingReport && openExistingReport(existingReport)}
+        onBack={() => setExistingReport(null)}
       />
       <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 16 : 24 }]}>
         <Text style={styles.title}>Nuevo Reporte</Text>

@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +28,10 @@ import { useMe } from "../../../src/queries/users";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
 import { reportKeys, userKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  PUBLIC_LIST_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
 import { reportStatusLabel } from "../../../src/reports/labels";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -149,11 +152,29 @@ export default function ProfileScreen() {
 
   // Al volver al perfil se refresca lo que venció, sin tapar la pantalla.
   useRefetchOnFocus(userKeys.details());
-  useRefetchOnFocus(reportKeys.lists());
+  // Mientras alguno está en revisión por una denuncia (US-043), se vuelve a
+  // mirar cada tanto: la decisión la toma el administrador y nada le avisa a
+  // esta pantalla, que si no seguía diciendo "En revisión" ya resuelto.
+  const anyUnderReview = reports.some(
+    (item) => "under_privacy_review" in item && item.under_privacy_review,
+  );
+  // Lo mismo mientras alguno tiene la imagen en el difuminado (US-042): lo
+  // resuelve una tarea del servidor y nada le avisa a esta pantalla, que si no
+  // seguiría diciendo "Procesando imagen" sobre un reporte ya publicado.
+  const anyProcessing = reports.some(
+    (item) => "photo_status" in item && item.photo_status === "pendiente",
+  );
+  const waitingOnTheServer = anyUnderReview || anyProcessing;
+  useRefetchOnFocus(reportKeys.lists(), {
+    pollMs: waitingOnTheServer ? PUBLIC_LIST_POLL_MS : undefined,
+    onlyStale: !waitingOnTheServer,
+  });
   // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
   // se lee como que no hay reportes, y el contador no alcanza para desmentirlo.
   const [reportsOpen, setReportsOpen] = useState(true);
-  const chevronSpin = useRef(new Animated.Value(1)).current;
+  // Se crea una sola vez: el inicializador perezoso de `useState` evita leer
+  // una ref durante el render.
+  const [chevronSpin] = useState(() => new Animated.Value(1));
 
   function toggleReports() {
     const opening = !reportsOpen;
@@ -382,6 +403,19 @@ export default function ProfileScreen() {
                       este listado es el único lugar donde el autor lo vuelve a
                       encontrar: la fecha explica desde cuándo (US-031). */}
                   {item.archived_at ? ` · ${formatDate(item.archived_at)}` : ""}
+                  {/* Oculto al público mientras se revisa una denuncia por
+                      dato personal (US-043): acá es donde el autor lo sigue
+                      encontrando. */}
+                  {item.under_privacy_review ? " · En revisión" : ""}
+                  {/* Todavía no es público: su imagen está en el difuminado, o
+                      no se pudo procesar y el reporte no llegó a publicarse
+                      (US-042, escenario 3). Este listado es el único lugar
+                      donde el autor lo ve. */}
+                  {item.photo_status === "pendiente" ? " · Procesando imagen" : ""}
+                  {item.photo_status === "fallida" ? " · Sin publicar" : ""}
+                  {"photo_removed_at" in item && item.photo_removed_at
+                    ? " · Retirado"
+                    : ""}
                 </Text>
               </View>
               {/* Los me gusta y los comentarios son la repercusión entre

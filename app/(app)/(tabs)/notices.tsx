@@ -49,6 +49,16 @@ const KIND_STYLE: Record<NotificationKind, KindStyle> = {
   proxima_confirmacion: { icon: "hourglass-outline", color: "#b45309", background: "#fef3c7" },
   // El único que no le llega al vecino sino al municipio: algo se objetó.
   apelacion_cierre: { icon: "alert-circle", color: "#c62828", background: "#ffebee" },
+  // La plataforma retiró una foto del reporte por protección de datos (US-043).
+  imagen_retirada: { icon: "eye-off-outline", color: "#475569", background: "#f1f5f9" },
+  // Oculto mientras se revisa: ámbar, como los otros avisos de algo en curso.
+  reporte_en_revision: { icon: "eye-off-outline", color: "#b45309", background: "#fef3c7" },
+  reporte_restituido: { icon: "eye-outline", color: "#16a34a", background: "#dcfce7" },
+  denuncia_resuelta: { icon: "flag-outline", color: "#475569", background: "#f1f5f9" },
+  // US-021: el acuse para quien denunció, y el aviso al autor del reporte. El
+  // del autor va en ámbar, como los demás avisos de algo en revisión.
+  denuncia_recibida: { icon: "flag-outline", color: "#475569", background: "#f1f5f9" },
+  reporte_denunciado: { icon: "flag", color: "#b45309", background: "#fef3c7" },
 };
 
 /**

@@ -1,6 +1,5 @@
 import {
   fireEvent,
-  render,
   screen,
   userEvent,
   waitFor,
@@ -16,9 +15,9 @@ import { renderWithProviders } from "../../test/renderWithProviders";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
   // El mapa refresca al volver a la pestaña; en el test alcanza con un efecto
-  // normal. El require va adentro: la fábrica se hoistea sobre los imports.
+  // normal. El `requireActual` va adentro: la fábrica se hoistea sobre los imports.
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("react-native-maps", () => {
@@ -28,7 +27,7 @@ jest.mock("react-native-maps", () => {
   // se movió la vista sin un mapa real.
   const animateToRegion = jest.fn();
   const MapView = React.forwardRef(
-    (props: Record<string, unknown>, ref: unknown) => {
+    function MapView(props: Record<string, unknown>, ref: unknown) {
       React.useImperativeHandle(ref, () => ({ animateToRegion }));
       return React.createElement(View, { testID: "map", ...props });
     },

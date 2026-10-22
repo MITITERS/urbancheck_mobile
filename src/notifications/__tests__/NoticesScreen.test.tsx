@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react-native";
+import { screen, waitFor } from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import NoticesTab from "../../../app/(app)/(tabs)/notices";
@@ -13,7 +13,7 @@ import { renderWithProviders } from "../../test/renderWithProviders";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 // Los iconos no son lo que se prueba acá, y `expo-font` —del que dependen— no

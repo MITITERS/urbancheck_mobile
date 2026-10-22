@@ -1,0 +1,39 @@
+# Dependabot: actualizaciones semanales de dependencias (Sprint 5, punto 5.4).
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Sin ecosistema `docker`: la app no tiene Dockerfile ni compose, y Dependabot
+# marca error si se le pide vigilar un directorio sin ninguno.
+#
+# Los paquetes `expo-*`, `react` y `react-native` van atados a la versión del
+# SDK de Expo: un PR de Dependabot que los mueva por fuera de lo que pide
+# `npx expo install --check` se cierra y se actualiza con `expo install`.
+
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    ignore:
+      - dependency-name: 'expo'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'expo-*'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-native'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    groups:
+      github-actions:
+        patterns:
+          - '*'

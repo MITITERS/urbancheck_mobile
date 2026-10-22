@@ -1,6 +1,6 @@
 # Expo HAS CHANGED
 
-Este proyecto corre **Expo SDK 57** (`expo` 57.0.19, `expo-router` 57.0.18,
+Este proyecto corre **Expo SDK 57** (`expo` 57.0.29, `expo-router` 57.0.27,
 React Native 0.86.3). Leé los docs de esa versión antes de escribir código:
 
 - https://docs.expo.dev/versions/v57.0.0/
@@ -130,6 +130,23 @@ Callejones sin salida ya recorridos, para no repetirlos:
   rechazaba igual.
 - **Desloguear el CLI** empeora las cosas: el mensaje pasa de pedir una punta a
   pedir las dos.
+
+## ESLint
+
+`npm run lint` usa `eslint-config-expo` (configuración plana, en
+`eslint.config.js`). Dos cosas para no tropezar:
+
+- **ESLint 9, no 10.** `eslint-plugin-react`, que trae la configuración de Expo,
+  todavía no anda con ESLint 10: se cae con
+  `contextOrFilename.getFilename is not a function` antes de reportar nada.
+- **Trae las reglas del React Compiler** (`react-hooks/refs`,
+  `set-state-in-effect`, `purity`, `globals`). Los valores que tienen que
+  existir una sola vez por pantalla (`Animated.Value`, `PanResponder`) se crean
+  con `useState(() => ...)` y no con `useRef(...).current`. Los `setState`
+  dentro de efectos que quedaron tienen un `eslint-disable-next-line` con el
+  motivo al lado: cada uno es una sincronización con algo externo (red,
+  permisos, teclado) o un reseteo al cambiar de reporte. Uno nuevo lleva su
+  motivo o se reescribe.
 
 ## Gestor de paquetes
 

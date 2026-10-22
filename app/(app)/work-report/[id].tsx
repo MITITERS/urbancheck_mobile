@@ -20,6 +20,7 @@ import { operatorKeys } from "../../../src/lib/queryKeys";
 import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
 import { useAssignedReport } from "../../../src/queries/operator";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
+import { RemovedPhoto } from "../../../src/reports/RemovedPhoto";
 
 /**
  * US-045 — el detalle de un trabajo de la bandeja del operario.
@@ -167,7 +168,11 @@ export default function WorkReportScreen() {
         report.resolution_evidences.map((evidence) => (
           <View key={evidence.id} style={styles.section}>
             <Text style={styles.sectionTitle}>Resolución registrada</Text>
-            <Image source={{ uri: evidence.photo }} style={styles.evidencePhoto} />
+            {evidence.photo ? (
+              <Image source={imageSource(evidence.photo)} style={styles.evidencePhoto} />
+            ) : (
+              evidence.photo_removed_at && <RemovedPhoto style={styles.evidencePhoto} />
+            )}
             <Text style={styles.description}>{evidence.description}</Text>
             <Text style={styles.meta}>
               {new Date(evidence.created_at).toLocaleDateString("es-AR")}

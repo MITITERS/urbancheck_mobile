@@ -14,6 +14,7 @@ import {
 } from "react-native";
 
 import { requestPasswordReset } from "../../src/api/auth";
+import { describeApiError, isRateLimited } from "../../src/api/errors";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
@@ -28,8 +29,12 @@ export default function ForgotPasswordScreen() {
     try {
       await requestPasswordReset(email);
       setSent(true);
-    } catch {
-      setError("No se pudo enviar el email. Verificá la dirección ingresada.");
+    } catch (err) {
+      setError(
+        isRateLimited(err)
+          ? describeApiError(err).message
+          : "No se pudo enviar el email. Verificá la dirección ingresada.",
+      );
     } finally {
       setLoading(false);
     }

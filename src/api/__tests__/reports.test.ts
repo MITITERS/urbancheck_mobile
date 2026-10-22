@@ -1,17 +1,23 @@
 import { api } from "../client";
 import {
   addComment,
+  complaintConflict,
   createReport,
   deleteComment,
   deleteReport,
+  fileComplaint,
   geocodeAddress,
   getComments,
   getReport,
+  isReportAlreadyExists,
   likeReport,
+  listComplaintReasons,
   listMapReports,
   listReportsByAuthor,
   listMyReports,
   listReports,
+  privacyRequestConflict,
+  requestPrivacyReview,
   unlikeReport,
   updateReport,
 } from "../reports";
@@ -155,5 +161,120 @@ describe("respuestas oficiales en el detalle (US-024)", () => {
     // Firma la municipalidad: la identidad del agente no llega al ciudadano.
     expect(detail.official_responses[0].municipality).toBe("Villa María");
     expect(detail.official_responses[0]).not.toHaveProperty("author");
+  });
+
+  describe("isReportAlreadyExists (US-032)", () => {
+    const existing = { id: 3, category: "bache", is_liked: false, is_author: false };
+
+    it("recognizes the 409 of a report that already exists", () => {
+      expect(
+        isReportAlreadyExists({
+          status: 409,
+          code: "report_already_exists",
+          detail: "Este problema ya fue reportado.",
+          existing_report: existing,
+        }),
+      ).toBe(true);
+    });
+
+    it("ignores another conflict", () => {
+      // Por ejemplo, el de una transición de estado: no trae ningún reclamo.
+      expect(
+        isReportAlreadyExists({ status: 409, detail: "Estado inválido." }),
+      ).toBe(false);
+    });
+
+    it("ignores the code without the existing report", () => {
+      expect(
+        isReportAlreadyExists({ status: 409, code: "report_already_exists" }),
+      ).toBe(false);
+    });
+
+    it("ignores a validation error and non-objects", () => {
+      expect(isReportAlreadyExists({ status: 400, category: ["Inválida."] })).toBe(false);
+      expect(isReportAlreadyExists(new Error("Network request failed"))).toBe(false);
+      expect(isReportAlreadyExists(null)).toBe(false);
+    });
+  });
+});
+
+describe("denuncia por dato personal visible (US-043)", () => {
+  it("denuncia la foto del reporte sin mandar evidencia", () => {
+    requestPrivacyReview(7);
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {});
+  });
+
+  it("denuncia la foto de un cierre indicando cuál", () => {
+    requestPrivacyReview(7, { evidence: 3 });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {
+      evidence: 3,
+    });
+  });
+
+  it("denuncia la foto de una objeción indicando cuál", () => {
+    requestPrivacyReview(7, { appeal: 5 });
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/privacy-request/", {
+      appeal: 5,
+    });
+  });
+
+  it("reconoce los dos conflictos por su código", () => {
+    expect(
+      privacyRequestConflict({ status: 409, code: "privacy_request_pending" }),
+    ).toBe("privacy_request_pending");
+    expect(
+      privacyRequestConflict({ status: 409, code: "image_already_removed" }),
+    ).toBe("image_already_removed");
+  });
+
+  it("no confunde otro 409 ni otro error con estos", () => {
+    expect(
+      privacyRequestConflict({ status: 409, code: "report_already_exists" }),
+    ).toBeNull();
+    expect(privacyRequestConflict({ status: 403, detail: "No." })).toBeNull();
+    expect(privacyRequestConflict(new Error("Network request failed"))).toBeNull();
+  });
+});
+
+describe("denunciar un reporte (US-021)", () => {
+  it("pide el catálogo de motivos al servidor", () => {
+    listComplaintReasons();
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/reports/complaint-reasons/");
+  });
+
+  it("manda el motivo, y el comentario solo si tiene algo", () => {
+    fileComplaint(7, "reporte_falso");
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/complaints/", {
+      reason: "reporte_falso",
+    });
+
+    fileComplaint(7, "reporte_falso", "   ");
+    expect(mockedApi.post).toHaveBeenLastCalledWith("/api/reports/7/complaints/", {
+      reason: "reporte_falso",
+    });
+  });
+
+  it("manda el comentario sin los espacios de los bordes", () => {
+    fileComplaint(7, "contenido_inapropiado", "  Es un insulto.  ");
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/reports/7/complaints/", {
+      reason: "contenido_inapropiado",
+      comment: "Es un insulto.",
+    });
+  });
+
+  it("reconoce los conflictos por su código", () => {
+    for (const code of [
+      "complaint_already_filed",
+      "report_not_public",
+      "image_already_removed",
+    ]) {
+      expect(complaintConflict({ status: 409, code })).toBe(code);
+    }
+  });
+
+  it("no confunde otro 409 ni otro error con estos", () => {
+    expect(complaintConflict({ status: 409, code: "report_already_exists" })).toBeNull();
+    expect(complaintConflict({ status: 403, detail: "No." })).toBeNull();
+    expect(complaintConflict(new Error("Network request failed"))).toBeNull();
   });
 });

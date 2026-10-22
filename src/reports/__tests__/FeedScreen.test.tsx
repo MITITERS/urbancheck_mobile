@@ -1,12 +1,15 @@
 import {
-  render,
   screen,
   userEvent,
   waitFor,
 } from "@testing-library/react-native";
 
 import FeedScreen from "../../../app/(app)/(tabs)/index";
-import { listReports, type PaginatedReports } from "../../api/reports";
+import {
+  listComplaintReasons,
+  listReports,
+  type PaginatedReports,
+} from "../../api/reports";
 import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
 import { renderWithProviders } from "../../test/renderWithProviders";
@@ -14,9 +17,9 @@ import { renderWithProviders } from "../../test/renderWithProviders";
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
   // La pantalla carga al enfocarse; en el test alcanza con un efecto normal.
-  // El require va adentro: la fábrica del mock se hoistea sobre los imports.
+  // El `requireActual` va adentro: la fábrica del mock se hoistea sobre los imports.
   useFocusEffect: (callback: () => void) =>
-    (require("react") as typeof import("react")).useEffect(callback, [callback]),
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
 }));
 
 jest.mock("expo-location", () => ({
@@ -33,11 +36,17 @@ jest.mock("@expo/vector-icons", () => {
   return { Ionicons: View };
 });
 
-jest.mock("../../api/reports", () => ({ listReports: jest.fn() }));
+jest.mock("../../api/reports", () => ({
+  listReports: jest.fn(),
+  listComplaintReasons: jest.fn(),
+}));
 jest.mock("../../auth/AuthContext", () => ({ useAuth: jest.fn() }));
 
 const Location = jest.requireMock("expo-location");
 const mockedListReports = listReports as jest.MockedFunction<typeof listReports>;
+const mockedListComplaintReasons = listComplaintReasons as jest.MockedFunction<
+  typeof listComplaintReasons
+>;
 const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
 const CITIZEN: UserProfile = {
@@ -60,6 +69,9 @@ const NO_FILTERS = { search: "", categories: [], statuses: [] };
 const REPORT = {
   id: 7,
   photo: "https://example.test/report.jpg",
+  photo_removed_at: null,
+  photo_status: "procesada" as const,
+  under_privacy_review: false,
   description: "Un bache enorme en la esquina",
   category: "bache" as const,
   latitude: "-32.41",
@@ -300,5 +312,57 @@ describe("reporte reabierto por una objeción (US-048)", () => {
 
     expect(await screen.findByText("En proceso")).toBeTruthy();
     expect(screen.queryByText("En proceso (objetado)")).toBeNull();
+  });
+});
+
+describe("denunciar desde la tarjeta (US-021)", () => {
+  function feedWith(report: Record<string, unknown>) {
+    mockedListReports.mockResolvedValue(
+      feedResponse({ count: 1, results: [report as typeof REPORT] }),
+    );
+  }
+
+  it("la tarjeta de un reporte ajeno ofrece denunciarlo", async () => {
+    feedWith(REPORT);
+
+    renderMobile();
+
+    expect(await screen.findByLabelText("Denunciar reporte")).toBeTruthy();
+  });
+
+  it("abre el formulario con los motivos, sin entrar al reporte", async () => {
+    mockedListComplaintReasons.mockResolvedValue([
+      {
+        value: "reporte_falso",
+        label: "Reporte falso o inexistente",
+        recipient: "agente_municipal",
+      },
+    ]);
+    feedWith(REPORT);
+    renderMobile();
+
+    await userEvent.press(await screen.findByLabelText("Denunciar reporte"));
+
+    expect(await screen.findByText("Reporte falso o inexistente")).toBeTruthy();
+    expect(screen.getByText("Enviar denuncia")).toBeTruthy();
+  });
+
+  it("la tarjeta de un reporte propio no la ofrece", async () => {
+    feedWith({ ...REPORT, author: { id: CITIZEN.id, name: "Vecina", avatar: null } });
+
+    renderMobile();
+
+    await screen.findByText(REPORT.description);
+    expect(screen.queryByLabelText("Denunciar reporte")).toBeNull();
+  });
+
+  it("a una cuenta de trabajo no se le ofrece", async () => {
+    signedInAs({ ...CITIZEN, role: "validador" });
+    feedWith(REPORT);
+
+    renderMobile();
+
+    await screen.findByText(REPORT.description);
+    expect(screen.queryByLabelText("Denunciar reporte")).toBeNull();
   });
 });

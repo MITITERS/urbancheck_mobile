@@ -36,5 +36,9 @@ export const userKeys = domainKeys("usuarios");
 export const notificationKeys = domainKeys("notificaciones");
 export const validationKeys = domainKeys("validacion");
 export const operatorKeys = domainKeys("operario");
+// Dominio propio y no bajo `reportKeys`: el catálogo de motivos no cambia
+// cuando cambia un reporte, y colgarlo de ahí lo haría volver a pedirse con
+// cada me gusta.
+export const complaintReasonKeys = domainKeys("motivos-denuncia");
 
 export { domainKeys };

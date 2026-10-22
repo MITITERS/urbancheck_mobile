@@ -144,7 +144,11 @@ async function request<T>(
  * Las imágenes locales (una foto recién elegida del carrete) no lo necesitan,
  * pero tampoco les molesta.
  */
-export function imageSource(uri: string) {
+export function imageSource(uri: string | null | undefined) {
+  // Una foto retirada por protección de datos (US-043) llega nula: sin
+  // `source`, la imagen queda como una caja vacía en lugar de pedir una URL
+  // inválida.
+  if (!uri) return undefined;
   return TUNNELED_API
     ? { uri, headers: { "ngrok-skip-browser-warning": "1" } }
     : { uri };

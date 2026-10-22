@@ -119,6 +119,30 @@ La baja lógica del validador (`is_validator_active`) no viaja en el perfil, as�
 que un validador desactivado ve la opción y recibe un `403` al usarla. Por eso
 las pantallas manejan ese error en vez de confiar en el cálculo local.
 
+### Un problema ya reportado: sumarse en vez de duplicar (US-032)
+
+Si el backend responde al alta con un `409` de código `report_already_exists`,
+el reporte **no se creó**. `isReportAlreadyExists()` (`src/api/reports.ts`)
+reconoce ese caso por el código y no solo por el estado, porque otro `409` no
+trae ningún reclamo. Así el error no pasa por el aviso genérico de
+`describeApiError`.
+
+`ExistingReportModal` muestra el reclamo existente con foto, categoría, estado,
+distancia, fecha y cuántos lo apoyan, y cambia según quién reporta:
+
+| Caso | Qué ofrece |
+|---|---|
+| vecino que no lo apoya | **Sumar mi apoyo** (el me gusta de siempre, vía `useToggleLike`), ver el reclamo o volver |
+| ya le dio me gusta | «Ya estás apoyando este reclamo», ver el reclamo o volver |
+| es el autor | «Ya reportaste este problema», ir a su reclamo o volver |
+
+**Volver solo cierra el aviso.** La pestaña sigue montada, así que el
+formulario conserva todo lo cargado. Puede ser que en realidad se estuviera
+reportando otra cosa y haya que cambiar la categoría. Sumarse o ir al reclamo
+sí limpia el formulario, porque ya no hace falta.
+
+El texto nunca dice «duplicado», que al vecino le suena a acusación.
+
 ### Solo el vecino participa: reportar, comentar y dar me gusta
 
 Las cuentas de trabajo operan el circuito en vez de usarlo: el validador
@@ -793,6 +817,111 @@ cerrar la tarjeta. Mismo cambio que en el panel, y por lo mismo.
 la sube al objetar, pero el hilo dibujaba solo el texto. La gracia de estos dos
 bloques es poder comparar la foto del cierre con la del estado real, y con una
 sola no hay comparación.
+
+### Denunciar un reporte (US-021)
+
+**«Denunciar»** está en el detalle, debajo de los datos del reporte, y en cada
+tarjeta del feed (la bandera junto a los contadores). Los dos abren el mismo
+formulario, `src/reports/ComplaintModal.tsx`: motivo obligatorio, comentario
+opcional de hasta 500 caracteres. Se manda
+`POST /api/reports/{id}/complaints/`.
+
+- **Los motivos vienen del servidor** (`GET /api/reports/complaint-reasons/`),
+  cada uno con su destinatario. La app no tiene una copia del catálogo. Se piden
+  al abrir el formulario y una sola vez por sesión.
+- **Sin motivo no se manda nada**: el formulario lo dice en el lugar, sin ir al
+  servidor.
+- **El texto de confirmación también viene del servidor** y distingue al
+  destinatario: la revisión del municipio para contenido inapropiado y reporte
+  falso, el plazo de la RN-12 para dato personal.
+- **A quién se le ofrece** lo decide `canReportReport()`
+  (`src/reports/complaints.ts`), una sola función para el feed y el detalle: no
+  sobre el reporte propio, no sobre uno cancelado, archivado o retirado, y no a
+  las cuentas de trabajo. El servidor rechaza los mismos casos.
+- **Una denuncia de contenido no cambia nada a la vista**: el reporte sigue
+  publicado y el vecino se queda donde estaba. La de dato personal sí lo oculta,
+  así que refresca las listas y, desde el detalle, vuelve atrás.
+- Los `409` se distinguen por `code`: `complaint_already_filed` («ya denunciaste
+  este reporte»), `report_not_public` e `image_already_removed`.
+- Avisos nuevos: `denuncia_recibida` (a quien denunció) y `reporte_denunciado`
+  (al autor, sin decir quién ni cuántas veces). El backend decide quién recibe
+  cada uno.
+
+### Denunciar una imagen con un dato personal visible (US-043)
+
+En el detalle, **«Denunciar foto»** en cada cierre del operario y **«Denunciar
+imagen»** debajo de la foto —este último solo para el autor— abren una elección
+con un único motivo, «Muestra un rostro o una patente sin difuminar»
+(`src/reports/usePrivacyReview.ts`). Recién al elegirlo se manda
+`POST /api/reports/{id}/privacy-request/`.
+
+Desde US-021, quien no es el autor denuncia la foto del reporte con el botón
+«Denunciar», que trae el motivo de dato personal entre los suyos. «Denunciar
+imagen» quedó para el autor, al que US-021 no le deja denunciar su propio
+reporte pero US-043 sí pedir la revisión de su foto.
+
+- La foto de un cierre la puede denunciar **cualquier vecino**, sea o no el
+  autor. Las cuentas de trabajo no ven los botones.
+- El reporte se oculta en el momento, con una sola denuncia. Por eso, para
+  quien no es el autor, cerrar la confirmación **vuelve atrás**: el reporte ya
+  no se abre. El autor se queda, y ve el aviso de que su reporte está oculto
+  mientras se revisa. En «Mis reportes» aparece «· En revisión».
+- El texto de confirmación viene del servidor, con el plazo tal como está
+  configurado. La app no escribe «24 horas».
+- Los dos `409` se distinguen por `code`: `privacy_request_pending` («ya
+  denunciaste esta imagen») e `image_already_removed`.
+- **Si se elimina la foto del reporte, se retira el reporte entero** y no se
+  vuelve a publicar: solo lo ve su autor, con un aviso que explica por qué y
+  que puede volver a reportarlo con otra foto. En «Mis reportes» figura
+  «· Retirado».
+- **Foto retirada**: `photo` llega nula con `photo_removed_at`. `RemovedPhoto`
+  ocupa su lugar en el detalle, en el cierre, en el feed y en el perfil público.
+  `imageSource()` acepta nulo y devuelve `undefined`, así que las pantallas que
+  no muestran el aviso (bandeja del validador y del operario, mapa) dibujan una
+  caja vacía en lugar de pedir una URL inválida.
+- Avisos nuevos: `imagen_retirada`, `reporte_en_revision`, `reporte_restituido` y
+  `denuncia_resuelta`. El backend decide quién recibe cada uno.
+- **Lo que hace otro vecino no llega solo a esta pantalla.** El feed y el mapa
+  se vuelven a pedir cada 30 s mientras están a la vista
+  (`useRefetchOnFocus(..., { pollMs })`). Sin eso, un reporte recién denunciado
+  seguía en el feed de los demás hasta que salieran de la pestaña. Si alguien
+  abre uno que ya se ocultó, el detalle recibe `404` y muestra «ya no está
+  disponible». Ojo: React Query conserva el dato viejo cuando el pedido falla,
+  así que hay que descartarlo a mano. De paso se refrescan las listas.
+
+### Un reporte no se publica hasta que su foto está difuminada (US-042)
+
+El difuminado dejó de pasar dentro del request. Al enviar un reporte el
+servidor contesta enseguida, la foto entra a una cola y el reporte aparece en
+el feed y en el mapa recién cuando termina. El campo nuevo es `photo_status`
+(`pendiente` | `procesada` | `fallida`) y viaja en el reporte, en la evidencia
+del cierre y en la apelación.
+
+- **No se le miente al usuario.** El aviso de confirmación decía «Tu reporte
+  fue creado correctamente», y mandaba al vecino a buscar en el feed algo que
+  todavía no estaba ahí. Ahora dice que se están difuminando los rostros y las
+  patentes, y que mientras tanto lo ve en su perfil.
+- **«Mis reportes» es el único lugar donde aparece.** La fila suma «· Procesando
+  imagen», o «· Sin publicar» si el difuminado falló, al lado de los sufijos que
+  ya tenía (`· En revisión`, `· Retirado`).
+- **El detalle lo abre solo su autor**, con un aviso de que nadie más lo ve y,
+  si falló, con la invitación a editarlo y cargar otra foto. En el lugar de la
+  imagen va `ProcessingPhoto`, calcado de `RemovedPhoto`: un hueco se lee como
+  un error de carga. **Precedencia**: retirada gana sobre en procesamiento —si
+  la foto se sacó por protección de datos, en qué quedó el difuminado ya no le
+  importa a nadie—.
+- **El poll condicional se reusa tal cual.** `useRefetchOnFocus(..., { pollMs })`
+  ya se encendía mientras había una denuncia en revisión; ahora también mientras
+  hay algo procesándose, en el perfil y en el detalle. Lo resuelve una tarea del
+  servidor y nada le avisa a la app: sin esto el autor se queda mirando
+  «procesando» sobre un reporte ya publicado. Al apagarse, se invalidan las
+  listas, porque el feed y el mapa venían sin traerlo.
+- **Un duplicado en procesamiento bloquea igual el alta** (US-032) pero no se
+  puede abrir ni apoyar: para ese vecino el reporte todavía no existe. El modal
+  no ofrece «Sumar mi apoyo» y explica que se está procesando.
+- **Cambiar la foto de un reporte lo despublica** hasta que la nueva se
+  difumine. Es correcto —no se publica una imagen sin procesar— pero es un
+  cambio visible, y sin avisarlo se lee como un bug.
 
 ## Nota: `feature/sprint-3` no salió de `develop`
 

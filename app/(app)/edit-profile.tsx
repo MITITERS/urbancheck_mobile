@@ -70,7 +70,7 @@ export default function EditProfileScreen() {
           type: asset.mimeType ?? "image/jpeg",
         });
       }
-    } catch (err) {
+    } catch {
       setNotice({
         tone: "error",
         title: "No pudimos abrir la galería",

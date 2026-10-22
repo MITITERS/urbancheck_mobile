@@ -83,6 +83,7 @@ export function useCurrentLocation({
 
   useEffect(() => {
     if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- el estado del permiso refleja la bandera `enabled` que llega por props
       setPermission("disabled");
       setCoords(null);
       return;
