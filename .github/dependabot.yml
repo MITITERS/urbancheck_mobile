@@ -8,9 +8,13 @@
 # SDK de Expo: un PR de Dependabot que los mueva por fuera de lo que pide
 # `npx expo install --check` se cierra y se actualiza con `expo install`.
 
+# Todos los PR van contra `develop` (C-16): `main` recibe solo releases, y un
+# PR de dependencias contra `main` se saltea `develop` y su CI.
+
 version: 2
 updates:
   - package-ecosystem: 'npm'
+    target-branch: 'develop'
     directory: '/'
     schedule:
       interval: 'weekly'
@@ -30,6 +34,7 @@ updates:
           - 'patch'
 
   - package-ecosystem: 'github-actions'
+    target-branch: 'develop'
     directory: '/'
     schedule:
       interval: 'weekly'
