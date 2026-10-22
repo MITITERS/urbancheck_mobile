@@ -115,9 +115,11 @@ decide si se muestran las acciones de validación. **El backend vuelve a
 verificarlo en cada request y es la fuente de verdad**; estas funciones solo
 deciden qué se dibuja.
 
-La baja lógica del validador (`is_validator_active`) no viaja en el perfil, así
-que un validador desactivado ve la opción y recibe un `403` al usarla. Por eso
-las pantallas manejan ese error en vez de confiar en el cálculo local.
+`canValidate()` pide las mismas tres condiciones que `User.can_validate` en el
+backend: rol `validador`, cuenta de trabajo activa (`is_work_account_active`,
+que viaja en el perfil) y contraseña temporal ya cambiada (C-11). Si el perfil
+no trae el campo, la cuenta se asume activa. Las pantallas igual manejan el
+`403`: la baja puede llegar con la app abierta y el perfil en caché.
 
 ### Un problema ya reportado: sumarse en vez de duplicar (US-032)
 

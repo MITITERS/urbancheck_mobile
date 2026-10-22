@@ -62,6 +62,14 @@ describe("users api", () => {
     expect(canValidate(null)).toBe(false);
   });
 
+  it("canValidate también pide la cuenta de trabajo activa (C-11)", () => {
+    // Igual que `User.can_validate` en el backend: un validador dado de baja
+    // no ve la opción, en vez de verla y recibir un 403 al usarla.
+    const validator: UserProfile = { ...CITIZEN, role: "validador" };
+    expect(canValidate({ ...validator, is_work_account_active: false })).toBe(false);
+    expect(canValidate({ ...validator, is_work_account_active: true })).toBe(true);
+  });
+
   it("el administrador de plataforma tampoco participa como vecino", () => {
     expect(participatesAsCitizen({ ...CITIZEN, role: "admin_plataforma" })).toBe(false);
   });

@@ -85,13 +85,20 @@ export function patchMe(data: FormData) {
 /**
  * Única regla de "este usuario puede validar" del lado del cliente (US-035).
  *
- * El backend la vuelve a verificar en cada request —es la fuente de verdad—;
- * esto solo decide qué se muestra. La baja lógica del validador no viaja en el
- * perfil, así que un validador desactivado ve la opción y recibe un 403 al
- * usarla: por eso las pantallas manejan ese error en lugar de confiar en esto.
+ * Las mismas tres condiciones que `User.can_validate` en el backend (C-11): el
+ * rol, la cuenta de trabajo activa y la contraseña temporal ya cambiada. El
+ * backend la vuelve a verificar en cada request —es la fuente de verdad—; esto
+ * solo decide qué se muestra. Si el perfil no trae `is_work_account_active`
+ * (un backend anterior a la baja lógica), la cuenta se asume activa. Las
+ * pantallas igual manejan el 403: la baja puede llegar con la app abierta.
  */
 export function canValidate(user: UserProfile | null): boolean {
-  return user !== null && user.role === "validador" && !user.must_change_password;
+  return (
+    user !== null &&
+    user.role === "validador" &&
+    user.is_work_account_active !== false &&
+    !user.must_change_password
+  );
 }
 
 /**
