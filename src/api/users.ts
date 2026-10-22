@@ -30,6 +30,12 @@ export interface UserProfile {
   municipality: Municipality | null;
   /** Mientras sea true, el usuario debe cambiar la contraseña temporal. */
   must_change_password: boolean;
+  /**
+   * Cuándo terminó u omitió el tutorial de bienvenida (US-051). Nulo mientras
+   * no lo vio. Vive en la cuenta y no en el teléfono: reinstalar la app o
+   * entrar desde otro dispositivo no lo vuelve a mostrar.
+   */
+  onboarding_completed_at: string | null;
   /** US-027: si es false, el perfil público solo muestra nombre y avatar. */
   is_public: boolean;
   /** Solo para el rol operario: el área cuyos reportes ve (US-044). */
@@ -61,6 +67,15 @@ export interface PublicProfile {
 
 export function getPublicProfile(id: number) {
   return api.get<PublicProfile>(`/api/users/${id}/`);
+}
+
+/**
+ * Marca el tutorial de bienvenida como visto (US-051). Terminarlo y omitirlo
+ * llaman a lo mismo. Es idempotente en el servidor: un reintento no pisa la
+ * fecha original.
+ */
+export function completeOnboarding() {
+  return api.post<UserProfile>("/api/users/me/onboarding/");
 }
 
 export function patchMe(data: FormData) {

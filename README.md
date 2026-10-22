@@ -923,6 +923,62 @@ del cierre y en la apelación.
   difumine. Es correcto —no se publica una imagen sin procesar— pero es un
   cambio visible, y sin avisarlo se lee como un bug.
 
+### Tutorial de bienvenida en el primer ingreso (US-051)
+
+- **Se decide en el arranque de sesión**, en `app/_layout.tsx`, con un
+  `Stack.Protected` más: el mismo punto que resuelve la contraseña temporal y la
+  navegación por rol, no la pantalla del feed. Se muestra solo a un vecino cuya
+  cuenta tiene `onboarding_completed_at` nulo; la contraseña temporal va
+  primero.
+- Los pasos son una **lista de datos** (`src/onboarding/steps.ts`): agregar o
+  quitar uno es editar esa lista. Los textos están en
+  `src/messages/onboarding.ts`, el primer archivo de mensajes centralizado de la
+  app.
+- El recorrido (`src/onboarding/OnboardingTour.tsx`) es un `ScrollView`
+  horizontal con `pagingEnabled`, el mismo patrón que la galería del detalle, en
+  vez de una dependencia nativa de paginado. Omitir está en todos los pasos
+  menos el último, donde lo reemplaza Empezar. No pide permisos: la cámara y la
+  ubicación se piden al crear el reporte.
+- **Terminar y omitir marcan la cuenta en el backend.** Si el POST falla por
+  red, el vecino entra al feed igual y queda anotado en SecureStore, por cuenta,
+  que la marca está pendiente. `AuthContext` la reintenta en silencio en el
+  siguiente ingreso (`reconcileOnboarding`), y mientras no se confirme el
+  tutorial tampoco se vuelve a mostrar. Si la app se cierra a mitad del
+  recorrido no se marcó nada, así que arranca otra vez desde el primer paso.
+- «Ver tutorial» en el perfil abre `/(app)/tutorial`, una ruta aparte dentro del
+  área autenticada que reutiliza el mismo recorrido sin Omitir y sin tocar
+  ninguna marca. Solo la ven los vecinos.
+
+### Un reporte descartado por moderación (US-049)
+
+- Un tercero que abre un reporte descartado recibe del servidor solo el aviso
+  (`is_moderation_notice`), y la pantalla de detalle dibuja `ModerationNoticeView`
+  con el motivo y nada más. `getReport()` sigue tipado como `ReportDetail`; la
+  pantalla lo distingue con `isModerationNotice()`.
+- El autor ve el detalle completo con `ModerationBanner`: el motivo, en qué
+  quedó su apelación y, si `moderation.can_appeal`, el botón para apelar.
+- La apelación tiene **pantalla propia** (`/(app)/moderation-appeal/[id]`) y no
+  reutiliza la de objetar un cierre: aquella gira alrededor de una foto
+  obligatoria y esta pide solo el motivo. El mecanismo del backend sí es el
+  mismo (`ResolutionAppeal` con `kind="moderacion"`).
+- Textos en `src/messages/moderation.ts`.
+
+### Compartir un reporte (US-030)
+
+- «Compartir» aparece en el detalle solo si el servidor manda `share_url`, o sea,
+  si el reporte es público. Abre `ShareSheet` con WhatsApp
+  (`whatsapp://send`, o WhatsApp Web si no está instalada), Instagram, copiar el
+  enlace (`expo-clipboard`) y «Más opciones». Instagram no recibe texto por URL,
+  así que abre la hoja del sistema, donde aparece si está instalada.
+- **`expo-clipboard` es un módulo nativo nuevo**: anda en Expo Go, pero el dev
+  build hay que regenerarlo (`npx expo prebuild --clean` y un build nuevo).
+- El enlace `https://urbancheck.com.ar/r/<token>` (y `urbancheck://r/<token>`)
+  abre `app/r/[token].tsx`, que vive en la raíz y sin guard, como
+  `reset-password`. Resuelve el token con el endpoint público y, con sesión, va
+  al detalle; si ya no está disponible lo dice. Android lo toma por el
+  `intentFilter` con `pathPrefix: "/r/"`.
+- Textos en `src/messages/share.ts`.
+
 ## Nota: `feature/sprint-3` no salió de `develop`
 
 Esta rama arranca de un punto **anterior** al merge de Sprint 2 en `develop`, así

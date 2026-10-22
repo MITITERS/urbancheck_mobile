@@ -16,6 +16,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   url: "/api/users/1/",
 };

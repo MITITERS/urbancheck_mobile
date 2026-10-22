@@ -155,6 +155,42 @@ export interface Report {
   area_assigned_at: string | null;
 }
 
+/** La apelación del autor contra un descarte, tal como la ve él (US-049). */
+export interface ModerationAppealState {
+  status: "pendiente" | "aceptada" | "rechazada";
+  reason: string;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_reason: string;
+}
+
+export interface PublicModeration {
+  reason: string;
+  decided_at: string;
+  can_appeal: boolean;
+  appeal: ModerationAppealState | null;
+}
+
+/**
+ * Lo que recibe un tercero al abrir un reporte descartado por moderación
+ * (US-049): el aviso con el motivo, y nada más. Sin foto, descripción ni autor.
+ */
+export interface ModerationNotice {
+  id: number;
+  number: number | null;
+  category: string;
+  status: "cancelado";
+  created_at: string;
+  moderation: PublicModeration;
+  is_moderation_notice: true;
+}
+
+export function isModerationNotice(
+  data: ReportDetail | ModerationNotice | null | undefined,
+): data is ModerationNotice {
+  return !!data && "is_moderation_notice" in data && data.is_moderation_notice === true;
+}
+
 export interface ReportDetail extends Report {
   is_liked: boolean;
   comments: Comment[];
@@ -182,6 +218,16 @@ export interface ReportDetail extends Report {
    * era garantizar que se fueran divergiendo.
    */
   can_appeal: boolean;
+  /**
+   * El descarte por moderación municipal vigente, si lo hay (US-049). El motivo
+   * es público; la apelación y `can_appeal` solo le llegan al autor.
+   */
+  moderation: PublicModeration | null;
+  /**
+   * El enlace para compartirlo (US-030). Nulo si el reporte no es público: un
+   * enlace a algo que nadie más puede ver no se ofrece.
+   */
+  share_url: string | null;
   status_history: StatusHistoryEntry[];
   /**
    * Si quien mira puede editar y eliminar este reporte (US-018 y US-019).
@@ -313,6 +359,14 @@ export function listMapReports(
   return api.get<MapReports>(`/api/reports/map/${query ? `?${query}` : ""}`);
 }
 
+/**
+ * El detalle de un reporte.
+ *
+ * Ojo: si el reporte fue descartado por moderación y quien pregunta no es su
+ * autor, el servidor responde el aviso reducido de US-049 en lugar del detalle.
+ * La pantalla de detalle lo distingue con `isModerationNotice()`; la de edición
+ * no lo necesita, porque solo la abre el autor.
+ */
 export function getReport(id: number) {
   return api.get<ReportDetail>(`/api/reports/${id}/`);
 }
@@ -529,4 +583,19 @@ export function geocodeAddress(query: string) {
   return api.get<{ results: GeocodeResult[] }>(
     `/api/reports/geocode/?q=${encodeURIComponent(query)}`,
   );
+}
+
+/** Lo que responde el endpoint público de un reporte compartido (US-030). */
+export interface PublicReportSummary {
+  id: number;
+  share_url: string;
+}
+
+/**
+ * Resuelve el token de un enlace compartido. Un `404` es "ya no está
+ * disponible" y llega como excepción con `status` y, si se descartó por
+ * moderación, el motivo.
+ */
+export function getPublicReport(token: string) {
+  return api.get<PublicReportSummary>(`/api/public/reports/${token}/`);
 }

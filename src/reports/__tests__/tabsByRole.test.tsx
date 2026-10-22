@@ -65,6 +65,7 @@ function userWith(role: UserRole): UserProfile {
     role,
     municipality: null,
     must_change_password: false,
+    onboarding_completed_at: "2026-01-01T00:00:00Z",
     is_public: true,
     url: "http://example.test/api/users/1/",
   };

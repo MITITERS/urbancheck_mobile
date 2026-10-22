@@ -12,6 +12,7 @@ import { setSessionToken, setUnauthorizedHandler } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { getMe, type UserProfile } from "../api/users";
+import { reconcileOnboarding } from "../onboarding/mark";
 
 const SECURE_STORE_KEY = "urbancheck_session_token";
 
@@ -67,9 +68,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const session = await getSession();
         const token = session.meta.session_token ?? storedToken;
         setSessionToken(token);
-        // El perfil se carga acá y no en cada pantalla: el rol y el flag de
-        // contraseña temporal deciden qué se muestra desde el primer render.
-        const user = await getMe().catch(() => null);
+        // El perfil se carga acá y no en cada pantalla: el rol, el flag de
+        // contraseña temporal y la marca del tutorial deciden qué se muestra
+        // desde el primer render. Si la marca del tutorial había quedado
+        // pendiente por un error de red, se reintenta ahora (US-051).
+        const user = await reconcileOnboarding(await getMe().catch(() => null));
         setState({ token, user, isLoading: false });
       } catch {
         setSessionToken(null);
@@ -85,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (rememberMe) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, token);
     }
-    const user = await getMe().catch(() => null);
+    const user = await reconcileOnboarding(await getMe().catch(() => null));
     setState({ token, user, isLoading: false });
   }, []);
 

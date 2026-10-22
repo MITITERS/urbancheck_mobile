@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { imageSource } from "../../../src/api/client";
 import { logout } from "../../../src/api/auth";
+import { onboardingMessages } from "../../../src/messages/onboarding";
 import { useResolvedWork } from "../../../src/queries/operator";
 import { type Report } from "../../../src/api/reports";
 import { useMyReports } from "../../../src/queries/reports";
@@ -29,6 +30,7 @@ import { useAuth } from "../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
 import { reportKeys, userKeys } from "../../../src/lib/queryKeys";
 import {
+  PROCESSING_POLL_MS,
   PUBLIC_LIST_POLL_MS,
   useRefetchOnFocus,
 } from "../../../src/lib/useRefetchOnFocus";
@@ -166,7 +168,13 @@ export default function ProfileScreen() {
   );
   const waitingOnTheServer = anyUnderReview || anyProcessing;
   useRefetchOnFocus(reportKeys.lists(), {
-    pollMs: waitingOnTheServer ? PUBLIC_LIST_POLL_MS : undefined,
+    // El difuminado tarda un segundo: esperar los 30 s del feed era casi todo
+    // demora. La revisión la decide una persona y puede ir más lenta.
+    pollMs: anyProcessing
+      ? PROCESSING_POLL_MS
+      : anyUnderReview
+        ? PUBLIC_LIST_POLL_MS
+        : undefined,
     onlyStale: !waitingOnTheServer,
   });
   // Arranca desplegada, como la de comentarios del detalle: plegada por defecto
@@ -296,8 +304,18 @@ export default function ProfileScreen() {
           icon="notifications-outline"
           label="Notificaciones"
           onPress={() => router.push("/(app)/notification-preferences")}
-          last
+          last={!isCitizen}
         />
+        {/* Volver a ver el tutorial de bienvenida (US-051). Solo el vecino: a
+            una cuenta de trabajo le describiría acciones que tiene prohibidas. */}
+        {isCitizen && (
+          <ActionRow
+            icon="help-circle-outline"
+            label={onboardingMessages.profileEntry}
+            onPress={() => router.push("/(app)/tutorial")}
+            last
+          />
+        )}
       </View>
 
       <View style={styles.card}>

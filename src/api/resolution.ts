@@ -63,3 +63,11 @@ export function appealResolution(
   body.append("reason", reason);
   return api.post<ReportDetail>(`/api/reports/${id}/appeal/`, body);
 }
+
+/**
+ * El autor apela el descarte de su reporte por moderación municipal (US-049).
+ * Solo el motivo: no hay foto que sumar. La resuelve la plataforma.
+ */
+export function appealModeration(id: number, reason: string) {
+  return api.post<ReportDetail>(`/api/reports/${id}/moderation-appeal/`, { reason });
+}

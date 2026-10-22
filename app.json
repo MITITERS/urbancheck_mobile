@@ -45,6 +45,11 @@
               "scheme": "https",
               "host": "urbancheck.com.ar",
               "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "urbancheck.com.ar",
+              "pathPrefix": "/r/"
             }
           ],
           "category": [

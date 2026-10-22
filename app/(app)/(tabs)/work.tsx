@@ -16,7 +16,10 @@ import { describeApiError } from "../../../src/api/errors";
 import { useAssignedWork } from "../../../src/queries/operator";
 import { useFloatingTabBarInset } from "../../../src/components/floatingTabBar";
 import { operatorKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  INBOX_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
 
 /**
@@ -36,9 +39,13 @@ export default function WorkInboxScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const work = useAssignedWork();
   // Al volver a la pestaña, y no solo al montarla: después de registrar una
-  // resolución el reporte cerrado tiene que desaparecer. Refresca por detrás
-  // —solo si el dato venció— en lugar de tapar la bandeja con un spinner.
-  useRefetchOnFocus(operatorKeys.lists());
+  // resolución el reporte cerrado tiene que desaparecer. Y mientras se mira,
+  // cada tanto: lo que el agente asigna desde el panel no le avisa a esta
+  // pantalla. Refresca por detrás en lugar de tapar la bandeja con un spinner.
+  useRefetchOnFocus(operatorKeys.lists(), {
+    onlyStale: false,
+    pollMs: INBOX_POLL_MS,
+  });
 
   const reports = work.data?.results ?? [];
   // El 403 de una cuenta o un área desactivadas trae su propio motivo

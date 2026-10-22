@@ -37,6 +37,15 @@ export default function AppLayout() {
           name="appeal-report/[id]"
           options={{ title: "Objetar el cierre" }}
         />
+        {/* La apelación del autor contra un descarte por moderación (US-049):
+            solo el motivo, sin foto. */}
+        <Stack.Screen
+          name="moderation-appeal/[id]"
+          options={{ title: "Apelar el descarte" }}
+        />
+        {/* «Ver tutorial» desde el perfil (US-051): pantalla completa, sin la
+            cabecera del stack, igual que en el primer ingreso. */}
+        <Stack.Screen name="tutorial" options={{ headerShown: false }} />
         <Stack.Screen
           name="notification-preferences"
           options={{ title: "Notificaciones" }}

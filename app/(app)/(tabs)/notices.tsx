@@ -59,6 +59,8 @@ const KIND_STYLE: Record<NotificationKind, KindStyle> = {
   // del autor va en ámbar, como los demás avisos de algo en revisión.
   denuncia_recibida: { icon: "flag-outline", color: "#475569", background: "#f1f5f9" },
   reporte_denunciado: { icon: "flag", color: "#b45309", background: "#fef3c7" },
+  // US-049: una decisión definitiva sobre el reporte propio.
+  apelacion_moderacion_rechazada: { icon: "ban-outline", color: "#c62828", background: "#ffebee" },
 };
 
 /**

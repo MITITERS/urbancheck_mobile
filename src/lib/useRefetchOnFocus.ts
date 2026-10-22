@@ -11,6 +11,27 @@ import { useQueryClient } from "@tanstack/react-query";
 export const PUBLIC_LIST_POLL_MS = 30_000;
 
 /**
+ * Cada cuánto se vuelve a mirar una bandeja de trabajo —la del validador y la
+ * del operario— mientras está a la vista.
+ *
+ * Más corto que el feed porque la bandeja es la cola de trabajo de alguien: un
+ * reporte nuevo aparece en ella **un segundo** después de cargarse, cuando
+ * termina el difuminado (US-042), y sin sondeo el validador que ya estaba
+ * mirando la pestaña no lo veía hasta salir y volver pasados los 30 s del
+ * `staleTime`. Eso era el "a veces aparece al toque y a veces tarda".
+ */
+export const INBOX_POLL_MS = 15_000;
+
+/**
+ * Cada cuánto se vuelve a mirar mientras una foto se está difuminando.
+ *
+ * El difuminado tarda alrededor de un segundo, así que esperar los 30 s del
+ * feed era casi todo demora. Solo corre mientras hay algo en `pendiente`: en
+ * cuanto llega `procesada` el sondeo se corta solo.
+ */
+export const PROCESSING_POLL_MS = 3_000;
+
+/**
  * Refresca al volver a la pantalla, pero **solo si el dato quedó viejo**.
  *
  * Es el equivalente de `refetchOnWindowFocus` para una app de pestañas: en
