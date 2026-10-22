@@ -148,6 +148,24 @@ Callejones sin salida ya recorridos, para no repetirlos:
   permisos, teclado) o un reseteo al cambiar de reporte. Uno nuevo lleva su
   motivo o se reescribe.
 
+## Ramas, PR y etiquetas
+
+Es el flujo que se usa de verdad desde el Sprint 1, igual en los tres
+repositorios (C-20):
+
+- Cada sprint se trabaja en `feature/sprint-N`, que sale de `develop`.
+  Correcciones puntuales sobre un sprint en curso pueden ir en ramas
+  `fix/<id>` que salen de esa rama y vuelven a ella con merge.
+- Al cerrar el sprint, PR de `feature/sprint-N` a `develop`, que se fusiona con
+  merge commit (sin squash ni rebase) con el CI en verde.
+- El merge a `develop` se etiqueta con una etiqueta anotada `sprint-N`. Las
+  etiquetas se suben de a una (`git push origin sprint-N`), nunca con `--tags`.
+- `main` solo recibe releases: `release/x.y.z` sale de `develop`, se fusiona en
+  `main`, se etiqueta `vx.y.z` y vuelve a `develop`.
+- No se reescribe historia publicada: nada de force push, rebase de ramas
+  remotas ni amend de commits ya subidos.
+- Commits con Conventional Commits (`feat(scope): ...`, `fix(scope): ...`).
+
 ## Gestor de paquetes
 
 **npm.** Hubo un `bun.lock` conviviendo con `package-lock.json`; `expo install`

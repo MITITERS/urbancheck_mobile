@@ -1,7 +1,7 @@
 # UrbanCheck — App móvil
 
-Aplicación de ciudadanos y validadores de UrbanCheck (Expo + React Native +
-TypeScript). El panel municipal es otro repositorio (`urbancheck_frontend`) y la
+Aplicación de ciudadanos, validadores y operarios de UrbanCheck (Expo + React
+Native + TypeScript). El panel municipal es otro repositorio (`urbancheck_frontend`) y la
 API vive en `urbancheck_backend`.
 
 ## Levantar el proyecto
@@ -37,15 +37,22 @@ npx tsc --noEmit  # typecheck
 
 ## Roles
 
-La plataforma tiene cuatro roles: `ciudadano`, `validador`, `agente_municipal` y
-`admin_plataforma`. **Esta app es para los dos primeros**; los municipales
-trabajan desde el panel web.
+La plataforma tiene cinco roles: `ciudadano`, `validador`, `operario`,
+`agente_municipal` y `admin_plataforma`. **Esta app es para los tres primeros**;
+el agente y el admin trabajan desde el panel web.
 
-Las cuentas de **validador** y de **agente municipal** son **cuentas de
-trabajo**: solo ven reportes de la municipalidad que se les asignó, también en el
-feed y en el mapa. Un reporte de otra jurisdicción directamente no existe para
-esas cuentas. Quien además quiera usar UrbanCheck como vecino se crea una cuenta
-personal aparte.
+| Rol         | Pestañas (`app/(app)/(tabs)/_layout.tsx`)                     |
+| ----------- | ------------------------------------------------------------- |
+| `ciudadano` | Reportes, Mapa, Reportar, Avisos y Perfil                     |
+| `validador` | Reportes, Mapa, Validar, Avisos y Perfil, de su municipalidad |
+| `operario`  | Trabajos (los de su área) y Perfil (ver US-044 más abajo)     |
+
+Las cuentas de **validador**, **operario** y **agente municipal** son **cuentas
+de trabajo**: solo ven reportes de la municipalidad que se les asignó (el
+operario, además, solo los de su área). Un reporte de otra jurisdicción
+directamente no existe para esas cuentas, y ninguna participa como vecino: no
+reporta, no comenta ni da me gusta, esté activa o dada de baja. Quien además
+quiera usar UrbanCheck como vecino se crea una cuenta personal aparte.
 
 El filtro lo aplica el backend, así que la app no tiene que saber nada: pide el
 feed como siempre y recibe solo lo que corresponde.
@@ -636,9 +643,12 @@ contra un GPS falsificado.
 
 ### Notificaciones
 
-La bandeja muestra los avisos sociales (comentarios y likes) y los de cambio de
-estado del reporte, con ícono propio por tipo y un contador de no leídos que
-incluye ambos.
+La bandeja muestra todos los tipos de aviso que manda el backend: los sociales
+(comentarios y me gusta, que se generan desde C-09), los del avance del reporte
+(cambio de estado, respuesta oficial, archivado y confirmación próximos) y los de
+denuncias, moderación e imágenes. Cada tipo tiene ícono propio (`KIND_STYLE` en
+`notices.tsx`) y el contador de no leídos los incluye a todos. El operario no
+tiene bandeja de avisos.
 
 Las preferencias (`app/(app)/notification-preferences.tsx`) recorren el catálogo
 de tipos que devuelve el backend, así que **un tipo nuevo aparece en la pantalla
