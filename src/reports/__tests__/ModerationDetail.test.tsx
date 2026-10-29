@@ -85,6 +85,7 @@ function signedInAs(id: number) {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 

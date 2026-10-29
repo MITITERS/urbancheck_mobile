@@ -160,6 +160,7 @@ beforeEach(() => {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
   mockedGet.mockResolvedValue(detail() as never);
 });

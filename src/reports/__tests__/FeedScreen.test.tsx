@@ -106,6 +106,7 @@ function signedInAs(user: UserProfile | null) {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 

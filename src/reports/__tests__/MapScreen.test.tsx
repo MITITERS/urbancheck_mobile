@@ -121,6 +121,7 @@ function signedInAs(user: UserProfile) {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 

@@ -66,6 +66,7 @@ function signedInAs(role: UserRole, onboarding: string | null, extra: Partial<Us
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 

@@ -60,6 +60,7 @@ function signedInAs(profile: UserProfile, routes: Record<string, unknown> = {}) 
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
   respondWith({ [ME_URL]: profile, ...routes });
 }

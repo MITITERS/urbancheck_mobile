@@ -63,7 +63,8 @@ export async function resetPassword(key: string, password: string): Promise<void
  * releer el perfil.
  */
 export function changePassword(currentPassword: string, newPassword: string) {
-  return api.post("/_allauth/app/v1/account/password/change", {
+  // La respuesta trae el token rotado de la sesión actual (N-04).
+  return api.post<AuthResponse>("/_allauth/app/v1/account/password/change", {
     current_password: currentPassword,
     new_password: newPassword,
   });

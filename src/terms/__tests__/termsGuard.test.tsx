@@ -63,6 +63,7 @@ function signedInAs(role: UserRole, extra: Partial<UserProfile> = {}) {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 

@@ -27,6 +27,7 @@ interface AuthContextValue extends AuthState {
   signOut: () => Promise<void>;
   setUser: (user: UserProfile) => void;
   refreshUser: () => Promise<void>;
+  replaceToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,9 +103,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) setState((s) => ({ ...s, user }));
   }, []);
 
+  /**
+   * Adopta el token nuevo de la misma sesión. allauth lo rota al cambiar la
+   * contraseña (N-04): el viejo deja de valer, y seguir usándolo cerraba la
+   * sesión. Se guarda solo si ya estaba guardado ("recordarme").
+   */
+  const replaceToken = useCallback(async (token: string) => {
+    setSessionToken(token);
+    const stored = await SecureStore.getItemAsync(SECURE_STORE_KEY).catch(() => null);
+    if (stored) {
+      await SecureStore.setItemAsync(SECURE_STORE_KEY, token).catch(() => {});
+    }
+    setState((s) => ({ ...s, token }));
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ ...state, signIn, signOut, setUser, refreshUser }}
+      value={{ ...state, signIn, signOut, setUser, refreshUser, replaceToken }}
     >
       {children}
     </AuthContext.Provider>

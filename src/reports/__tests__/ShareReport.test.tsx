@@ -61,6 +61,7 @@ function signedIn(session: string | null) {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
 }
 
