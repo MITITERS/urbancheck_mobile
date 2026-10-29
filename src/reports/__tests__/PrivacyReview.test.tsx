@@ -7,7 +7,8 @@ import { api } from "../../api/client";
 import type { ReportDetail } from "../../api/reports";
 import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
-import { renderWithProviders } from "../../test/renderWithProviders";
+import { reportKeys } from "../../lib/queryKeys";
+import { createTestQueryClient, renderWithProviders } from "../../test/renderWithProviders";
 import { PERSONAL_DATA_REASON } from "../usePrivacyReview";
 
 /**
@@ -357,11 +358,16 @@ describe("Denunciar imagen (US-043)", () => {
   it("CP-043-M11 (US-043 E2) · si el reporte se ocultó mientras estaba abierto, deja de mostrarlo", async () => {
     // El 404 llega con el dato viejo todavía en la caché: React Query lo
     // conserva, y la pantalla lo seguía mostrando.
+    // Se siembra la caché con el reporte que se estaba viendo: el 404 llega al
+    // volver a pedirlo.
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
+    const client = createTestQueryClient();
+    client.setQueryData(reportKeys.detail(7), detail());
     renderWithProviders(
       <SafeAreaProvider initialMetrics={METRICS}>
         <ReportDetailScreen />
       </SafeAreaProvider>,
+      client,
     );
 
     expect(await screen.findByText("Este reporte ya no está disponible.")).toBeTruthy();

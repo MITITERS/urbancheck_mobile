@@ -165,6 +165,44 @@ beforeEach(() => {
   mockedGet.mockResolvedValue(detail() as never);
 });
 
+describe("errores al cargar (N-20)", () => {
+  it("un 404 al abrirlo dice que no se encontró, sin ofrecer reintentar", async () => {
+    mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
+
+    renderDetail();
+
+    expect(await screen.findByText("Reporte no encontrado.")).toBeTruthy();
+    expect(screen.queryByText("Reintentar")).toBeNull();
+  });
+
+  it("un error del servidor no se confunde con un reporte inexistente", async () => {
+    mockedGet.mockRejectedValueOnce({ status: 500, detail: "Server Error" });
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("No pudimos cargar el reporte")).toBeTruthy();
+    expect(screen.queryByText("Reporte no encontrado.")).toBeNull();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+
+  it("sin red lo dice y deja reintentar", async () => {
+    mockedGet.mockRejectedValueOnce(new Error("Network request failed"));
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("Sin conexión")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+});
+
 describe("autor del reporte", () => {
   it("N-09 · si el vecino borró su cuenta dice «Usuario eliminado»", async () => {
     mockedGet.mockResolvedValue(detail({ author: null }) as never);

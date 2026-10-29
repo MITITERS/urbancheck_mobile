@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { participatesAsCitizen } from "../src/api/users";
 import { AuthProvider, useAuth } from "../src/auth/AuthContext";
 import { QueryProvider } from "../src/lib/QueryProvider";
+import { AppErrorBoundary } from "../src/components/AppErrorBoundary";
 
 function RootStack() {
   const { token, user, isLoading } = useAuth();
@@ -62,6 +63,10 @@ function RootStack() {
     </Stack>
   );
 }
+
+// Expo Router toma este export como el límite de errores de todo el árbol
+// (N-20): un error de renderizado muestra un mensaje en vez de cerrar la app.
+export { AppErrorBoundary as ErrorBoundary };
 
 export default function RootLayout() {
   return (

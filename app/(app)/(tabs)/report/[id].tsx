@@ -38,7 +38,7 @@ import {
   useRefetchOnFocus,
 } from "../../../../src/lib/useRefetchOnFocus";
 import { useInvalidateReports, useReport } from "../../../../src/queries/reports";
-import { describeApiError } from "../../../../src/api/errors";
+import { describeApiError, isNetworkFailure } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
@@ -54,6 +54,8 @@ import { ComplaintModal } from "../../../../src/reports/ComplaintModal";
 import { ModerationBanner } from "../../../../src/reports/ModerationBanner";
 import { ShareSheet } from "../../../../src/reports/ShareSheet";
 import { accountMessages } from "../../../../src/messages/account";
+import { errorMessages } from "../../../../src/messages/errors";
+import { RetryButton } from "../../../../src/components/AppErrorBoundary";
 import { shareMessages } from "../../../../src/messages/share";
 import { ModerationNoticeView } from "../../../../src/reports/ModerationNoticeView";
 import { canReportReport } from "../../../../src/reports/complaints";
@@ -333,13 +335,30 @@ export default function ReportDetailScreen() {
   }
 
   if (!report) {
+    // N-20: un 404 no es lo mismo que un servidor caído o la falta de red. El
+    // 404 de un reporte que se estaba mostrando es que dejó de estar
+    // disponible (US-043); el de uno que nunca llegó, que no existe.
+    if (unavailable || !query.isError) {
+      return (
+        <View style={styles.center}>
+          <Text>
+            {unavailable && query.data !== undefined
+              ? errorMessages.reportGone
+              : errorMessages.reportNotFound}
+          </Text>
+        </View>
+      );
+    }
+    const offline = isNetworkFailure(query.error);
     return (
       <View style={styles.center}>
-        <Text>
-          {unavailable
-            ? "Este reporte ya no está disponible."
-            : "Reporte no encontrado."}
+        <Text style={styles.errorTitle}>
+          {offline ? errorMessages.offlineTitle : errorMessages.serverTitle}
         </Text>
+        <Text style={styles.errorBody}>
+          {offline ? errorMessages.offlineBody : errorMessages.serverBody}
+        </Text>
+        <RetryButton onPress={() => void query.refetch()} />
       </View>
     );
   }
@@ -1347,7 +1366,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   container: { flex: 1, backgroundColor: "#fff" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 8 },
+  errorTitle: { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center" },
+  errorBody: { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20 },
   photo: { width: "100%", height: 240 },
   privacyNotice: {
     flexDirection: "row",
