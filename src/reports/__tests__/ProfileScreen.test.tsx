@@ -245,6 +245,23 @@ describe("«Ver tutorial» en el perfil (US-051)", () => {
   });
 });
 
+describe("«Eliminar mi cuenta» en el perfil (N-09)", () => {
+  it("el vecino tiene la opción", async () => {
+    renderProfile();
+
+    expect(await screen.findByText("Eliminar mi cuenta")).toBeTruthy();
+  });
+
+  it("una cuenta de trabajo no: sigue con la baja lógica", async () => {
+    asOperator([]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Editar perfil")).toBeTruthy();
+    expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
+  });
+});
+
 /**
  * US-046 — el operario ve en su perfil los trabajos que cerró, como el vecino
  * ve los que reportó. Misma sección plegable y mismo resumen de tres cifras;

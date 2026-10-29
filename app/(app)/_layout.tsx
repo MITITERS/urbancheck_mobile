@@ -15,6 +15,7 @@ export default function AppLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ title: "Editar perfil" }} />
+        <Stack.Screen name="delete-account" options={{ title: "Eliminar mi cuenta" }} />
         <Stack.Screen
           name="edit-report/[id]"
           options={{ title: "Editar reporte" }}

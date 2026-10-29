@@ -89,6 +89,14 @@ export function patchMe(data: FormData) {
 }
 
 /**
+ * Borra la cuenta del vecino (N-09), confirmada con su contraseña. El backend
+ * borra lo que el municipio nunca gestionó y conserva sin autor lo demás.
+ */
+export function deleteAccount(password: string) {
+  return api.delete<void>("/api/users/me/", { password });
+}
+
+/**
  * Única regla de "este usuario puede validar" del lado del cliente (US-035).
  *
  * Las mismas tres condiciones que `User.can_validate` en el backend (C-11): el

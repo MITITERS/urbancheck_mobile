@@ -177,5 +177,10 @@ export const api = {
       method: "PATCH",
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  // Con cuerpo solo la baja de la cuenta, que confirma con la contraseña (N-09).
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "DELETE",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
 };

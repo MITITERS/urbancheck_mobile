@@ -165,6 +165,16 @@ beforeEach(() => {
   mockedGet.mockResolvedValue(detail() as never);
 });
 
+describe("autor del reporte", () => {
+  it("N-09 · si el vecino borró su cuenta dice «Usuario eliminado»", async () => {
+    mockedGet.mockResolvedValue(detail({ author: null }) as never);
+
+    renderDetail();
+
+    expect(await screen.findByText(/Usuario eliminado/)).toBeTruthy();
+  });
+});
+
 describe("ubicación del reporte", () => {
   it("muestra la calle, no las coordenadas", async () => {
     // **Con coordenadas cargadas**, que es el caso real y el que fallaba: la

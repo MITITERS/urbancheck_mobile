@@ -131,7 +131,8 @@ export interface Report {
   longitude: string | null;
   address: string;
   status: ReportStatus;
-  author: ReportAuthor;
+  /** Nulo si el vecino borró su cuenta (N-09): el reporte se conservó. */
+  author: ReportAuthor | null;
   like_count: number;
   comment_count: number;
   created_at: string;

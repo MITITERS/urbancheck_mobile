@@ -53,6 +53,7 @@ import { RemovedPhoto } from "../../../../src/reports/RemovedPhoto";
 import { ComplaintModal } from "../../../../src/reports/ComplaintModal";
 import { ModerationBanner } from "../../../../src/reports/ModerationBanner";
 import { ShareSheet } from "../../../../src/reports/ShareSheet";
+import { accountMessages } from "../../../../src/messages/account";
 import { shareMessages } from "../../../../src/messages/share";
 import { ModerationNoticeView } from "../../../../src/reports/ModerationNoticeView";
 import { canReportReport } from "../../../../src/reports/complaints";
@@ -116,7 +117,7 @@ export default function ReportDetailScreen() {
   const privacyReview = usePrivacyReview({
     reportId: Number(id),
     onSubmitted: () => {
-      if (report && user?.id === report.author.id) {
+      if (report && user?.id === report.author?.id) {
         void query.refetch();
       } else {
         router.back();
@@ -361,7 +362,7 @@ export default function ReportDetailScreen() {
    * se achica, así que suponer que sí dejaba el cajón debajo del teclado—.
    */
   const composerBottom = keyboardOffset > 0 ? keyboardOffset : tabBarInset;
-  const isAuthor = user !== null && user.id === report.author.id;
+  const isAuthor = user !== null && user.id === report.author?.id;
   const canReport = canReportReport(report, user);
 
   // La foto, o el aviso de por qué no está: retirada por protección de datos
@@ -611,13 +612,18 @@ export default function ReportDetailScreen() {
           <Text style={styles.description}>{report.description}</Text>
           <Text style={styles.meta}>
             Por{" "}
-            <Text
-              style={styles.authorLink}
-              onPress={() => router.push(`/(app)/user/${report.author.id}`)}
-              suppressHighlighting
-            >
-              {report.author.name}
-            </Text>{" "}
+            {report.author ? (
+              <Text
+                style={styles.authorLink}
+                onPress={() => router.push(`/(app)/user/${report.author?.id}`)}
+                suppressHighlighting
+              >
+                {report.author.name}
+              </Text>
+            ) : (
+              // El vecino borró su cuenta (N-09): el reporte quedó sin autor.
+              accountMessages.deletedUser
+            )}{" "}
             • {new Date(report.created_at).toLocaleDateString("es-AR")}
           </Text>
           {/* La dirección primero y las coordenadas solo como último recurso.
