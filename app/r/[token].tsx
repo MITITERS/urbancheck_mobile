@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { getPublicReport } from "../../src/api/reports";
+import { getPublicReport, resolveSharedReport } from "../../src/api/reports";
 import { useAuth } from "../../src/auth/AuthContext";
 import { shareMessages as t } from "../../src/messages/share";
 
@@ -33,10 +33,13 @@ export default function SharedReportScreen() {
   useEffect(() => {
     let cancelled = false;
     getPublicReport(String(token))
-      .then((report) => {
+      // La respuesta pública no trae el id (N-06): con sesión se resuelve
+      // aparte, con la misma regla de visibilidad.
+      .then(() => (session ? resolveSharedReport(String(token)) : null))
+      .then((resolved) => {
         if (cancelled) return;
-        if (session) {
-          router.replace(`/(app)/(tabs)/report/${report.id}`);
+        if (resolved) {
+          router.replace(`/(app)/(tabs)/report/${resolved.id}`);
         } else {
           setOutcome({ kind: "needsSession" });
         }

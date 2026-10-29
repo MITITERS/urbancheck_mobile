@@ -134,7 +134,9 @@ describe("abrir un enlace compartido en la app (US-030)", () => {
 
   it("CP-030-M06 (US-030 E2) · con sesión va directo al detalle", async () => {
     signedIn("t");
-    mockedGet.mockResolvedValue({ id: 42, share_url: URL } as never);
+    // N-06: la respuesta pública no trae el id; con sesión se resuelve aparte.
+    mockedGet.mockImplementation((async (path: string) =>
+      path === "/api/reports/shared/tok-123/" ? { id: 42 } : { share_url: URL }) as never);
 
     renderScreen();
 
@@ -142,6 +144,7 @@ describe("abrir un enlace compartido en la app (US-030)", () => {
       expect(mockReplace).toHaveBeenCalledWith("/(app)/(tabs)/report/42"),
     );
     expect(mockedGet).toHaveBeenCalledWith("/api/public/reports/tok-123/");
+    expect(mockedGet).toHaveBeenCalledWith("/api/reports/shared/tok-123/");
   });
 
   it("CP-030-M07 (US-030 E3) · si ya no está disponible, lo dice", async () => {
@@ -170,10 +173,12 @@ describe("abrir un enlace compartido en la app (US-030)", () => {
 
   it("CP-030-M09 · sin sesión pide iniciarla", async () => {
     signedIn(null);
-    mockedGet.mockResolvedValue({ id: 42, share_url: URL } as never);
+    mockedGet.mockResolvedValue({ share_url: URL } as never);
 
     renderScreen();
 
     expect(await screen.findByText(t.signInToOpen)).toBeTruthy();
+    // Sin sesión no se pide el id: esa ruta la exige.
+    expect(mockedGet).not.toHaveBeenCalledWith("/api/reports/shared/tok-123/");
   });
 });

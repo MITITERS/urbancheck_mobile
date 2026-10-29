@@ -585,9 +585,11 @@ export function geocodeAddress(query: string) {
   );
 }
 
-/** Lo que responde el endpoint público de un reporte compartido (US-030). */
+/**
+ * Lo que la app usa del endpoint público de un reporte compartido (US-030). No
+ * trae el id, que es correlativo (N-06): con sesión, se pide aparte.
+ */
 export interface PublicReportSummary {
-  id: number;
   share_url: string;
 }
 
@@ -598,4 +600,9 @@ export interface PublicReportSummary {
  */
 export function getPublicReport(token: string) {
   return api.get<PublicReportSummary>(`/api/public/reports/${token}/`);
+}
+
+/** El id del reporte de un enlace, para abrir su detalle. Pide sesión (N-06). */
+export function resolveSharedReport(token: string) {
+  return api.get<{ id: number }>(`/api/reports/shared/${token}/`);
 }
