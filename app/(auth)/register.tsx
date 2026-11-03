@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -45,10 +46,10 @@ export default function RegisterScreen() {
   // confirmación de contraseña y el botón, y se escribía a ciegas. El hook mide
   // cuánto tapa el teclado de verdad y sube solo al campo enfocado, igual que
   // en el alta y el cierre de un reporte.
-  const nameField = useRef<TextInput>(null);
-  const emailField = useRef<TextInput>(null);
-  const passwordField = useRef<TextInput>(null);
-  const confirmField = useRef<TextInput>(null);
+  const nameField = useRef<TextInputInstance>(null);
+  const emailField = useRef<TextInputInstance>(null);
+  const passwordField = useRef<TextInputInstance>(null);
+  const confirmField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
 
   useEffect(() => {
@@ -174,7 +175,7 @@ export default function RegisterScreen() {
     errorKey: string,
     // El ref y el `onFocus` van juntos o el hook no tiene qué revelar: uno dice
     // qué campo medir y el otro cuándo.
-    ref: React.RefObject<TextInput | null>,
+    ref: React.RefObject<TextInputInstance | null>,
     extra?: object,
   ) {
     return (

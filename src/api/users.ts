@@ -162,11 +162,16 @@ export function isOperator(user: UserProfile | null): boolean {
   return user !== null && user.role === "operario";
 }
 
-/** Una versión publicada de los términos y condiciones (RN-10). */
+/**
+ * Una versión publicada de los términos y condiciones y la política de
+ * privacidad (RN-10). Los dos documentos comparten versión y se aceptan juntos.
+ * Los textos vienen en Markdown.
+ */
 export interface TermsOfService {
   version: string;
-  text: string;
   published_at: string;
+  terms: string;
+  privacy: string;
 }
 
 /**

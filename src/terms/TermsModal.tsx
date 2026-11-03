@@ -2,10 +2,11 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 
 import type { TermsOfService } from "../api/users";
 import { termsMessages as t } from "../messages/terms";
+import { LegalText } from "./LegalText";
 
 /**
- * El texto completo de los términos (RN-10), para leerlo desde el registro sin
- * perder lo que ya se cargó en el formulario.
+ * Los términos y la política de privacidad completos (RN-10), para leerlos
+ * desde el registro sin perder lo que ya se cargó en el formulario.
  */
 export function TermsModal({
   terms,
@@ -22,7 +23,7 @@ export function TermsModal({
         <Text style={styles.title}>{t.modalTitle}</Text>
         <Text style={styles.version}>{t.version(terms.version)}</Text>
         <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-          <Text style={styles.text}>{terms.text}</Text>
+          <LegalText terms={terms} />
         </ScrollView>
         <Pressable style={styles.button} onPress={onClose} accessibilityRole="button">
           <Text style={styles.buttonText}>{t.modalClose}</Text>
@@ -38,7 +39,6 @@ const styles = StyleSheet.create({
   version: { fontSize: 13, color: "#6b7280", marginTop: 4 },
   body: { flex: 1, marginTop: 16 },
   bodyContent: { paddingBottom: 24 },
-  text: { fontSize: 15, color: "#374151", lineHeight: 22 },
   button: {
     backgroundColor: "#1a73e8",
     borderRadius: 10,

@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { acceptTerms, getCurrentTerms, type TermsOfService } from "../src/api/users";
 import { useAuth } from "../src/auth/AuthContext";
 import { termsMessages as t } from "../src/messages/terms";
+import { LegalText } from "../src/terms/LegalText";
 
 /**
  * Aceptación de los términos vigentes en el ingreso (RN-10, C-23).
@@ -78,7 +79,7 @@ export default function AcceptTermsScreen() {
         <>
           <Text style={styles.version}>{t.version(terms.version)}</Text>
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-            <Text style={styles.text}>{terms.text}</Text>
+            <LegalText terms={terms} />
           </ScrollView>
         </>
       )}
@@ -131,7 +132,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   bodyContent: { padding: 16 },
-  text: { fontSize: 15, color: "#374151", lineHeight: 22 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   error: { color: "#dc2626", fontSize: 13, marginTop: 8 },
   button: {

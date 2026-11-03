@@ -28,8 +28,9 @@ const mockedTerms = getCurrentTerms as jest.MockedFunction<typeof getCurrentTerm
 
 const TERMS = {
   version: "2026-10",
-  text: "Texto de los términos de prueba.",
   published_at: "2026-10-22T00:00:00Z",
+  terms: "# Términos\n\nTexto de los términos de prueba.",
+  privacy: "# Privacidad\n\nTexto de la política de prueba.",
 };
 
 async function fillForm() {
@@ -52,14 +53,14 @@ describe("con términos publicados", () => {
 
   it("no deja registrarse sin aceptarlos", async () => {
     render(<RegisterScreen />);
-    await screen.findByText("Leí y acepto los términos y condiciones");
+    await screen.findByText("Leí y acepto los términos y condiciones y la política de privacidad");
     await fillForm();
 
     await userEvent.press(screen.getByText("Registrarse"));
 
     expect(
       await screen.findByText(
-        "Para crear la cuenta tenés que aceptar los términos y condiciones.",
+        "Para crear la cuenta tenés que aceptar los términos y condiciones y la política de privacidad.",
       ),
     ).toBeTruthy();
     expect(mockedSignup).not.toHaveBeenCalled();
@@ -68,7 +69,7 @@ describe("con términos publicados", () => {
   it("al aceptarlos manda la aceptación y la versión", async () => {
     render(<RegisterScreen />);
     await fillForm();
-    await userEvent.press(await screen.findByLabelText("Leí y acepto los términos y condiciones"));
+    await userEvent.press(await screen.findByLabelText("Leí y acepto los términos y condiciones y la política de privacidad"));
 
     await userEvent.press(screen.getByText("Registrarse"));
 
@@ -86,9 +87,9 @@ describe("con términos publicados", () => {
   it("el texto se lee desde el formulario", async () => {
     render(<RegisterScreen />);
 
-    await userEvent.press(await screen.findByText("Ver términos y condiciones"));
+    await userEvent.press(await screen.findByText("Ver términos y política de privacidad"));
 
-    expect(await screen.findByText(TERMS.text)).toBeTruthy();
+    expect(await screen.findByText("Texto de los términos de prueba.")).toBeTruthy();
   });
 });
 
@@ -108,6 +109,6 @@ describe("sin términos publicados", () => {
         password: "una-clave-larga",
       }),
     );
-    expect(screen.queryByText("Leí y acepto los términos y condiciones")).toBeNull();
+    expect(screen.queryByText("Leí y acepto los términos y condiciones y la política de privacidad")).toBeNull();
   });
 });

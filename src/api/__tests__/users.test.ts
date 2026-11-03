@@ -85,7 +85,12 @@ describe("users api", () => {
 
 describe("términos y condiciones (RN-10)", () => {
   it("getCurrentTerms devuelve la versión vigente", async () => {
-    const terms = { version: "2026-10", text: "t", published_at: "2026-10-22T00:00:00Z" };
+    const terms = {
+      version: "2026-10",
+      published_at: "2026-10-22T00:00:00Z",
+      terms: "t",
+      privacy: "p",
+    };
     mockedApi.get.mockResolvedValueOnce(terms);
 
     await expect(getCurrentTerms()).resolves.toEqual(terms);
