@@ -1,9 +1,9 @@
 # Expo HAS CHANGED
 
-Este proyecto corre **Expo SDK 57** (`expo` 57.0.29, `expo-router` 57.0.27,
-React Native 0.86.3). Leé los docs de esa versión antes de escribir código:
+Este proyecto corre **Expo SDK 58** (`expo` 58.0.21, `expo-router` 58.0.28,
+React Native 0.88.1). Leé los docs de esa versión antes de escribir código:
 
-- https://docs.expo.dev/versions/v57.0.0/
+- https://docs.expo.dev/versions/v58.0.0/
 - Expo Router: https://docs.expo.dev/router/introduction/
 
 Verificá la versión real antes de confiar en este archivo:
@@ -15,6 +15,45 @@ node -e "console.log(require('expo/package.json').version)"
 Si no coincide con lo de arriba, actualizá este archivo: apuntar a los docs de
 otra versión es peor que no tener la nota, porque manda a leer una API que acá no
 existe.
+
+## Cambios de SDK 57 → 58 que rompen código
+
+Migrado el 30 de octubre de 2026, porque Expo Go para iOS se actualizó a 58 y
+Apple no deja instalar una versión anterior.
+
+- **Node 22.13 o más.** `engines` pide `>=22.13.0 <23`, alineado con
+  `.nvmrc` y el CI (C-17, lo controla `nodeVersion.test.ts`). SDK 58 también
+  acepta Node 24, y con ese se hizo la migración; el Node 20 de nvm no sirve.
+- **El encabezado del stack es translúcido por defecto en iOS 26.** El
+  contenido arranca debajo de él y queda tapado. El stack de `(app)` fija
+  `headerTransparent: false` en `screenOptions`; un stack nuevo con
+  encabezado visible necesita lo mismo.
+- **`href: null` en una pestaña la vuelve inalcanzable.** Antes solo sacaba
+  el botón de la barra; ahora expo-router la marca `hidden` y un `push` a esa
+  ruta no hace nada. Para una pestaña que se navega pero no se ve (el detalle
+  del reporte) se usa `tabBarItemStyle: { display: "none" }`. Lo cubre
+  `reportDetailRoute.test.tsx`.
+- **Sin sesión, `/` necesita su propia pantalla.** Con el guard de `(app)` en
+  falso, expo-router 58 ya no manda `/` a la primera pantalla permitida: se ve
+  "Unmatched Route", y es justo la URL con la que abre Expo Go.
+  `app/(auth)/index.tsx` redirige al login.
+- **Los refs de `ScrollView` y `TextInput` se tipan con la instancia:**
+  `useRef<ScrollViewInstance>` y `useRef<TextInputInstance>`, importados como
+  tipos de `react-native`. Los componentes pasaron a ser funciones y
+  `useRef<ScrollView>` ya no tiene `scrollTo`.
+- **`ColorValue` admite `number` y `null`.** `@expo/vector-icons` 15 todavía
+  pide `string`, así que el color que llega a `tabBarIcon` se castea con
+  `iconColor()` en `app/(app)/(tabs)/_layout.tsx`.
+- **`ListEmptyComponent` y `ListFooterComponent` no aceptan `null`:** la rama
+  vacía devuelve `undefined`.
+- **`createBottomTabNavigator` no existe más.** Su reemplazo,
+  `createStandardBottomTabNavigator`, devuelve un descriptor y no un
+  navegador, y `NavigationContainer` ya no se exporta. Para probar un
+  layout de pestañas se usa `renderRouter` de `expo-router/testing-library`
+  (ver `floatingTabBar.test.tsx`).
+- **Jest 30.** Sus tipos son más estrictos con `mockResolvedValue`: el valor
+  tiene que coincidir con el tipo de retorno (`Linking.openURL` devuelve
+  `void`, `Share.share` exige `activityType`).
 
 ## Cambios de SDK 54 → 57 que rompen código
 

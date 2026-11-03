@@ -1,6 +1,6 @@
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable } from "react-native";
+import { Pressable, type ColorValue } from "react-native";
 
 import {
   participatesAsCitizen,
@@ -16,6 +16,11 @@ import {
   formatUnreadBadge,
   useUnread,
 } from "../../../src/notifications/UnreadContext";
+
+// RN 0.88 tipa el color de `tabBarIcon` como `ColorValue`, que admite `number`
+// y `null`; `@expo/vector-icons` 15 todavía pide `string`. El navegador siempre
+// pasa los strings del tema, así que el cast no esconde nada.
+const iconColor = (color: ColorValue) => color as string;
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -76,7 +81,7 @@ export default function TabsLayout() {
               <Ionicons
                 name={focused ? "hammer" : "hammer-outline"}
                 size={25}
-                color={color}
+                color={iconColor(color)}
               />
             ),
           }}
@@ -90,7 +95,7 @@ export default function TabsLayout() {
             headerTitle: "Reportes UrbanCheck",
             tabBarLabel: "Feed",
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? "list" : "list-outline"} size={25} color={color} />
+              <Ionicons name={focused ? "list" : "list-outline"} size={25} color={iconColor(color)} />
             ),
           }}
         />
@@ -100,7 +105,7 @@ export default function TabsLayout() {
             title: "Mapa",
             headerTitle: "Mapa de Incidentes",
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? "map" : "map-outline"} size={25} color={color} />
+              <Ionicons name={focused ? "map" : "map-outline"} size={25} color={iconColor(color)} />
             ),
           }}
         />
@@ -127,7 +132,7 @@ export default function TabsLayout() {
               <Ionicons
                 name={focused ? "shield-checkmark" : "shield-checkmark-outline"}
                 size={25}
-                color={color}
+                color={iconColor(color)}
               />
             ),
           }}
@@ -153,7 +158,7 @@ export default function TabsLayout() {
               <Ionicons
                 name={focused ? "notifications" : "notifications-outline"}
                 size={25}
-                color={color}
+                color={iconColor(color)}
               />
             ),
           }}
@@ -165,18 +170,20 @@ export default function TabsLayout() {
           title: "Perfil",
           headerShown: false,
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={25} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={25} color={iconColor(color)} />
           ),
         }}
       />
-      {/* Fuera de la barra —`href: null`— pero igual detrás del guard: el
-          detalle del feed no es del operario, y sin esto seguiría siendo
-          alcanzable escribiendo la ruta. */}
+      {/* Fuera de la barra pero igual detrás del guard: el detalle del feed no
+          es del operario, y sin esto seguiría siendo alcanzable escribiendo la
+          ruta. Se oculta con `display: "none"` y no con `href: null`: desde
+          expo-router 58 aquello marca la pantalla como `hidden` y la vuelve
+          inalcanzable, y ningún reporte abría su detalle. */}
       <Tabs.Protected guard={!operator}>
         <Tabs.Screen
           name="report/[id]"
           options={{
-            href: null,
+            tabBarItemStyle: { display: "none" },
             headerShown: true,
             headerTitle: "Detalle del reporte",
             headerLeft: () => (

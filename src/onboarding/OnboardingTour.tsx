@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -42,7 +43,7 @@ interface Props {
 export function OnboardingTour({ onFinish, replay = false, steps = ONBOARDING_STEPS }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [index, setIndex] = useState(0);
   const [finishing, setFinishing] = useState(false);
   const isLast = index === steps.length - 1;

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,7 +37,7 @@ export default function ModerationAppealScreen() {
   const router = useRouter();
   const invalidateReports = useInvalidateReports();
   const keyboard = useKeyboardAwareScroll();
-  const reasonField = useRef<TextInput>(null);
+  const reasonField = useRef<TextInputInstance>(null);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<ApiErrorDescription | null>(null);

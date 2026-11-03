@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -58,7 +59,7 @@ export default function CreateReportTab() {
   const [address, setAddress] = useState("");
   // El único campo que sigue adentro del scroll y puede quedar tapado: la
   // dirección se mudó a la barra anclada.
-  const descriptionField = useRef<TextInput>(null);
+  const descriptionField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
   const tabBarInset = useFloatingTabBarInset();
   /**

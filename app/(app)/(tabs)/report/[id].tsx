@@ -9,6 +9,7 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -153,7 +154,7 @@ export default function ReportDetailScreen() {
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [isEnlarged, setIsEnlarged] = useState(false);
   // Los comentarios arrancan a la vista: esconderlos por defecto se lee como
   // que no hay ninguno. El desplegable es para poder achicar la sección cuando

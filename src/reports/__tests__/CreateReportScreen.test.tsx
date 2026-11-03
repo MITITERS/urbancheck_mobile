@@ -205,7 +205,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
 describe("CreateReportTab when the photo still has to be blurred (US-042)", () => {
   /** Lo que el usuario lee tras enviar, sin el diálogo del selector de foto. */
   async function submitAndReadTheConfirmation() {
-    const alerts: { title: string; message?: string }[] = [];
+    const alerts: { title?: string | null; message?: string | null }[] = [];
     mockedCreateReport.mockResolvedValueOnce({ id: 99 } as never);
     renderScreen();
 

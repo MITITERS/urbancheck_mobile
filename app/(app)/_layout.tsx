@@ -11,7 +11,16 @@ export default function AppLayout() {
         // Solo la flecha, sin el nombre de la pantalla anterior. Por defecto
         // iOS lo escribe al lado, y acá ese nombre es el de un grupo de rutas
         // —"(tabs)"—, que no significa nada para quien usa la app.
-        screenOptions={{ headerBackButtonDisplayMode: "minimal" }}
+        //
+        // `headerTransparent: false` porque desde SDK 58 el default en iOS 26
+        // es `true`: el encabezado queda flotando y el contenido arranca debajo
+        // de él. Las pantallas envuelven su ScrollView en un
+        // KeyboardAvoidingView, así que iOS no les corre el margen solo, y el
+        // encabezado tapaba el principio de cada formulario.
+        screenOptions={{
+          headerBackButtonDisplayMode: "minimal",
+          headerTransparent: false,
+        }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ title: "Editar perfil" }} />

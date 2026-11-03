@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useWindowDimensions } from "react-native";
-import type { NativeScrollEvent, NativeSyntheticEvent, ScrollView } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent, ScrollViewInstance } from "react-native";
 
 import { useKeyboardOffset } from "./useKeyboardVisible";
 
@@ -33,7 +33,7 @@ type Measurable = {
  * daría cero.
  */
 export function useKeyboardAwareScroll() {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const scrollOffset = useRef(0);
   const focusedField = useRef<Measurable | null>(null);
   const keyboardOffset = useKeyboardOffset();

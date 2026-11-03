@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -60,7 +61,7 @@ export default function AppealReportScreen() {
   const [notice, setNotice] = useState<ApiErrorDescription | null>(null);
   // Mismo caso que el cierre del operario: el motivo es el último campo y el
   // teclado lo tapa entero.
-  const reasonField = useRef<TextInput>(null);
+  const reasonField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
 
   async function pickPhoto(fromCamera: boolean) {

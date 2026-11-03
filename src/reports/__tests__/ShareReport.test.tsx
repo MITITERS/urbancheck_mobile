@@ -79,7 +79,7 @@ describe("ShareSheet (US-030 E1)", () => {
   });
 
   it("CP-030-M02 · WhatsApp lleva el mensaje con el enlace", async () => {
-    const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+    const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
     const { onClose } = renderSheet();
 
     fireEvent.press(screen.getByLabelText(t.whatsapp));
@@ -94,7 +94,7 @@ describe("ShareSheet (US-030 E1)", () => {
     const open = jest
       .spyOn(Linking, "openURL")
       .mockRejectedValueOnce(new Error("no app"))
-      .mockResolvedValue(true);
+      .mockResolvedValue(undefined);
     renderSheet();
 
     fireEvent.press(screen.getByLabelText(t.whatsapp));
@@ -107,7 +107,7 @@ describe("ShareSheet (US-030 E1)", () => {
   });
 
   it("CP-030-M04 · Instagram abre la hoja del sistema con el enlace", async () => {
-    const share = jest.spyOn(Share, "share").mockResolvedValue({ action: "sharedAction" });
+    const share = jest.spyOn(Share, "share").mockResolvedValue({ action: "sharedAction", activityType: undefined });
     renderSheet();
 
     fireEvent.press(screen.getByLabelText(t.instagram));
