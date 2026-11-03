@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { imageSource } from "../../../src/api/client";
 import { logout } from "../../../src/api/auth";
-import { accountMessages } from "../../../src/messages/account";
 import { onboardingMessages } from "../../../src/messages/onboarding";
 import { useResolvedWork } from "../../../src/queries/operator";
 import { type Report } from "../../../src/api/reports";
@@ -325,19 +324,8 @@ export default function ProfileScreen() {
           label="Cerrar sesión"
           tint="#e53935"
           onPress={handleLogout}
-          last={!isCitizen}
+          last
         />
-        {/* La baja de la cuenta (N-09) es solo del vecino: las cuentas de
-            trabajo siguen con la baja lógica del administrador. */}
-        {isCitizen && (
-          <ActionRow
-            icon="trash-outline"
-            label={accountMessages.profileEntry}
-            tint="#e53935"
-            onPress={() => router.push("/(app)/delete-account")}
-            last
-          />
-        )}
       </View>
 
       {hasHistory && (
@@ -504,7 +492,7 @@ export default function ProfileScreen() {
               </Text>
             </Pressable>
           </View>
-        ) : null
+        ) : undefined
       }
     />
   );

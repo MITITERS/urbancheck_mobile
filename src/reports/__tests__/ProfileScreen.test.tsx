@@ -245,11 +245,12 @@ describe("«Ver tutorial» en el perfil (US-051)", () => {
   });
 });
 
-describe("«Eliminar mi cuenta» en el perfil (N-09)", () => {
-  it("el vecino tiene la opción", async () => {
+describe("«Eliminar mi cuenta» no está en el perfil (N-09)", () => {
+  it("el vecino la encuentra en Editar perfil, no acá", async () => {
     renderProfile();
 
-    expect(await screen.findByText("Eliminar mi cuenta")).toBeTruthy();
+    expect(await screen.findByText("Editar perfil")).toBeTruthy();
+    expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
   });
 
   it("una cuenta de trabajo no: sigue con la baja lógica", async () => {
