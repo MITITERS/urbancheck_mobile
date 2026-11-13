@@ -1,11 +1,5 @@
 [
   {
-    "advisory": "GHSA-86w9-cpqp-85rv",
-    "package": "node-forge",
-    "reason": "Sin versión corregida publicada (1.4.0 es la última y está afectada). Solo la usa @expo/cli para los certificados de firma de código del servidor de desarrollo; no viaja en el bundle de la app.",
-    "reviewed": "2026-10-15"
-  },
-  {
     "advisory": "GHSA-mrhx-c7xc-m3w5",
     "package": "zod",
     "reason": "Corregida solo en 4.6.6, y @expo/cli exige zod ^3.25.76 (3.25.76 es la última 3.x y está afectada). La usan @expo/cli y eslint-plugin-react-hooks en la máquina de desarrollo o en el build; el código de la app no importa zod y no viaja en el bundle.",
