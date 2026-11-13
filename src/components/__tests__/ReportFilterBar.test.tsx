@@ -24,9 +24,9 @@ jest.mock("@expo/vector-icons", () => {
   return { Ionicons: View };
 });
 
-function renderBar(filters: Partial<ReportFilterState> = {}, resultLabel?: string) {
+async function renderBar(filters: Partial<ReportFilterState> = {}, resultLabel?: string) {
   const onChange = jest.fn();
-  render(
+  await render(
     <ReportFilterBar
       filters={{ ...EMPTY_FILTERS, ...filters }}
       onChange={onChange}
@@ -65,7 +65,7 @@ describe("countActiveFilters", () => {
 
 describe("ReportFilterBar, búsqueda", () => {
   it("emite el término escrito conservando el resto del estado", async () => {
-    const { onChange, user } = renderBar({ categories: ["bache"] });
+    const { onChange, user } = await renderBar({ categories: ["bache"] });
 
     await user.type(screen.getByPlaceholderText(/Buscar por palabra clave/), "vereda");
 
@@ -74,14 +74,14 @@ describe("ReportFilterBar, búsqueda", () => {
     );
   });
 
-  it("sin texto no ofrece limpiar la búsqueda", () => {
-    renderBar();
+  it("sin texto no ofrece limpiar la búsqueda", async () => {
+    await renderBar();
 
     expect(screen.queryByLabelText("Limpiar búsqueda")).toBeNull();
   });
 
   it("con texto, limpiar deja la búsqueda vacía sin tocar los chips", async () => {
-    const { onChange, user } = renderBar({ search: "bache", statuses: ["reportado"] });
+    const { onChange, user } = await renderBar({ search: "bache", statuses: ["reportado"] });
 
     await user.press(screen.getByLabelText("Limpiar búsqueda"));
 
@@ -92,22 +92,22 @@ describe("ReportFilterBar, búsqueda", () => {
     });
   });
 
-  it("muestra el texto de resultados cuando la pantalla se lo pasa", () => {
-    renderBar({}, "12 reportes");
+  it("muestra el texto de resultados cuando la pantalla se lo pasa", async () => {
+    await renderBar({}, "12 reportes");
 
     expect(screen.getByText("12 reportes")).toBeTruthy();
   });
 });
 
 describe("ReportFilterBar, panel de chips", () => {
-  it("arranca colapsado: la búsqueda es lo frecuente", () => {
-    renderBar();
+  it("arranca colapsado: la búsqueda es lo frecuente", async () => {
+    await renderBar();
 
     expect(screen.queryByText("Categoría")).toBeNull();
   });
 
   it("se despliega desde el botón de filtros", async () => {
-    const { user } = renderBar();
+    const { user } = await renderBar();
 
     await expand(user);
 
@@ -116,7 +116,7 @@ describe("ReportFilterBar, panel de chips", () => {
   });
 
   it("ofrece las seis categorías", async () => {
-    const { user } = renderBar();
+    const { user } = await renderBar();
 
     await expand(user);
 
@@ -128,7 +128,7 @@ describe("ReportFilterBar, panel de chips", () => {
   it("no ofrece filtrar por estados que el feed nunca muestra", async () => {
     // Cancelado y archivado no viajan en el feed público: ofrecerlos sería
     // ofrecer un filtro que siempre devuelve vacío.
-    const { user } = renderBar();
+    const { user } = await renderBar();
 
     await expand(user);
 
@@ -140,7 +140,7 @@ describe("ReportFilterBar, panel de chips", () => {
   });
 
   it("tocar una categoría la agrega a las ya elegidas", async () => {
-    const { onChange, user } = renderBar({ categories: ["bache"] });
+    const { onChange, user } = await renderBar({ categories: ["bache"] });
     await expand(user);
 
     await user.press(screen.getByText(CATEGORY_LABEL.basura));
@@ -153,7 +153,7 @@ describe("ReportFilterBar, panel de chips", () => {
   });
 
   it("volver a tocarla la quita", async () => {
-    const { onChange, user } = renderBar({ categories: ["bache", "basura"] });
+    const { onChange, user } = await renderBar({ categories: ["bache", "basura"] });
     await expand(user);
 
     await user.press(screen.getByText(CATEGORY_LABEL.bache));
@@ -166,7 +166,7 @@ describe("ReportFilterBar, panel de chips", () => {
   });
 
   it("tocar un estado lo agrega", async () => {
-    const { onChange, user } = renderBar();
+    const { onChange, user } = await renderBar();
     await expand(user);
 
     await user.press(screen.getByText(STATUS_LABEL.en_proceso));
@@ -181,7 +181,7 @@ describe("ReportFilterBar, panel de chips", () => {
 
 describe("ReportFilterBar, limpiar filtros", () => {
   it("sin filtros activos no ofrece limpiarlos", async () => {
-    const { user } = renderBar();
+    const { user } = await renderBar();
     await expand(user);
 
     expect(screen.queryByText("Limpiar filtros")).toBeNull();
@@ -190,7 +190,7 @@ describe("ReportFilterBar, limpiar filtros", () => {
   it("limpiar descarta chips pero conserva la búsqueda escrita", async () => {
     // Son dos cosas distintas: quien buscó «Corrientes» y filtró por bache
     // espera que limpiar los chips no le borre lo que escribió.
-    const { onChange, user } = renderBar({
+    const { onChange, user } = await renderBar({
       search: "Corrientes",
       categories: ["bache"],
       statuses: ["reportado"],

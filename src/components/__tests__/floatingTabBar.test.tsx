@@ -24,7 +24,7 @@ const METRICS: Metrics = {
 // `NavigationContainer`: se monta un router de prueba con el mismo layout de
 // pestañas. El `SafeAreaProvider` va adentro del layout para que sea el más
 // cercano a la barra y no lo pise el que trae el router.
-function renderIsland(badge?: string) {
+async function renderIsland(badge?: string) {
   function Layout() {
     return (
       <SafeAreaProvider initialMetrics={METRICS}>
@@ -45,7 +45,7 @@ function renderIsland(badge?: string) {
       </SafeAreaProvider>
     );
   }
-  return renderRouter({ _layout: Layout, index: Feed, notices: Feed });
+  return await renderRouter({ _layout: Layout, index: Feed, notices: Feed });
 }
 
 function Feed() {
@@ -57,8 +57,8 @@ function Feed() {
  * de contenedores que decide si el badge se ve o se recorta.
  */
 function islandStyle(): Record<string, unknown> {
-  type Node = ReturnType<typeof screen.UNSAFE_getByProps>;
-  let node: Node | null = screen.UNSAFE_getByProps({ role: "tablist" });
+  type Node = (typeof screen.container)["parent"];
+  let node: Node = screen.container.queryAll((n) => n.props.role === "tablist")[0] ?? null;
   const styles: StyleProp<ViewStyle>[] = [];
   while (node) {
     const { style } = node.props as { style?: StyleProp<ViewStyle> };
@@ -132,16 +132,16 @@ function wrapperWith(bottomInset: number) {
 }
 
 describe("useFloatingTabBarBottom", () => {
-  it("respeta la safe area cuando el dispositivo la tiene", () => {
-    const { result } = renderHook(useFloatingTabBarBottom, {
+  it("respeta la safe area cuando el dispositivo la tiene", async () => {
+    const { result } = await renderHook(useFloatingTabBarBottom, {
       wrapper: wrapperWith(34),
     });
 
     expect(result.current).toBe(38); // 34 + 4
   });
 
-  it("usa una separación fija cuando no la tiene", () => {
-    const { result } = renderHook(useFloatingTabBarBottom, {
+  it("usa una separación fija cuando no la tiene", async () => {
+    const { result } = await renderHook(useFloatingTabBarBottom, {
       wrapper: wrapperWith(0),
     });
 
@@ -150,10 +150,10 @@ describe("useFloatingTabBarBottom", () => {
 });
 
 describe("useFloatingTabBarInset", () => {
-  it("reserva el alto de la barra, su separación y el aire", () => {
+  it("reserva el alto de la barra, su separación y el aire", async () => {
     // Es el espacio que una pantalla scrolleable tiene que dejar libre para que
     // su último elemento no quede debajo de la barra flotante.
-    const { result } = renderHook(useFloatingTabBarInset, {
+    const { result } = await renderHook(useFloatingTabBarInset, {
       wrapper: wrapperWith(34),
     });
 
@@ -162,12 +162,12 @@ describe("useFloatingTabBarInset", () => {
     );
   });
 
-  it("siempre deja el contenido por encima de la barra", () => {
+  it("siempre deja el contenido por encima de la barra", async () => {
     for (const bottomInset of [0, 20, 34, 48]) {
-      const { result } = renderHook(useFloatingTabBarInset, {
+      const { result } = await renderHook(useFloatingTabBarInset, {
         wrapper: wrapperWith(bottomInset),
       });
-      const { result: bottom } = renderHook(useFloatingTabBarBottom, {
+      const { result: bottom } = await renderHook(useFloatingTabBarBottom, {
         wrapper: wrapperWith(bottomInset),
       });
 

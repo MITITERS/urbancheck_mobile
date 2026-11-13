@@ -93,8 +93,8 @@ const METRICS: Metrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-function renderMap() {
-  return renderWithProviders(
+async function renderMap() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <MapTab />
     </SafeAreaProvider>,
@@ -137,7 +137,7 @@ beforeEach(() => {
 
 describe("mapa acotado al municipio", () => {
   it("pide los marcadores con la ubicación del vecino", async () => {
-    renderMap();
+    await renderMap();
 
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalledWith(HERE, NO_FILTERS));
   });
@@ -148,7 +148,7 @@ describe("mapa acotado al municipio", () => {
       coverage: { in_coverage: false, municipality: null },
     });
 
-    renderMap();
+    await renderMap();
 
     expect(await screen.findByText(/fuera del área de cobertura/i)).toBeTruthy();
   });
@@ -162,7 +162,7 @@ describe("mapa acotado al municipio", () => {
       },
     });
 
-    renderMap();
+    await renderMap();
 
     expect(
       await screen.findByText("Todavía no hay reportes geolocalizados en Villa María."),
@@ -179,7 +179,7 @@ describe("mapa acotado al municipio", () => {
       canAskAgain: true,
     });
 
-    renderMap();
+    await renderMap();
 
     expect(await screen.findByText(/necesitamos tu ubicación/i)).toBeTruthy();
     expect(mockedListMapReports).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("mapa acotado al municipio", () => {
     });
     mockedListMapReports.mockResolvedValue({ results: [MARKER] });
 
-    renderMap();
+    await renderMap();
 
     // Sin coordenadas en la consulta: su jurisdicción ya la resuelve el
     // servidor. La ubicación se sigue usando para centrar la vista.
@@ -208,10 +208,10 @@ describe("botón de mi ubicación", () => {
     Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: HERE });
     Location.getCurrentPositionAsync.mockResolvedValueOnce({ coords: AHORA });
 
-    renderMap();
+    await renderMap();
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
 
-    await userEvent.press(screen.getByText("Mi ubicación"));
+    await userEvent.press(await screen.findByText("Mi ubicación"));
 
     // Lleva el mapa a la lectura del momento, no a la del arranque: el botón
     // dice "mi ubicación", y la de hace diez minutos ya no lo es.
@@ -233,11 +233,11 @@ describe("botón de mi ubicación", () => {
       canAskAgain: true,
     });
 
-    renderMap();
+    await renderMap();
     await screen.findByText("Mi ubicación");
     Location.requestForegroundPermissionsAsync.mockClear();
 
-    await userEvent.press(screen.getByText("Mi ubicación"));
+    await userEvent.press(await screen.findByText("Mi ubicación"));
 
     await waitFor(() =>
       expect(Location.requestForegroundPermissionsAsync).toHaveBeenCalled(),
@@ -252,7 +252,7 @@ describe("ficha del reporte elegido", () => {
     mockedListMapReports.mockResolvedValue({ results: [MARKER] });
     const user = userEvent.setup();
 
-    renderMap();
+    await renderMap();
     const marker = await screen.findByLabelText("marcador");
 
     // En Android el globo nativo llegaba en blanco y no recibía toques: la
@@ -271,10 +271,10 @@ describe("ficha del reporte elegido", () => {
     // terminar en la misma ficha.
     mockedListMapReports.mockResolvedValue({ results: [MARKER] });
 
-    renderMap();
+    await renderMap();
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
 
-    fireEvent(screen.getByTestId("map"), "markerPress", {
+    await fireEvent(await screen.findByTestId("map"), "markerPress", {
       nativeEvent: { id: String(MARKER.id) },
     });
 
@@ -286,11 +286,11 @@ describe("ficha del reporte elegido", () => {
     // a la vista, el estado del reporte ya está escrito al lado de su color.
     mockedListMapReports.mockResolvedValue({ results: [MARKER] });
 
-    renderMap();
+    await renderMap();
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
-    const legend = screen.getByTestId("legend");
+    const legend = await screen.findByTestId("legend");
 
-    fireEvent(screen.getByTestId("map"), "markerPress", {
+    await fireEvent(await screen.findByTestId("map"), "markerPress", {
       nativeEvent: { id: String(MARKER.id) },
     });
     await screen.findByText("Ver detalle");
@@ -309,9 +309,9 @@ describe("ficha del reporte elegido", () => {
       ],
     });
 
-    renderMap();
+    await renderMap();
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
-    fireEvent(screen.getByTestId("map"), "markerPress", {
+    await fireEvent(await screen.findByTestId("map"), "markerPress", {
       nativeEvent: { id: String(MARKER.id) },
     });
 
@@ -321,16 +321,16 @@ describe("ficha del reporte elegido", () => {
   it("un toque en el mapa no cierra la ficha recién abierta", async () => {
     mockedListMapReports.mockResolvedValue({ results: [MARKER] });
 
-    renderMap();
+    await renderMap();
     await waitFor(() => expect(mockedListMapReports).toHaveBeenCalled());
-    fireEvent(screen.getByTestId("map"), "markerPress", {
+    await fireEvent(await screen.findByTestId("map"), "markerPress", {
       nativeEvent: { id: String(MARKER.id) },
     });
     await screen.findByText("Ver detalle");
 
     // El mismo gesto llega como toque del mapa en algunas plataformas; sin la
     // ventana de gracia, la ficha se abría y se cerraba de una.
-    fireEvent(screen.getByTestId("map"), "press", { nativeEvent: {} });
+    await fireEvent(await screen.findByTestId("map"), "press", { nativeEvent: {} });
 
     expect(screen.getByText("Ver detalle")).toBeTruthy();
   });

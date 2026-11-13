@@ -46,7 +46,7 @@ function signedInAs(profile: UserProfile) {
 describe("«Eliminar mi cuenta» en Editar perfil (N-09)", () => {
   it("el vecino la tiene al pie y lleva a la baja", async () => {
     signedInAs(CITIZEN);
-    renderWithProviders(<EditProfileScreen />);
+    await renderWithProviders(<EditProfileScreen />);
 
     await userEvent.press(await screen.findByText("Eliminar mi cuenta"));
 
@@ -55,7 +55,7 @@ describe("«Eliminar mi cuenta» en Editar perfil (N-09)", () => {
 
   it("una cuenta de trabajo no: sigue con la baja lógica", async () => {
     signedInAs({ ...CITIZEN, role: "operario" });
-    renderWithProviders(<EditProfileScreen />);
+    await renderWithProviders(<EditProfileScreen />);
 
     expect(await screen.findByText("Guardar cambios")).toBeTruthy();
     expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();

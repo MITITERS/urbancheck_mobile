@@ -55,6 +55,28 @@ Apple no deja instalar una versión anterior.
   tiene que coincidir con el tipo de retorno (`Linking.openURL` devuelve
   `void`, `Share.share` exige `activityType`).
 
+## Testing Library 14: render y eventos son async
+
+`@testing-library/react-native` 14 usa `test-renderer` (no `react-test-renderer`)
+y `render`, `renderHook`, `fireEvent`, `act`, `rerender` y `unmount` devuelven
+una Promise: siempre `await`. Lo que hay que saber para no romper la suite:
+
+- **`await render` espera a que los efectos se estabilicen.** Un mock de
+  `useRouter` que devuelve un objeto nuevo por render, con `router` en las
+  dependencias de un efecto, ya no falla: cuelga el test hasta el timeout. El
+  mock tiene que devolver una referencia estable (ver `ShareReport.test.tsx`).
+- **Un string suelto dentro de una `View` lanza** `Text strings must be
+  rendered within a <Text> component`. Los mocks de `Link` envuelven en `Text`.
+- **`UNSAFE_getBy*` no existe.** Para llegar a un host se usa
+  `screen.container.queryAll((n) => ...)` (`n.type`, `n.props`, `n.parent`).
+- **Un componente que lanza al montar ya no lanza síncrono:**
+  `await expect(renderHook(...)).rejects.toThrow(...)`.
+- **Con timers falsos, `findBy`/`waitFor` adelantan el reloj** y se pasan de
+  estados intermedios. Se avanza a mano:
+  `await act(() => jest.advanceTimersByTimeAsync(ms))`.
+- Tras `await render`, una pantalla con datos remotos puede seguir cargando:
+  usar `findBy*` y no `getBy*` para lo que depende de la respuesta.
+
 ## Cambios de SDK 54 → 57 que rompen código
 
 Migrado el 3 de septiembre de 2026. Lo que hay que saber para no reintroducir

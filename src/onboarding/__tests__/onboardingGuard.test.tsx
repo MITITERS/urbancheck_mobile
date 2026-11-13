@@ -71,19 +71,19 @@ function signedInAs(role: UserRole, onboarding: string | null, extra: Partial<Us
 }
 
 describe("guard del tutorial de bienvenida", () => {
-  it("CP-051-M14 (US-051 E1) · un vecino nuevo ve el tutorial antes que el feed", () => {
+  it("CP-051-M14 (US-051 E1) · un vecino nuevo ve el tutorial antes que el feed", async () => {
     signedInAs("ciudadano", null);
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:onboarding")).toBeTruthy();
     expect(screen.queryByText("ruta:(app)")).toBeNull();
   });
 
-  it("CP-051-M15 (US-051 E5, E9) · con la marca puesta entra directo a la app", () => {
+  it("CP-051-M15 (US-051 E5, E9) · con la marca puesta entra directo a la app", async () => {
     signedInAs("ciudadano", "2026-01-01T00:00:00Z");
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:(app)")).toBeTruthy();
     expect(screen.queryByText("ruta:onboarding")).toBeNull();
@@ -91,20 +91,20 @@ describe("guard del tutorial de bienvenida", () => {
 
   it.each<UserRole>(["validador", "operario", "agente_municipal", "admin_plataforma"])(
     "CP-051-M16 (US-051 E8) · una cuenta %s nunca ve el tutorial",
-    (role) => {
+    async (role) => {
       signedInAs(role, null);
 
-      render(<RootLayout />);
+      await render(<RootLayout />);
 
       expect(screen.queryByText("ruta:onboarding")).toBeNull();
       expect(screen.getByText("ruta:(app)")).toBeTruthy();
     },
   );
 
-  it("la contraseña temporal va primero que el tutorial", () => {
+  it("la contraseña temporal va primero que el tutorial", async () => {
     signedInAs("ciudadano", null, { must_change_password: true });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:change-password")).toBeTruthy();
     expect(screen.queryByText("ruta:onboarding")).toBeNull();

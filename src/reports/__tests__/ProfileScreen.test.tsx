@@ -140,8 +140,8 @@ function asOperator(results: ReturnType<typeof work>[]) {
   signedInAs(OPERATOR, { [HISTORY_URL]: page(results) });
 }
 
-function renderProfile() {
-  return renderWithProviders(
+async function renderProfile() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ProfileScreen />
     </SafeAreaProvider>,
@@ -160,7 +160,7 @@ describe("perfil", () => {
         report(3, "resuelto"),
       ]) });
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Mis reportes")).toBeTruthy();
     // El perfil y la lista son **dos consultas independientes**: el encabezado
@@ -177,7 +177,7 @@ describe("perfil", () => {
   });
 
   it("sin reportes, invita a crear el primero", async () => {
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Todavía no reportaste nada")).toBeTruthy();
     expect(screen.getByText("Crear mi primer reporte")).toBeTruthy();
@@ -191,7 +191,7 @@ describe("perfil", () => {
     };
     signedInAs(validator);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Validador")).toBeTruthy();
     expect(screen.queryByText("Mis reportes")).toBeNull();
@@ -206,7 +206,7 @@ describe("perfil", () => {
     respondWith({ [ME_URL]: CITIZEN, [MY_REPORTS_URL]: page([report(1, "reportado")]) });
     const user = userEvent.setup();
 
-    renderProfile();
+    await renderProfile();
     // Arranca desplegada: el reporte se ve sin tocar nada.
     expect(await screen.findByText("Reporte 1")).toBeTruthy();
 
@@ -220,7 +220,7 @@ describe("perfil", () => {
   });
 
   it("las acciones son filas, no botones apretados en una línea", async () => {
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.getByText("Notificaciones")).toBeTruthy();
@@ -230,7 +230,7 @@ describe("perfil", () => {
 
 describe("«Ver tutorial» en el perfil (US-051)", () => {
   it("CP-051-M10 (US-051 E7) · el vecino puede volver a ver el tutorial", async () => {
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Ver tutorial")).toBeTruthy();
   });
@@ -238,7 +238,7 @@ describe("«Ver tutorial» en el perfil (US-051)", () => {
   it("CP-051-M11 (US-051 E8) · una cuenta de trabajo no tiene la opción", async () => {
     asOperator([]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.queryByText("Ver tutorial")).toBeNull();
@@ -247,7 +247,7 @@ describe("«Ver tutorial» en el perfil (US-051)", () => {
 
 describe("«Eliminar mi cuenta» no está en el perfil (N-09)", () => {
   it("el vecino la encuentra en Editar perfil, no acá", async () => {
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
@@ -256,7 +256,7 @@ describe("«Eliminar mi cuenta» no está en el perfil (N-09)", () => {
   it("una cuenta de trabajo no: sigue con la baja lógica", async () => {
     asOperator([]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
@@ -272,7 +272,7 @@ describe("perfil del operario", () => {
   it("lista los trabajos que cerró en vez de reportes propios", async () => {
     asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Trabajos resueltos")).toBeTruthy();
     expect(screen.getByText("Reporte 1")).toBeTruthy();
@@ -295,7 +295,7 @@ describe("perfil del operario", () => {
       work(3, "en_proceso", "2026-09-07T12:00:00Z"),
     ]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Cerrados")).toBeTruthy();
     expect(screen.getByText("A confirmar")).toBeTruthy();
@@ -307,7 +307,7 @@ describe("perfil del operario", () => {
   it("cada fila muestra la fecha de su cierre, no la del reporte", async () => {
     asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText("Cerrado 05/09/2026")).toBeTruthy();
     // 27/08 es el `created_at` del reporte: al operario no le dice nada.
@@ -317,7 +317,7 @@ describe("perfil del operario", () => {
   it("sin cierres, lo manda a su bandeja y no a crear un reporte", async () => {
     asOperator([]);
 
-    renderProfile();
+    await renderProfile();
 
     expect(
       await screen.findByText("Todavía no cerraste ningún trabajo"),
@@ -330,7 +330,7 @@ describe("perfil del operario", () => {
     asOperator([work(1, "resuelto", "2026-09-05T12:00:00Z")]);
     const user = userEvent.setup();
 
-    renderProfile();
+    await renderProfile();
     expect(await screen.findByText("Reporte 1")).toBeTruthy();
 
     await user.press(screen.getByText("Trabajos resueltos"));
@@ -354,7 +354,7 @@ describe("ProfileScreen mientras la imagen se difumina (US-042)", () => {
       ]),
     });
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText(/Procesando imagen/)).toBeTruthy();
     // El publicado no arrastra ningún sufijo.
@@ -369,7 +369,7 @@ describe("ProfileScreen mientras la imagen se difumina (US-042)", () => {
       [MY_REPORTS_URL]: page([report(3, "reportado", "fallida")]),
     });
 
-    renderProfile();
+    await renderProfile();
 
     expect(await screen.findByText(/Sin publicar/)).toBeTruthy();
   });

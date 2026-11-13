@@ -59,8 +59,8 @@ const METRICS: Metrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-function renderDetail() {
-  return renderWithProviders(
+async function renderDetail() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ReportDetailScreen />
     </SafeAreaProvider>,
@@ -140,10 +140,8 @@ function detail(overrides: Partial<ReportDetail> = {}): ReportDetail {
 
 /** Las URLs de las imágenes que la pantalla dibujó, en orden. */
 function renderedPhotos(): string[] {
-  return screen
-    .UNSAFE_getAllByType(
-      (jest.requireActual("react-native") as typeof import("react-native")).Image,
-    )
+  return screen.container
+    .queryAll((node) => node.type === "Image")
     .map((node) => {
       const source = node.props.source as { uri?: string } | undefined;
       return source?.uri ?? "";
@@ -169,7 +167,7 @@ describe("errores al cargar (N-20)", () => {
   it("un 404 al abrirlo dice que no se encontró, sin ofrecer reintentar", async () => {
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Reporte no encontrado.")).toBeTruthy();
     expect(screen.queryByText("Reintentar")).toBeNull();
@@ -179,12 +177,12 @@ describe("errores al cargar (N-20)", () => {
     mockedGet.mockRejectedValueOnce({ status: 500, detail: "Server Error" });
     mockedGet.mockResolvedValue(detail() as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("No pudimos cargar el reporte")).toBeTruthy();
     expect(screen.queryByText("Reporte no encontrado.")).toBeNull();
 
-    fireEvent.press(screen.getByText("Reintentar"));
+    await fireEvent.press(screen.getByText("Reintentar"));
 
     expect(await screen.findByText("Vereda rota")).toBeTruthy();
   });
@@ -193,11 +191,11 @@ describe("errores al cargar (N-20)", () => {
     mockedGet.mockRejectedValueOnce(new Error("Network request failed"));
     mockedGet.mockResolvedValue(detail() as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Sin conexión")).toBeTruthy();
 
-    fireEvent.press(screen.getByText("Reintentar"));
+    await fireEvent.press(screen.getByText("Reintentar"));
 
     expect(await screen.findByText("Vereda rota")).toBeTruthy();
   });
@@ -207,7 +205,7 @@ describe("autor del reporte", () => {
   it("N-09 · si el vecino borró su cuenta dice «Usuario eliminado»", async () => {
     mockedGet.mockResolvedValue(detail({ author: null }) as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(/Usuario eliminado/)).toBeTruthy();
   });
@@ -222,7 +220,7 @@ describe("ubicación del reporte", () => {
       detail({ latitude: "-32.410300", longitude: "-63.240000" }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(/Buenos Aires 100/)).toBeTruthy();
     expect(screen.queryByText(/-32\.410300/)).toBeNull();
@@ -237,7 +235,7 @@ describe("ubicación del reporte", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     // Tres tramos alcanzan para ubicarlo; el resto empuja el alto sin informar.
     expect(await screen.findByText(/442, La Rioja, General Güemes/)).toBeTruthy();
@@ -249,7 +247,7 @@ describe("ubicación del reporte", () => {
       detail({ address: "", latitude: "-32.410300", longitude: "-63.240000" }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(/-32\.410300/)).toBeTruthy();
   });
@@ -296,7 +294,7 @@ describe("hilo de resolución del detalle", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
     await screen.findByText("Primer cierre.");
 
     // La objeción queda **entre** los dos cierres, no al final.
@@ -315,7 +313,7 @@ describe("hilo de resolución del detalle", () => {
 
 
   it("muestra la foto del cierre y la de la objeción, para poder compararlas", async () => {
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Se repuso la baldosa.")).toBeTruthy();
     expect(screen.getByText("Sigue igual.")).toBeTruthy();
@@ -343,7 +341,7 @@ describe("hilo de resolución del detalle", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Sigue igual.")).toBeTruthy();
     expect(renderedPhotos()).not.toContain(APPEAL_PHOTO);
@@ -380,7 +378,7 @@ describe("respuestas oficiales en el detalle del vecino", () => {
       detail({ official_responses: [RESPONSES[0]], has_official_response: true }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
     expect(screen.getByText(RESPONSES[0].text)).toBeTruthy();
@@ -393,7 +391,7 @@ describe("respuestas oficiales en el detalle del vecino", () => {
       detail({ official_responses: RESPONSES, has_official_response: true }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(RESPONSES[0].text)).toBeTruthy();
     expect(screen.getByText(RESPONSES[1].text)).toBeTruthy();
@@ -417,7 +415,7 @@ describe("respuestas oficiales en el detalle del vecino", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     // Cada uno bajo su propio título: el compromiso del municipio no queda
     // colgando del listado de comentarios.
@@ -431,7 +429,7 @@ describe("respuestas oficiales en el detalle del vecino", () => {
   it("un reporte sin respuestas no deja el bloque vacío en la pantalla", async () => {
     mockedGet.mockResolvedValue(detail({ official_responses: [] }) as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Vereda rota")).toBeTruthy();
     expect(screen.queryByText("Respuestas oficiales")).toBeNull();
@@ -440,33 +438,33 @@ describe("respuestas oficiales en el detalle del vecino", () => {
 
 describe("foto del reporte en el detalle", () => {
   it("el indicador de carga se va cuando la foto termina de cargar", async () => {
-    renderDetail();
+    await renderDetail();
 
     const photo = await screen.findByLabelText("Foto del reporte");
     expect(screen.getByTestId("photo-loading")).toBeTruthy();
 
-    fireEvent(photo, "loadEnd");
+    await fireEvent(photo, "loadEnd");
 
     expect(screen.queryByTestId("photo-loading")).toBeNull();
   });
 
   it("aunque nunca llegue onLoad, onLoadEnd no la deja tapada", async () => {
-    renderDetail();
+    await renderDetail();
 
     const photo = await screen.findByLabelText("Foto del reporte");
-    fireEvent(photo, "loadStart");
-    fireEvent(photo, "loadEnd");
+    await fireEvent(photo, "loadStart");
+    await fireEvent(photo, "loadEnd");
 
     expect(screen.queryByTestId("photo-loading")).toBeNull();
   });
 
   it("si la foto no carga, lo dice en lugar de quedar girando", async () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
-    renderDetail();
+    await renderDetail();
 
     const photo = await screen.findByLabelText("Foto del reporte");
-    fireEvent(photo, "error", { nativeEvent: { error: "HTTP 404" } });
-    fireEvent(photo, "loadEnd");
+    await fireEvent(photo, "error", { nativeEvent: { error: "HTTP 404" } });
+    await fireEvent(photo, "loadEnd");
 
     expect(screen.getByText("No pudimos cargar la foto")).toBeTruthy();
     expect(screen.queryByTestId("photo-loading")).toBeNull();

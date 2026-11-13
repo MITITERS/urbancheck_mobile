@@ -47,7 +47,7 @@ it("desde el feed se abre el detalle de un reporte", async () => {
   );
   await screen.findByText("FEED");
 
-  act(() => router.push("/(tabs)/report/5"));
+  await act(() => router.push("/(tabs)/report/5"));
 
   expect(await screen.findByText("DETALLE")).toBeTruthy();
   expect(result.getPathname()).toBe("/report/5");

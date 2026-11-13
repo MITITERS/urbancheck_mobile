@@ -26,8 +26,8 @@ Escribinos a [soporte](mailto:soporte@example.com).
 `;
 
 describe("Markdown", () => {
-  it("dibuja los elementos sin dejar marcas a la vista", () => {
-    render(<Markdown>{SAMPLE}</Markdown>);
+  it("dibuja los elementos sin dejar marcas a la vista", async () => {
+    await render(<Markdown>{SAMPLE}</Markdown>);
 
     expect(screen.getByText("Título")).toBeTruthy();
     expect(screen.getByText("negrita")).toBeTruthy();
@@ -41,16 +41,16 @@ describe("Markdown", () => {
     expect(screen.queryByText(/\*\*|^#|\|/)).toBeNull();
   });
 
-  it("abre los enlaces", () => {
+  it("abre los enlaces", async () => {
     const open = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
-    render(<Markdown>{SAMPLE}</Markdown>);
+    await render(<Markdown>{SAMPLE}</Markdown>);
 
-    fireEvent.press(screen.getByText("soporte"));
+    await fireEvent.press(screen.getByText("soporte"));
 
     expect(open).toHaveBeenCalledWith("mailto:soporte@example.com");
   });
 
-  it("los documentos del backend se interpretan sin restos de Markdown", () => {
+  it("los documentos del backend se interpretan sin restos de Markdown", async () => {
     // Los archivos reales, si el backend está al lado: es lo que se publica.
     const legal = resolve(__dirname, "../../../../urbancheck_backend/urbancheck/legal/1.0");
     let files: string[];
@@ -62,9 +62,9 @@ describe("Markdown", () => {
       return; // El repo móvil solo, sin el backend al lado (por ejemplo, en CI).
     }
     for (const text of files) {
-      const { unmount } = render(<Markdown>{text}</Markdown>);
+      const { unmount } = await render(<Markdown>{text}</Markdown>);
       expect(screen.queryByText(/\*\*|^#{1,6} |^\|/)).toBeNull();
-      unmount();
+      await unmount();
     }
   });
 });

@@ -22,8 +22,8 @@ function wrapper({ children }: { children: ReactNode }) {
   return <UnreadProvider>{children}</UnreadProvider>;
 }
 
-function renderUnread() {
-  return renderHook(useUnread, { wrapper });
+async function renderUnread() {
+  return await renderHook(useUnread, { wrapper });
 }
 
 beforeEach(() => {
@@ -54,7 +54,7 @@ describe("UnreadProvider", () => {
   it("le pregunta el contador al backend al montarse", async () => {
     mockedGetUnreadCount.mockResolvedValue({ unread: 7 });
 
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
 
     await waitFor(() => expect(result.current.unread).toBe(7));
   });
@@ -62,7 +62,7 @@ describe("UnreadProvider", () => {
   it("no rompe si el pedido falla: deja el contador como estaba", async () => {
     mockedGetUnreadCount.mockRejectedValue(new Error("sin red"));
 
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
 
     await waitFor(() => expect(mockedGetUnreadCount).toHaveBeenCalled());
     expect(result.current.unread).toBe(0);
@@ -70,29 +70,29 @@ describe("UnreadProvider", () => {
 
   it("descuenta de a uno al abrir un aviso, sin esperar al servidor", async () => {
     mockedGetUnreadCount.mockResolvedValue({ unread: 3 });
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
     await waitFor(() => expect(result.current.unread).toBe(3));
 
-    act(() => result.current.applyUnreadDelta(-1));
+    await act(() => result.current.applyUnreadDelta(-1));
 
     expect(result.current.unread).toBe(2);
   });
 
   it("nunca baja de cero", async () => {
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
     await waitFor(() => expect(mockedGetUnreadCount).toHaveBeenCalled());
 
-    act(() => result.current.applyUnreadDelta(-5));
+    await act(() => result.current.applyUnreadDelta(-5));
 
     expect(result.current.unread).toBe(0);
   });
 
   it("lo pone en cero al marcar todo", async () => {
     mockedGetUnreadCount.mockResolvedValue({ unread: 12 });
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
     await waitFor(() => expect(result.current.unread).toBe(12));
 
-    act(() => result.current.clearUnread());
+    await act(() => result.current.clearUnread());
 
     expect(result.current.unread).toBe(0);
   });
@@ -108,9 +108,9 @@ describe("UnreadProvider", () => {
       }),
     );
 
-    const { result } = renderUnread();
-    act(() => result.current.applyUnreadDelta(2));
-    act(() => resolvePending({ unread: 3 }));
+    const { result } = await renderUnread();
+    await act(() => result.current.applyUnreadDelta(2));
+    await act(() => resolvePending({ unread: 3 }));
 
     await waitFor(() => expect(result.current.unread).toBe(2));
   });
@@ -125,11 +125,11 @@ describe("UnreadProvider", () => {
       });
 
     mockedGetUnreadCount.mockResolvedValue({ unread: 1 });
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
     await waitFor(() => expect(result.current.unread).toBe(1));
 
     mockedGetUnreadCount.mockResolvedValue({ unread: 4 });
-    act(() => listeners.forEach((listener) => listener("active")));
+    await act(() => listeners.forEach((listener) => listener("active")));
 
     await waitFor(() => expect(result.current.unread).toBe(4));
     spy.mockRestore();
@@ -144,10 +144,10 @@ describe("UnreadProvider", () => {
         return { remove: jest.fn() } as never;
       });
 
-    const { result } = renderUnread();
+    const { result } = await renderUnread();
     await waitFor(() => expect(mockedGetUnreadCount).toHaveBeenCalledTimes(1));
 
-    act(() => listeners.forEach((listener) => listener("background")));
+    await act(() => listeners.forEach((listener) => listener("background")));
 
     expect(mockedGetUnreadCount).toHaveBeenCalledTimes(1);
     expect(result.current.unread).toBe(0);

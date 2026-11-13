@@ -53,7 +53,7 @@ function permission({ granted = false, canAskAgain = true } = {}) {
 }
 
 async function mount() {
-  render(<Probe />);
+  await render(<Probe />);
   await waitFor(() =>
     expect(screen.getByTestId("permission")).not.toHaveTextContent("checking"),
   );
