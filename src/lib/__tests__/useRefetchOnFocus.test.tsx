@@ -41,7 +41,7 @@ const FEED_KEY = ["reportes", "list", {}] as const;
  * alcanza consultas que algún componente esté mirando: sin el `useQuery`
  * montado, el test pasaría sin probar nada.
  */
-function mountFeedWith(
+async function mountFeedWith(
   watched: readonly unknown[],
   staleTime: number,
   queryFn: jest.Mock,
@@ -50,7 +50,7 @@ function mountFeedWith(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime } },
   });
-  const view = renderHook(
+  const view = await renderHook(
     () => {
       useQuery({ queryKey: FEED_KEY, queryFn });
       useRefetchOnFocus(watched, { pollMs });
@@ -67,7 +67,7 @@ beforeEach(() => {
 describe("useRefetchOnFocus", () => {
   it("no pide nada si el dato todavía está fresco", async () => {
     const queryFn = jest.fn().mockResolvedValue({ results: [] });
-    mountFeedWith(["reportes", "list"], 30_000, queryFn);
+    await mountFeedWith(["reportes", "list"], 30_000, queryFn);
     await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
     focusScreen();
@@ -80,7 +80,7 @@ describe("useRefetchOnFocus", () => {
   it("refresca lo que ya venció", async () => {
     const queryFn = jest.fn().mockResolvedValue({ results: [] });
     // `staleTime: 0` deja el dato vencido apenas se resuelve.
-    mountFeedWith(["reportes", "list"], 0, queryFn);
+    await mountFeedWith(["reportes", "list"], 0, queryFn);
     await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
     focusScreen();
@@ -90,7 +90,7 @@ describe("useRefetchOnFocus", () => {
 
   it("no toca consultas de otro dominio", async () => {
     const queryFn = jest.fn().mockResolvedValue({ results: [] });
-    mountFeedWith(["notificaciones", "list"], 0, queryFn);
+    await mountFeedWith(["notificaciones", "list"], 0, queryFn);
     await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
     focusScreen();
@@ -108,7 +108,7 @@ describe("useRefetchOnFocus", () => {
       // caché: el dato "fresco" puede estar mostrando algo que ya se ocultó.
       jest.useFakeTimers();
       const queryFn = jest.fn().mockResolvedValue({ results: [] });
-      mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
+      await mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
       await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
       focusScreen();
@@ -120,7 +120,7 @@ describe("useRefetchOnFocus", () => {
     it("deja de pedir al salir de la pantalla", async () => {
       jest.useFakeTimers();
       const queryFn = jest.fn().mockResolvedValue({ results: [] });
-      mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
+      await mountFeedWith(["reportes", "list"], 30_000, queryFn, 30_000);
       await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
       const leave = focusScreen();

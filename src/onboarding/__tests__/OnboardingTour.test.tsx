@@ -17,9 +17,9 @@ const METRICS: Metrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
-function renderTour(props: Partial<Parameters<typeof OnboardingTour>[0]> = {}) {
+async function renderTour(props: Partial<Parameters<typeof OnboardingTour>[0]> = {}) {
   const onFinish = props.onFinish ?? jest.fn();
-  render(
+  await render(
     <SafeAreaProvider initialMetrics={METRICS}>
       <OnboardingTour onFinish={onFinish} {...props} />
     </SafeAreaProvider>,
@@ -28,8 +28,8 @@ function renderTour(props: Partial<Parameters<typeof OnboardingTour>[0]> = {}) {
 }
 
 describe("OnboardingTour", () => {
-  it("CP-051-M01 (US-051) · tiene los cuatro pasos de la historia, en orden", () => {
-    renderTour();
+  it("CP-051-M01 (US-051) · tiene los cuatro pasos de la historia, en orden", async () => {
+    await renderTour();
 
     expect(ONBOARDING_STEPS).toHaveLength(4);
     for (const step of ONBOARDING_STEPS) {
@@ -41,7 +41,7 @@ describe("OnboardingTour", () => {
 
   it("CP-051-M02 (US-051 E2) · avanza y retrocede con los botones e indica el paso", async () => {
     const user = userEvent.setup();
-    renderTour();
+    await renderTour();
 
     expect(screen.queryByText("Anterior")).toBeNull();
     await user.press(screen.getByText("Siguiente"));
@@ -50,10 +50,10 @@ describe("OnboardingTour", () => {
     expect(screen.getByText("Paso 1 de 4")).toBeTruthy();
   });
 
-  it("CP-051-M03 (US-051 E2) · deslizar también cambia de paso", () => {
-    renderTour();
+  it("CP-051-M03 (US-051 E2) · deslizar también cambia de paso", async () => {
+    await renderTour();
 
-    fireEvent(screen.getByTestId("onboarding-pager"), "momentumScrollEnd", {
+    await fireEvent(screen.getByTestId("onboarding-pager"), "momentumScrollEnd", {
       nativeEvent: { contentOffset: { x: Dimensions.get("window").width * 2, y: 0 } },
     });
 
@@ -62,7 +62,7 @@ describe("OnboardingTour", () => {
 
   it("CP-051-M04 (US-051 E3) · en el último paso Empezar reemplaza a Omitir y cierra", async () => {
     const user = userEvent.setup();
-    const { onFinish } = renderTour();
+    const { onFinish } = await renderTour();
 
     for (let i = 0; i < 3; i += 1) {
       expect(screen.getByText("Omitir")).toBeTruthy();
@@ -77,7 +77,7 @@ describe("OnboardingTour", () => {
 
   it("CP-051-M05 (US-051 E4) · Omitir desde cualquier paso sale igual que terminar", async () => {
     const user = userEvent.setup();
-    const { onFinish } = renderTour();
+    const { onFinish } = await renderTour();
 
     await user.press(screen.getByText("Siguiente"));
     await user.press(screen.getByText("Omitir"));
@@ -87,7 +87,7 @@ describe("OnboardingTour", () => {
 
   it("CP-051-M06 (US-051 E7) · al volver a verlo no hay Omitir, se cierra", async () => {
     const user = userEvent.setup();
-    const { onFinish } = renderTour({ replay: true });
+    const { onFinish } = await renderTour({ replay: true });
 
     expect(screen.queryByText("Omitir")).toBeNull();
     await user.press(screen.getByLabelText("Cerrar"));

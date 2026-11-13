@@ -36,15 +36,15 @@ const EXISTING: ExistingReport = {
   distance_meters: 12,
 };
 
-function renderModal(report: ExistingReport | null = EXISTING) {
+async function renderModal(report: ExistingReport | null = EXISTING) {
   const handlers = { onJoin: jest.fn(), onOpen: jest.fn(), onBack: jest.fn() };
-  render(<ExistingReportModal report={report} {...handlers} />);
+  await render(<ExistingReportModal report={report} {...handlers} />);
   return handlers;
 }
 
 describe("ExistingReportModal (US-032)", () => {
-  it("CP-032-M01 (US-032 E1) · shows the existing report card", () => {
-    renderModal();
+  it("CP-032-M01 (US-032 E1) · shows the existing report card", async () => {
+    await renderModal();
 
     expect(screen.getByText("Este problema ya fue reportado")).toBeTruthy();
     expect(screen.getByText("Bache")).toBeTruthy();
@@ -53,13 +53,13 @@ describe("ExistingReportModal (US-032)", () => {
     expect(screen.getByText("3 vecinos lo apoyan")).toBeTruthy();
   });
 
-  it("CP-032-M02 (US-032 E1) · never calls it a duplicate", () => {
+  it("CP-032-M02 (US-032 E1) · never calls it a duplicate", async () => {
     for (const report of [
       EXISTING,
       { ...EXISTING, is_liked: true },
       { ...EXISTING, is_author: true },
     ]) {
-      const { unmount } = render(
+      const { unmount } = await render(
         <ExistingReportModal
           report={report}
           onJoin={jest.fn()}
@@ -68,12 +68,12 @@ describe("ExistingReportModal (US-032)", () => {
         />,
       );
       expect(screen.queryByText(/duplicad/i)).toBeNull();
-      unmount();
+      await unmount();
     }
   });
 
   it("CP-032-M03 (US-032 E2) · offers to join and joins", async () => {
-    const { onJoin } = renderModal();
+    const { onJoin } = await renderModal();
 
     await userEvent.press(screen.getByText("Sumar mi apoyo"));
 
@@ -81,7 +81,7 @@ describe("ExistingReportModal (US-032)", () => {
   });
 
   it("CP-032-M04 (US-032 E3) · goes back to the form without joining", async () => {
-    const { onBack, onJoin } = renderModal();
+    const { onBack, onJoin } = await renderModal();
 
     await userEvent.press(screen.getByText("Volver"));
 
@@ -90,7 +90,7 @@ describe("ExistingReportModal (US-032)", () => {
   });
 
   it("CP-032-M05 (US-032 E4) · does not offer to join to someone already supporting it", async () => {
-    const { onOpen } = renderModal({ ...EXISTING, is_liked: true });
+    const { onOpen } = await renderModal({ ...EXISTING, is_liked: true });
 
     expect(screen.getByText("Ya estás apoyando este reclamo")).toBeTruthy();
     expect(screen.queryByText("Sumar mi apoyo")).toBeNull();
@@ -100,7 +100,7 @@ describe("ExistingReportModal (US-032)", () => {
   });
 
   it("CP-032-M06 (US-032 E5) · takes the author to their own report without offering to join", async () => {
-    const { onOpen } = renderModal({ ...EXISTING, is_author: true });
+    const { onOpen } = await renderModal({ ...EXISTING, is_author: true });
 
     expect(screen.getByText("Ya reportaste este problema")).toBeTruthy();
     expect(screen.queryByText("Sumar mi apoyo")).toBeNull();
@@ -109,8 +109,8 @@ describe("ExistingReportModal (US-032)", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("renders nothing without a report", () => {
-    renderModal(null);
+  it("renders nothing without a report", async () => {
+    await renderModal(null);
 
     expect(screen.queryByTestId("existing-report")).toBeNull();
   });

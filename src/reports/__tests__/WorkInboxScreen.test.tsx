@@ -73,8 +73,8 @@ const METRICS: Metrics = {
 };
 
 /** La bandeja reserva el espacio de la barra flotante: necesita las insets. */
-function renderInbox() {
-  return renderWithProviders(
+async function renderInbox() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <WorkInboxScreen />
     </SafeAreaProvider>,
@@ -89,7 +89,7 @@ describe("bandeja del operario", () => {
   it("muestra los trabajos con lo que hace falta para llegar al lugar", async () => {
     mockedList.mockResolvedValue(response({ count: 1, results: [WORK] }));
 
-    renderInbox();
+    await renderInbox();
 
     expect(await screen.findByText("Bache")).toBeTruthy();
     expect(screen.getByText(WORK.address)).toBeTruthy();
@@ -100,7 +100,7 @@ describe("bandeja del operario", () => {
     // Escenario 2: lo que importa es hace cuánto está esperando el área.
     mockedList.mockResolvedValue(response({ count: 1, results: [WORK] }));
 
-    renderInbox();
+    await renderInbox();
 
     expect(
       await screen.findByText(/Asignado el 27\/8\/2026/),
@@ -111,7 +111,7 @@ describe("bandeja del operario", () => {
     // Escenario 9: una lista vacía no distingue "no hay trabajo" de un error.
     mockedList.mockResolvedValue(response());
 
-    renderInbox();
+    await renderInbox();
 
     expect(await screen.findByText("No hay trabajos pendientes")).toBeTruthy();
   });
@@ -124,7 +124,7 @@ describe("bandeja del operario", () => {
       detail: "Tu área operativa dejó de operar.",
     });
 
-    renderInbox();
+    await renderInbox();
 
     await waitFor(() =>
       expect(screen.getByText("Tu área operativa dejó de operar.")).toBeTruthy(),
@@ -134,9 +134,9 @@ describe("bandeja del operario", () => {
   it("abre el detalle por la ruta del operario, no por la del feed", async () => {
     // La del feed le responde 403: su superficie es otra (escenario 8).
     mockedList.mockResolvedValue(response({ count: 1, results: [WORK] }));
-    renderInbox();
+    await renderInbox();
 
-    fireEvent.press(await screen.findByLabelText("Trabajo Bache"));
+    await fireEvent.press(await screen.findByLabelText("Trabajo Bache"));
 
     expect(mockedPush).toHaveBeenCalledWith("/(app)/work-report/7");
   });

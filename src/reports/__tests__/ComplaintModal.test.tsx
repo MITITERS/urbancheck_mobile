@@ -69,8 +69,8 @@ const onClose = jest.fn();
 const onSubmitted = jest.fn();
 let alert: jest.SpyInstance;
 
-function renderModal(reportId: number | null = 7) {
-  return renderWithProviders(
+async function renderModal(reportId: number | null = 7) {
+  return await renderWithProviders(
     <ComplaintModal reportId={reportId} onClose={onClose} onSubmitted={onSubmitted} />,
   );
 }
@@ -82,7 +82,7 @@ function lastAlert(): [string, string, AlertButton[]] {
 
 async function send() {
   await act(async () => {
-    fireEvent.press(screen.getByText("Enviar denuncia"));
+    await fireEvent.press(screen.getByText("Enviar denuncia"));
   });
 }
 
@@ -93,7 +93,7 @@ beforeEach(() => {
 
 describe("Denunciar un reporte (US-021)", () => {
   it("CP-021-M01 (US-021 E2) · ofrece los tres motivos que manda el servidor", async () => {
-    renderModal();
+    await renderModal();
 
     for (const reason of REASONS) {
       expect(await screen.findByText(reason.label)).toBeTruthy();
@@ -101,15 +101,15 @@ describe("Denunciar un reporte (US-021)", () => {
     expect(mockedGet).toHaveBeenCalledWith("/api/reports/complaint-reasons/");
   });
 
-  it("cerrado, no pide los motivos ni dibuja nada", () => {
-    renderModal(null);
+  it("cerrado, no pide los motivos ni dibuja nada", async () => {
+    await renderModal(null);
 
     expect(mockedGet).not.toHaveBeenCalled();
     expect(screen.queryByText("Enviar denuncia")).toBeNull();
   });
 
   it("CP-021-M02 (US-021 E4) · sin motivo no manda nada y dice que es obligatorio", async () => {
-    renderModal();
+    await renderModal();
     await screen.findByText("Reporte falso o inexistente");
 
     await send();
@@ -120,20 +120,20 @@ describe("Denunciar un reporte (US-021)", () => {
   });
 
   it("CP-021-M03 (US-021 E4) · al elegir un motivo se va el aviso de que faltaba", async () => {
-    renderModal();
+    await renderModal();
     await screen.findByText("Reporte falso o inexistente");
     await send();
 
-    fireEvent.press(screen.getByText("Reporte falso o inexistente"));
+    await fireEvent.press(screen.getByText("Reporte falso o inexistente"));
 
     expect(screen.queryByText(REASON_REQUIRED_MESSAGE)).toBeNull();
   });
 
   it("CP-021-M04 (US-021 E1) · con el motivo solo, denuncia sin comentario", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
+    await fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
     await send();
 
     expect(mockedPost).toHaveBeenCalledWith("/api/reports/7/complaints/", {
@@ -143,10 +143,10 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("CP-021-M05 (US-021 E1) · manda el comentario cuando se escribe uno", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Contenido inapropiado u ofensivo"));
-    fireEvent.changeText(
+    await fireEvent.press(await screen.findByText("Contenido inapropiado u ofensivo"));
+    await fireEvent.changeText(
       screen.getByLabelText("Comentario (opcional)"),
       "Insulta a un vecino.",
     );
@@ -160,9 +160,9 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("CP-021-M06 (US-021 E3) · una denuncia de contenido confirma la revisión del municipio", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
+    await fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
     await send();
 
     const [title, message] = lastAlert();
@@ -174,9 +174,9 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("CP-021-M07 (US-021 E3) · CP-043-M01 (US-043 E1) · una de dato personal confirma el plazo de 24 horas", async () => {
     mockedPost.mockResolvedValue(PLATFORM_RECEIPT);
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Dato personal visible"));
+    await fireEvent.press(await screen.findByText("Dato personal visible"));
     await send();
 
     expect(lastAlert()[1]).toMatch(/24 horas/);
@@ -184,13 +184,13 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("avisa a la pantalla recién cuando se cierra la confirmación", async () => {
     mockedPost.mockResolvedValue(PLATFORM_RECEIPT);
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Dato personal visible"));
+    await fireEvent.press(await screen.findByText("Dato personal visible"));
     await send();
     expect(onSubmitted).not.toHaveBeenCalled();
 
-    act(() => {
+    await act(() => {
       lastAlert()[2][0]?.onPress?.();
     });
 
@@ -199,15 +199,15 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("solo la de dato personal refresca los reportes: es la única que oculta", async () => {
     mockedPost.mockResolvedValue(MUNICIPAL_RECEIPT);
-    const { queryClient } = renderModal();
+    const { queryClient } = await renderModal();
     const invalidate = jest.spyOn(queryClient, "invalidateQueries");
 
-    fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
+    await fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
     await send();
     expect(invalidate).not.toHaveBeenCalled();
 
     mockedPost.mockResolvedValue(PLATFORM_RECEIPT);
-    fireEvent.press(screen.getByText("Dato personal visible"));
+    await fireEvent.press(screen.getByText("Dato personal visible"));
     await send();
     expect(invalidate).toHaveBeenCalledWith({ queryKey: reportKeys.all });
   });
@@ -218,9 +218,9 @@ describe("Denunciar un reporte (US-021)", () => {
       code: "complaint_already_filed",
       detail: "Ya denunciaste este reporte por ese motivo.",
     });
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
+    await fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
     await send();
 
     const [title, message] = lastAlert();
@@ -231,9 +231,9 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("un error cualquiera deja el formulario abierto para reintentar", async () => {
     mockedPost.mockRejectedValue(new Error("Network request failed"));
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
+    await fireEvent.press(await screen.findByText("Reporte falso o inexistente"));
     await send();
 
     expect(alert).toHaveBeenCalled();
@@ -243,9 +243,9 @@ describe("Denunciar un reporte (US-021)", () => {
 
   it("si los motivos no cargan, ofrece reintentar", async () => {
     mockedGet.mockRejectedValueOnce({ status: 500 });
-    renderModal();
+    await renderModal();
 
-    fireEvent.press(await screen.findByText("Reintentar"));
+    await fireEvent.press(await screen.findByText("Reintentar"));
 
     await waitFor(() =>
       expect(screen.getByText("Reporte falso o inexistente")).toBeTruthy(),

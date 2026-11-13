@@ -61,8 +61,8 @@ function page(results: Notification[]): PaginatedNotifications {
   return { count: results.length, next: null, previous: null, results };
 }
 
-function renderNotices() {
-  return renderWithProviders(
+async function renderNotices() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <NoticesTab />
     </SafeAreaProvider>,
@@ -95,7 +95,7 @@ describe("bandeja de avisos", () => {
       ]),
     );
 
-    renderNotices();
+    await renderNotices();
 
     expect(await screen.findByText("El municipio respondió.")).toBeTruthy();
     expect(screen.getByText("Un vecino objetó el cierre.")).toBeTruthy();
@@ -113,7 +113,7 @@ describe("bandeja de avisos", () => {
       ]),
     );
 
-    renderNotices();
+    await renderNotices();
 
     await waitFor(() =>
       expect(

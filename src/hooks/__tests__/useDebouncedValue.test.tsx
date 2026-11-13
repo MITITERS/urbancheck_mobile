@@ -16,95 +16,95 @@ afterEach(() => {
 });
 
 describe("useDebouncedValue", () => {
-  it("returns the initial value straight away", () => {
-    const { result } = renderHook(() => useDebouncedValue("bache"));
+  it("returns the initial value straight away", async () => {
+    const { result } = await renderHook(() => useDebouncedValue("bache"));
     expect(result.current).toBe("bache");
   });
 
-  it("does not expose the new value before the delay elapses", () => {
-    const { result, rerender } = renderHook<string, { value: string }>(
+  it("does not expose the new value before the delay elapses", async () => {
+    const { result, rerender } = await renderHook<string, { value: string }>(
       ({ value }) => useDebouncedValue(value, 400),
       { initialProps: { value: "" } },
     );
 
-    rerender({ value: "b" });
-    act(() => {
+    await rerender({ value: "b" });
+    await act(() => {
       jest.advanceTimersByTime(399);
     });
 
     expect(result.current).toBe("");
   });
 
-  it("exposes the value once the delay elapses", () => {
-    const { result, rerender } = renderHook<string, { value: string }>(
+  it("exposes the value once the delay elapses", async () => {
+    const { result, rerender } = await renderHook<string, { value: string }>(
       ({ value }) => useDebouncedValue(value, 400),
       { initialProps: { value: "" } },
     );
 
-    rerender({ value: "bache" });
-    act(() => {
+    await rerender({ value: "bache" });
+    await act(() => {
       jest.advanceTimersByTime(400);
     });
 
     expect(result.current).toBe("bache");
   });
 
-  it("keystrokes in a row settle on the last one only", () => {
-    const { result, rerender } = renderHook<string, { value: string }>(
+  it("keystrokes in a row settle on the last one only", async () => {
+    const { result, rerender } = await renderHook<string, { value: string }>(
       ({ value }) => useDebouncedValue(value, 400),
       { initialProps: { value: "" } },
     );
 
     for (const value of ["b", "ba", "bac", "bach", "bache"]) {
-      rerender({ value });
-      act(() => {
+      await rerender({ value });
+      await act(() => {
         jest.advanceTimersByTime(100);
       });
     }
     expect(result.current).toBe("");
 
-    act(() => {
+    await act(() => {
       jest.advanceTimersByTime(400);
     });
     expect(result.current).toBe("bache");
   });
 
-  it("clearing the box also goes through the debounce", () => {
-    const { result, rerender } = renderHook<string, { value: string }>(
+  it("clearing the box also goes through the debounce", async () => {
+    const { result, rerender } = await renderHook<string, { value: string }>(
       ({ value }) => useDebouncedValue(value, 400),
       { initialProps: { value: "bache" } },
     );
 
-    rerender({ value: "" });
-    act(() => {
+    await rerender({ value: "" });
+    await act(() => {
       jest.advanceTimersByTime(400);
     });
 
     expect(result.current).toBe("");
   });
 
-  it("cancels the pending timer when unmounted", () => {
+  it("cancels the pending timer when unmounted", async () => {
     const clearSpy = jest.spyOn(global, "clearTimeout");
-    const { unmount, rerender } = renderHook<string, { value: string }>(
+    const { unmount, rerender } = await renderHook<string, { value: string }>(
       ({ value }) => useDebouncedValue(value, 400),
       { initialProps: { value: "" } },
     );
 
-    rerender({ value: "bache" });
-    unmount();
+    await rerender({ value: "bache" });
+    await unmount();
 
     expect(clearSpy).toHaveBeenCalled();
     clearSpy.mockRestore();
   });
 
-  it("works with a non-string value", () => {
-    const { result, rerender } = renderHook<string[], { value: string[] }>(
+  it("works with a non-string value", async () => {
+    const { result, rerender } = await renderHook<string[], { value: string[] }>(
       ({ value }) => useDebouncedValue(value, 200),
       { initialProps: { value: ["bache"] } },
     );
 
-    rerender({ value: ["bache", "basura"] });
-    act(() => {
+    await rerender({ value: ["bache", "basura"] });
+    await act(() => {
       jest.advanceTimersByTime(200);
     });
 

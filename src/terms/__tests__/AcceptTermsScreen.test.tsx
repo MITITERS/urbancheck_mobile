@@ -37,7 +37,7 @@ beforeEach(() => {
 });
 
 it("muestra el texto y la versión vigentes", async () => {
-  render(<AcceptTermsScreen />);
+  await render(<AcceptTermsScreen />);
 
   expect(await screen.findByText("Texto de los términos de prueba.")).toBeTruthy();
   expect(screen.getByText("Versión 2026-10")).toBeTruthy();
@@ -50,7 +50,7 @@ it("muestra el texto y la versión vigentes", async () => {
 it("aceptar manda la versión que leyó y actualiza la sesión", async () => {
   const updated = { id: 1, must_accept_terms: false } as UserProfile;
   mockedAccept.mockResolvedValue(updated);
-  render(<AcceptTermsScreen />);
+  await render(<AcceptTermsScreen />);
   await screen.findByText("Texto de los términos de prueba.");
 
   await userEvent.press(screen.getByText("Acepto"));
@@ -61,7 +61,7 @@ it("aceptar manda la versión que leyó y actualiza la sesión", async () => {
 
 it("si el servidor la rechaza, avisa y recarga la versión vigente", async () => {
   mockedAccept.mockRejectedValue({ status: 400 });
-  render(<AcceptTermsScreen />);
+  await render(<AcceptTermsScreen />);
   await screen.findByText("Texto de los términos de prueba.");
 
   await userEvent.press(screen.getByText("Acepto"));
@@ -72,7 +72,7 @@ it("si el servidor la rechaza, avisa y recarga la versión vigente", async () =>
 });
 
 it("se puede salir cerrando sesión", async () => {
-  render(<AcceptTermsScreen />);
+  await render(<AcceptTermsScreen />);
   await screen.findByText("Texto de los términos de prueba.");
 
   await userEvent.press(screen.getByText("Cerrar sesión"));

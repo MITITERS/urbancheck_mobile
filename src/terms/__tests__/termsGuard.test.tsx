@@ -68,56 +68,56 @@ function signedInAs(role: UserRole, extra: Partial<UserProfile> = {}) {
 }
 
 describe("guard de términos y condiciones", () => {
-  it("RN-10 · el vecino que no aceptó los vigentes solo ve la aceptación", () => {
+  it("RN-10 · el vecino que no aceptó los vigentes solo ve la aceptación", async () => {
     signedInAs("ciudadano", { must_accept_terms: true });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:accept-terms")).toBeTruthy();
     expect(screen.queryByText("ruta:(app)")).toBeNull();
     expect(screen.queryByText("ruta:onboarding")).toBeNull();
   });
 
-  it("RN-10 · después de aceptar entra a la app", () => {
+  it("RN-10 · después de aceptar entra a la app", async () => {
     signedInAs("ciudadano", { must_accept_terms: false });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:(app)")).toBeTruthy();
     expect(screen.queryByText("ruta:accept-terms")).toBeNull();
   });
 
-  it("RN-10 · los términos van antes que el tutorial", () => {
+  it("RN-10 · los términos van antes que el tutorial", async () => {
     signedInAs("ciudadano", { must_accept_terms: true, onboarding_completed_at: null });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:accept-terms")).toBeTruthy();
     expect(screen.queryByText("ruta:onboarding")).toBeNull();
   });
 
-  it("RN-10 · la contraseña temporal va primero", () => {
+  it("RN-10 · la contraseña temporal va primero", async () => {
     signedInAs("ciudadano", { must_accept_terms: true, must_change_password: true });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:change-password")).toBeTruthy();
     expect(screen.queryByText("ruta:accept-terms")).toBeNull();
   });
 
-  it("RN-10 · una cuenta de trabajo nunca pasa por la aceptación", () => {
+  it("RN-10 · una cuenta de trabajo nunca pasa por la aceptación", async () => {
     signedInAs("validador", { must_accept_terms: true });
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.queryByText("ruta:accept-terms")).toBeNull();
     expect(screen.getByText("ruta:(app)")).toBeTruthy();
   });
 
-  it("sin el campo (backend anterior) no se exige nada", () => {
+  it("sin el campo (backend anterior) no se exige nada", async () => {
     signedInAs("ciudadano");
 
-    render(<RootLayout />);
+    await render(<RootLayout />);
 
     expect(screen.getByText("ruta:(app)")).toBeTruthy();
   });

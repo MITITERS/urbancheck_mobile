@@ -15,7 +15,7 @@ jest.mock("@expo/vector-icons", () => {
 
 type BoundaryProps = { error: Error; retry: () => Promise<void> };
 
-it("el layout raíz exporta un ErrorBoundary con mensaje y reintento", () => {
+it("el layout raíz exporta un ErrorBoundary con mensaje y reintento", async () => {
   const ErrorBoundary = (RootLayout as { ErrorBoundary?: ComponentType<BoundaryProps> })
     .ErrorBoundary;
   expect(ErrorBoundary).toBeDefined();
@@ -23,9 +23,9 @@ it("el layout raíz exporta un ErrorBoundary con mensaje y reintento", () => {
   jest.spyOn(console, "error").mockImplementation(() => {});
   const retry = jest.fn(async () => {});
 
-  render(<ErrorBoundary error={new Error("falla")} retry={retry} />);
+  await render(<ErrorBoundary error={new Error("falla")} retry={retry} />);
 
   expect(screen.getByText("Algo salió mal")).toBeTruthy();
-  fireEvent.press(screen.getByText("Reintentar"));
+  await fireEvent.press(screen.getByText("Reintentar"));
   expect(retry).toHaveBeenCalled();
 });

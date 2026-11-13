@@ -26,7 +26,10 @@ import { renderWithProviders } from "../../test/renderWithProviders";
  */
 
 jest.mock("expo-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => children,
+  Link: ({ children }: { children: React.ReactNode }) => {
+    const { Text } = jest.requireActual("react-native");
+    return <Text>{children}</Text>;
+  },
   useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn() }),
   useLocalSearchParams: () => ({ key: "clave-de-prueba" }),
 }));
@@ -84,7 +87,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
   it("CP-SEC05-M01 · login: el bloqueo dice que hay que esperar, no que la contraseña está mal", async () => {
     (login as jest.Mock).mockRejectedValue(LOGIN_LOCKED);
     const user = userEvent.setup();
-    renderWithProviders(<LoginScreen />);
+    await renderWithProviders(<LoginScreen />);
 
     await user.type(screen.getByPlaceholderText("Email"), "vecina@example.com");
     await user.type(screen.getByPlaceholderText("Contraseña"), "otra-vez");
@@ -99,7 +102,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
   it("CP-SEC05-M02 · registro: el tope por IP se explica igual", async () => {
     (signup as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
-    renderWithProviders(<RegisterScreen />);
+    await renderWithProviders(<RegisterScreen />);
 
     await user.type(screen.getByPlaceholderText("Nombre completo"), "Ana Pérez");
     await user.type(screen.getByPlaceholderText("Email"), "ana@example.com");
@@ -117,7 +120,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
   it("CP-SEC05-M03 · recuperación: el tope por cuenta no se confunde con un email inválido", async () => {
     (requestPasswordReset as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
-    renderWithProviders(<ForgotPasswordScreen />);
+    await renderWithProviders(<ForgotPasswordScreen />);
 
     await user.type(screen.getByPlaceholderText("Email"), "vecina@example.com");
     await user.press(screen.getByText("Enviar enlace"));
@@ -129,7 +132,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
   it("CP-SEC05-M04 · restablecer la contraseña: el tope se explica", async () => {
     (resetPassword as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
-    renderWithProviders(<ResetPasswordScreen />);
+    await renderWithProviders(<ResetPasswordScreen />);
 
     await user.type(
       screen.getByPlaceholderText("Nueva contraseña (mín. 8 caracteres)"),
@@ -145,7 +148,7 @@ describe("límites de intentos en las pantallas de cuenta", () => {
   it("CP-SEC05-M05 · cambiar la contraseña: el tope se explica en la pantalla", async () => {
     (changePassword as jest.Mock).mockRejectedValue(ALLAUTH_LIMITED);
     const user = userEvent.setup();
-    renderWithProviders(<ChangePasswordScreen />);
+    await renderWithProviders(<ChangePasswordScreen />);
 
     await user.type(screen.getByPlaceholderText("Contraseña actual"), "Vieja#2026x");
     await user.type(screen.getByPlaceholderText("Contraseña nueva"), "Nueva#2026x");

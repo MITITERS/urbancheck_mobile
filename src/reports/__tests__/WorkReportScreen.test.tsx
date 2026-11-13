@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Linking, Platform } from "react-native";
 
 import WorkReportScreen from "../../../app/(app)/work-report/[id]";
@@ -84,8 +84,8 @@ const WORK: ReportDetail = {
   can_edit: false,
 };
 
-function renderDetail() {
-  return renderWithProviders(<WorkReportScreen />);
+async function renderDetail() {
+  return await renderWithProviders(<WorkReportScreen />);
 }
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ describe("detalle del trabajo del operario", () => {
     // Escenario 3: lo que hace falta para entender el problema antes de salir.
     mockedGet.mockResolvedValue(WORK);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Bache")).toBeTruthy();
     expect(screen.getByText(WORK.description)).toBeTruthy();
@@ -108,7 +108,7 @@ describe("detalle del trabajo del operario", () => {
   it("lo pide por la ruta del operario, que es la que el servidor acota", async () => {
     mockedGet.mockResolvedValue(WORK);
 
-    renderDetail();
+    await renderDetail();
 
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith("/api/operator/reports/7/"),
@@ -118,7 +118,7 @@ describe("detalle del trabajo del operario", () => {
   it("fecha el trabajo por su asignación al área, no por el alta del reporte", async () => {
     mockedGet.mockResolvedValue(WORK);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(/Asignado a tu área el/)).toBeTruthy();
     // 27/08, la asignación; no el 01/08 en que el vecino lo reportó.
@@ -128,9 +128,9 @@ describe("detalle del trabajo del operario", () => {
   it("ofrece el acceso al cierre mientras el trabajo está vigente", async () => {
     mockedGet.mockResolvedValue(WORK);
 
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByText("Registrar la resolución"));
+    await fireEvent.press(await screen.findByText("Registrar la resolución"));
 
     expect(mockedPush).toHaveBeenCalledWith("/(app)/close-report/7");
   });
@@ -152,7 +152,7 @@ describe("detalle del trabajo del operario", () => {
       ],
     });
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Resolución registrada")).toBeTruthy();
     expect(screen.getByText("Bache tapado con asfalto en frío")).toBeTruthy();
@@ -183,16 +183,19 @@ describe("detalle del trabajo del operario", () => {
           ],
         });
 
-      renderDetail();
+      await renderDetail();
 
-      expect(await screen.findByLabelText(/Procesando la imagen/)).toBeTruthy();
+      // Con timers falsos `findBy`/`waitFor` adelantan el reloj por su cuenta y
+      // se pasarían del estado `pendiente`: se avanza a mano y vaciando promesas.
+      await act(() => jest.advanceTimersByTimeAsync(0));
+      expect(screen.getByLabelText(/Procesando la imagen/)).toBeTruthy();
 
-      jest.advanceTimersByTime(PROCESSING_POLL_MS);
+      await act(() => jest.advanceTimersByTimeAsync(PROCESSING_POLL_MS));
 
       await waitFor(() => expect(screen.queryByLabelText(/Procesando la imagen/)).toBeNull());
       const calls = mockedGet.mock.calls.length;
       // Publicada la foto, el sondeo se corta.
-      jest.advanceTimersByTime(PROCESSING_POLL_MS * 3);
+      await act(() => jest.advanceTimersByTimeAsync(PROCESSING_POLL_MS * 3));
       expect(mockedGet.mock.calls.length).toBe(calls);
     } finally {
       jest.useRealTimers();
@@ -202,7 +205,7 @@ describe("detalle del trabajo del operario", () => {
   it("muestra el compromiso que el municipio asumió con el vecino", async () => {
     mockedGet.mockResolvedValue(WORK);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
     expect(screen.getByText("La cuadrilla pasa esta semana.")).toBeTruthy();
@@ -214,7 +217,7 @@ describe("detalle del trabajo del operario", () => {
     // El cliente lanza el cuerpo de la respuesta tal cual.
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("No encontrado.")).toBeTruthy();
     expect(screen.queryByText("Registrar la resolución")).toBeNull();
@@ -249,9 +252,9 @@ describe("navegación al lugar del trabajo", () => {
       canOpenURL.mockResolvedValue(true);
       openURL.mockResolvedValue(undefined);
 
-      renderDetail();
+      await renderDetail();
 
-      fireEvent.press(await screen.findByText("Cómo llegar"));
+      await fireEvent.press(await screen.findByText("Cómo llegar"));
 
       await waitFor(() => expect(openURL).toHaveBeenCalledWith(expected));
     },
@@ -262,9 +265,9 @@ describe("navegación al lugar del trabajo", () => {
     canOpenURL.mockResolvedValue(false);
     openURL.mockResolvedValue(undefined);
 
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByText("Cómo llegar"));
+    await fireEvent.press(await screen.findByText("Cómo llegar"));
 
     await waitFor(() =>
       expect(openURL).toHaveBeenCalledWith(
@@ -276,7 +279,7 @@ describe("navegación al lugar del trabajo", () => {
   it("sin coordenadas no ofrece la navegación en lugar de abrir la nada", async () => {
     mockedGet.mockResolvedValue({ ...WORK, latitude: null, longitude: null });
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(WORK.description)).toBeTruthy();
     expect(screen.queryByText("Cómo llegar")).toBeNull();

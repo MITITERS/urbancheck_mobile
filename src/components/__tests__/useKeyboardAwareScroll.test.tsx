@@ -32,8 +32,8 @@ const BREATHING_ROOM = 16;
 
 const listeners: Record<string, (event: unknown) => void> = {};
 
-function showKeyboard() {
-  act(() => {
+async function showKeyboard() {
+  await act(() => {
     for (const event of Object.keys(listeners)) {
       if (event.endsWith("Show")) {
         listeners[event]({ endCoordinates: { height: KEYBOARD } });
@@ -70,71 +70,71 @@ beforeEach(() => {
 });
 
 describe("useKeyboardAwareScroll", () => {
-  it("sube el campo que el teclado tapa", () => {
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+  it("sube el campo que el teclado tapa", async () => {
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
     const scrollTo = attachScrollView(result);
 
     // Un campo abajo de todo: la dirección del formulario de reporte.
-    act(() => result.current.focusField(fieldAt(700)));
-    showKeyboard();
+    await act(() => result.current.focusField(fieldAt(700)));
+    await showKeyboard();
 
     const hiddenBy = 700 + 44 + BREATHING_ROOM - KEYBOARD_TOP;
     expect(scrollTo).toHaveBeenCalledWith({ y: hiddenBy, animated: true });
   });
 
-  it("no mueve nada si el campo ya se ve por encima del teclado", () => {
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+  it("no mueve nada si el campo ya se ve por encima del teclado", async () => {
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
     const scrollTo = attachScrollView(result);
 
-    act(() => result.current.focusField(fieldAt(100)));
-    showKeyboard();
+    await act(() => result.current.focusField(fieldAt(100)));
+    await showKeyboard();
 
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it("con el teclado cerrado no scrollea aunque se enfoque un campo", () => {
+  it("con el teclado cerrado no scrollea aunque se enfoque un campo", async () => {
     // Al enfocar, el teclado todavía no ocupa nada: corregir ahí daría cero.
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
     const scrollTo = attachScrollView(result);
 
-    act(() => result.current.focusField(fieldAt(700)));
+    await act(() => result.current.focusField(fieldAt(700)));
 
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it("acompaña el salto de un campo a otro con el teclado ya abierto", () => {
+  it("acompaña el salto de un campo a otro con el teclado ya abierto", async () => {
     // No cambia el alto del teclado, así que no alcanza con reaccionar a eso.
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
     const scrollTo = attachScrollView(result);
-    act(() => result.current.focusField(fieldAt(100)));
-    showKeyboard();
+    await act(() => result.current.focusField(fieldAt(100)));
+    await showKeyboard();
     expect(scrollTo).not.toHaveBeenCalled();
 
-    act(() => result.current.focusField(fieldAt(700)));
+    await act(() => result.current.focusField(fieldAt(700)));
 
     expect(scrollTo).toHaveBeenCalledTimes(1);
   });
 
-  it("cuenta desde dónde está el scroll, no desde el principio", () => {
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+  it("cuenta desde dónde está el scroll, no desde el principio", async () => {
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
     const scrollTo = attachScrollView(result);
-    act(() =>
+    await act(() =>
       result.current.scrollViewProps.onScroll({
         nativeEvent: { contentOffset: { y: 250 } },
       } as never),
     );
 
-    act(() => result.current.focusField(fieldAt(700)));
-    showKeyboard();
+    await act(() => result.current.focusField(fieldAt(700)));
+    await showKeyboard();
 
     const hiddenBy = 700 + 44 + BREATHING_ROOM - KEYBOARD_TOP;
     expect(scrollTo).toHaveBeenCalledWith({ y: 250 + hiddenBy, animated: true });
   });
 
-  it("expone cuánto tapa el teclado, para hacerle lugar abajo", () => {
-    const { result } = renderHook(() => useKeyboardAwareScroll());
+  it("expone cuánto tapa el teclado, para hacerle lugar abajo", async () => {
+    const { result } = await renderHook(() => useKeyboardAwareScroll());
 
-    showKeyboard();
+    await showKeyboard();
 
     expect(result.current.keyboardOffset).toBe(KEYBOARD);
   });

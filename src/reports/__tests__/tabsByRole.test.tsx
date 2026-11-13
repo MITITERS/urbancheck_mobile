@@ -71,9 +71,9 @@ function userWith(role: UserRole): UserProfile {
   };
 }
 
-function signedInAs(role: UserRole) {
+async function signedInAs(role: UserRole) {
   mockedAuth.mockReturnValue({ user: userWith(role) } as ReturnType<typeof useAuth>);
-  render(<TabsLayout />);
+  await render(<TabsLayout />);
 }
 
 /** Las rutas que quedaron declaradas para el rol de la sesión. */
@@ -88,14 +88,14 @@ beforeEach(() => {
 });
 
 describe("la navegación se resuelve por rol", () => {
-  it("el operario entra a su bandeja y a nada más que su perfil", () => {
-    signedInAs("operario");
+  it("el operario entra a su bandeja y a nada más que su perfil", async () => {
+    await signedInAs("operario");
 
     expect(declaredRoutes()).toEqual(["work", "profile"]);
   });
 
-  it("el operario no alcanza el feed, el mapa ni los avisos escribiendo la ruta", () => {
-    signedInAs("operario");
+  it("el operario no alcanza el feed, el mapa ni los avisos escribiendo la ruta", async () => {
+    await signedInAs("operario");
 
     const routes = declaredRoutes();
     for (const forbidden of ["index", "map", "notices", "create-tab", "report/[id]"]) {
@@ -103,8 +103,8 @@ describe("la navegación se resuelve por rol", () => {
     }
   });
 
-  it("el vecino conserva el feed, el mapa, el alta y los avisos, y no ve la bandeja", () => {
-    signedInAs("ciudadano");
+  it("el vecino conserva el feed, el mapa, el alta y los avisos, y no ve la bandeja", async () => {
+    await signedInAs("ciudadano");
 
     const routes = declaredRoutes();
     expect(routes).toEqual(
@@ -113,8 +113,8 @@ describe("la navegación se resuelve por rol", () => {
     expect(routes).not.toContain("work");
   });
 
-  it("el validador ve su bandeja de validación pero no la de trabajo ni el alta", () => {
-    signedInAs("validador");
+  it("el validador ve su bandeja de validación pero no la de trabajo ni el alta", async () => {
+    await signedInAs("validador");
 
     const routes = declaredRoutes();
     expect(routes).toContain("validate");
@@ -123,11 +123,11 @@ describe("la navegación se resuelve por rol", () => {
     expect(routes).not.toContain("create-tab");
   });
 
-  it("todos los roles conservan el perfil: es de donde se sale de la sesión", () => {
+  it("todos los roles conservan el perfil: es de donde se sale de la sesión", async () => {
     for (const role of ["ciudadano", "operario", "validador"] as const) {
-      signedInAs(role);
+      await signedInAs(role);
       expect(declaredRoutes()).toContain("profile");
-      screen.unmount();
+      await screen.unmount();
     }
   });
 });
