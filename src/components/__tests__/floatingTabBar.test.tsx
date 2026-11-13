@@ -1,6 +1,6 @@
-import { createBottomTabNavigator } from "expo-router/js-tabs";
-import { NavigationContainer } from "expo-router/react-navigation";
-import { render, renderHook, screen } from "@testing-library/react-native";
+import { Tabs } from "expo-router/js-tabs";
+import { renderRouter } from "expo-router/testing-library";
+import { renderHook, screen } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
@@ -14,19 +14,21 @@ import {
   useFloatingTabBarInset,
 } from "../floatingTabBar";
 
-const Tab = createBottomTabNavigator();
-
 const METRICS: Metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   // Un dispositivo con home indicator: es donde se rompía.
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
 };
 
+// expo-router 58 ya no deja armar un navegador suelto dentro de un
+// `NavigationContainer`: se monta un router de prueba con el mismo layout de
+// pestañas. El `SafeAreaProvider` va adentro del layout para que sea el más
+// cercano a la barra y no lo pise el que trae el router.
 function renderIsland(badge?: string) {
-  return render(
-    <SafeAreaProvider initialMetrics={METRICS}>
-      <NavigationContainer>
-        <Tab.Navigator
+  function Layout() {
+    return (
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <Tabs
           tabBar={(props) => <FloatingTabBar {...props} />}
           screenOptions={{
             tabBarStyle: {
@@ -37,16 +39,13 @@ function renderIsland(badge?: string) {
             },
           }}
         >
-          <Tab.Screen name="feed" component={Feed} />
-          <Tab.Screen
-            name="notices"
-            component={Feed}
-            options={{ tabBarBadge: badge }}
-          />
-        </Tab.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>,
-  );
+          <Tabs.Screen name="index" />
+          <Tabs.Screen name="notices" options={{ tabBarBadge: badge }} />
+        </Tabs>
+      </SafeAreaProvider>
+    );
+  }
+  return renderRouter({ _layout: Layout, index: Feed, notices: Feed });
 }
 
 function Feed() {
@@ -71,32 +70,32 @@ function islandStyle(): Record<string, unknown> {
 
 describe("FloatingTabBar", () => {
   it("muestra el badge de la campana", async () => {
-    renderIsland("5");
+    await renderIsland("5");
 
     expect(await screen.findByText("5")).toBeTruthy();
   });
 
-  it("no recorta el contenido: el badge se dibuja fuera de la caja del ícono", () => {
+  it("no recorta el contenido: el badge se dibuja fuera de la caja del ícono", async () => {
     // `overflow: "hidden"` en cualquier ancestro borra el badge, que va en
     // `top: -3` respecto del ícono. Es el bug que tenía la isla.
-    renderIsland("5");
+    await renderIsland("5");
 
     expect(islandStyle().overflow).not.toBe("hidden");
   });
 
-  it("no cuenta el safe area dos veces", () => {
+  it("no cuenta el safe area dos veces", async () => {
     // La isla ya se levanta por encima del home indicator; si además le dejamos
     // a `BottomTabBar` su `paddingBottom: insets.bottom`, quedan 23px de alto
     // útil para íconos de 28 y el badge se va por arriba del borde.
-    renderIsland("5");
+    await renderIsland("5");
     const style = islandStyle();
 
     expect(style.paddingBottom ?? 0).toBe(0);
     expect(style.height).toBe(TAB_BAR_HEIGHT);
   });
 
-  it("deja alto suficiente para el ícono y su badge", () => {
-    renderIsland("5");
+  it("deja alto suficiente para el ícono y su badge", async () => {
+    await renderIsland("5");
     const style = islandStyle();
     const usableHeight =
       (style.height as number) -
@@ -108,8 +107,8 @@ describe("FloatingTabBar", () => {
     expect(usableHeight).toBeGreaterThanOrEqual(28 + 3);
   });
 
-  it("sin avisos pendientes no dibuja nada", () => {
-    renderIsland(undefined);
+  it("sin avisos pendientes no dibuja nada", async () => {
+    await renderIsland(undefined);
 
     expect(screen.queryByText("5")).toBeNull();
   });

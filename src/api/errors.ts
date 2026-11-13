@@ -62,7 +62,8 @@ const NETWORK_FAILURES = [
   "Load failed",
 ];
 
-function isNetworkFailure(error: Error): boolean {
+export function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
   return NETWORK_FAILURES.some((needle) => error.message.includes(needle));
 }
 

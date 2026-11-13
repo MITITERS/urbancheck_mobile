@@ -22,6 +22,7 @@ const OPERATOR: UserProfile = {
   is_public: true,
   operational_area: { id: 9, name: "Obras Públicas", is_active: true },
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   url: "/api/users/1/",
 };
 

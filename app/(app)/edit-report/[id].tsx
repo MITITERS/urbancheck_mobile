@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -59,7 +60,7 @@ export default function EditReportScreen() {
   const query = useReport(Number(id));
   const report = query.data ?? null;
   const [description, setDescription] = useState("");
-  const descriptionField = useRef<TextInput>(null);
+  const descriptionField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
   const [category, setCategory] = useState<ReportCategory>("bache");
   const [photo, setPhoto] = useState<NewPhoto | null>(null);

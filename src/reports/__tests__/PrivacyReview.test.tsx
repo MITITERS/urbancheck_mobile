@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
 import { Alert, type AlertButton } from "react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
@@ -7,7 +7,8 @@ import { api } from "../../api/client";
 import type { ReportDetail } from "../../api/reports";
 import type { UserProfile } from "../../api/users";
 import { useAuth } from "../../auth/AuthContext";
-import { renderWithProviders } from "../../test/renderWithProviders";
+import { reportKeys } from "../../lib/queryKeys";
+import { createTestQueryClient, renderWithProviders } from "../../test/renderWithProviders";
 import { PERSONAL_DATA_REASON } from "../usePrivacyReview";
 
 /**
@@ -75,6 +76,7 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
     role: "ciudadano",
     municipality: null,
     must_change_password: false,
+    onboarding_completed_at: "2026-01-01T00:00:00Z",
     is_public: true,
     url: "/api/users/2/",
     ...overrides,
@@ -356,11 +358,16 @@ describe("Denunciar imagen (US-043)", () => {
   it("CP-043-M11 (US-043 E2) · si el reporte se ocultó mientras estaba abierto, deja de mostrarlo", async () => {
     // El 404 llega con el dato viejo todavía en la caché: React Query lo
     // conserva, y la pantalla lo seguía mostrando.
+    // Se siembra la caché con el reporte que se estaba viendo: el 404 llega al
+    // volver a pedirlo.
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
+    const client = createTestQueryClient();
+    client.setQueryData(reportKeys.detail(7), detail());
     renderWithProviders(
       <SafeAreaProvider initialMetrics={METRICS}>
         <ReportDetailScreen />
       </SafeAreaProvider>,
+      client,
     );
 
     expect(await screen.findByText("Este reporte ya no está disponible.")).toBeTruthy();
@@ -374,14 +381,21 @@ describe("Denunciar imagen (US-043)", () => {
     try {
       signIn(profile({ id: AUTHOR.id }));
       renderDetail(detail({ under_privacy_review: true }));
-      expect(await screen.findByText(/Tu reporte está oculto/)).toBeTruthy();
+      // Con timers falsos, `findBy*`/`waitFor` avanzan el reloj de a 50 ms y
+      // esperan entre vueltas: tardaba ~3,6 s y en el CI pasaba los 5 s del
+      // test. React Query agenda con timers, así que se avanza el reloj un
+      // poco (lejos de los 30 s del sondeo) para que llegue la primera carga.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(100);
+      });
+      expect(screen.getByText(/Tu reporte está oculto/)).toBeTruthy();
 
       mockedGet.mockResolvedValue(detail({ under_privacy_review: false }));
       await act(async () => {
-        jest.advanceTimersByTime(30_000);
+        await jest.advanceTimersByTimeAsync(30_000);
       });
 
-      await waitFor(() => expect(screen.queryByText(/Tu reporte está oculto/)).toBeNull());
+      expect(screen.queryByText(/Tu reporte está oculto/)).toBeNull();
     } finally {
       jest.useRealTimers();
     }

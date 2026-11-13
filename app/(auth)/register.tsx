@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,7 +18,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { signup, logout } from "../../src/api/auth";
 import { describeApiError, isRateLimited } from "../../src/api/errors";
 import { useAuth } from "../../src/auth/AuthContext";
+import { getCurrentTerms, type TermsOfService } from "../../src/api/users";
 import { useKeyboardAwareScroll } from "../../src/components/useKeyboardAwareScroll";
+import { termsMessages } from "../../src/messages/terms";
+import { TermsModal } from "../../src/terms/TermsModal";
 
 /** Aire al final del formulario, antes de sumarle lo que ocupe el teclado. */
 const CONTENT_BOTTOM_PADDING = 24;
@@ -32,15 +36,29 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Términos y condiciones (RN-10): si hay una versión publicada, aceptarla es
+  // obligatorio para crear la cuenta. Sin términos publicados no se muestra la
+  // casilla, y el backend tampoco la pide.
+  const [terms, setTerms] = useState<TermsOfService | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   // Son cuatro campos más el logo: en un teléfono chico el teclado tapaba la
   // confirmación de contraseña y el botón, y se escribía a ciegas. El hook mide
   // cuánto tapa el teclado de verdad y sube solo al campo enfocado, igual que
   // en el alta y el cierre de un reporte.
-  const nameField = useRef<TextInput>(null);
-  const emailField = useRef<TextInput>(null);
-  const passwordField = useRef<TextInput>(null);
-  const confirmField = useRef<TextInput>(null);
+  const nameField = useRef<TextInputInstance>(null);
+  const emailField = useRef<TextInputInstance>(null);
+  const passwordField = useRef<TextInputInstance>(null);
+  const confirmField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
+
+  useEffect(() => {
+    // Si falla, la casilla no aparece y el backend rechaza el alta con su
+    // propio mensaje: no se puede crear una cuenta sin aceptar por esta vía.
+    getCurrentTerms()
+      .then(setTerms)
+      .catch(() => setTerms(null));
+  }, []);
 
   async function handleRegister() {
     // Si queda abierto, tapa los errores de validación que se muestran debajo
@@ -77,14 +95,25 @@ export default function RegisterScreen() {
       tempErrors.confirmPassword = "Las contraseñas no coinciden.";
     }
 
+    if (terms && !termsAccepted) {
+      tempErrors.terms = termsMessages.required;
+    }
+
     if (Object.keys(tempErrors).length > 0) {
       setErrors(tempErrors);
       return;
     }
 
+    const data = {
+      name,
+      email,
+      password,
+      ...(terms ? { accept_terms: true, terms_version: terms.version } : {}),
+    };
+
     setLoading(true);
     try {
-      const res = await signup({ name, email, password });
+      const res = await signup(data);
       await signIn(res.meta.session_token, false);
     } catch (err: unknown) {
       let currentErr = err;
@@ -94,7 +123,7 @@ export default function RegisterScreen() {
           await logout();
         } catch {}
         try {
-          const res = await signup({ name, email, password });
+          const res = await signup(data);
           await signIn(res.meta.session_token, false);
           return;
         } catch (retryErr) {
@@ -108,7 +137,18 @@ export default function RegisterScreen() {
       } else if (data2?.errors) {
         const mapped: Record<string, string> = {};
         for (const e of data2.errors as { param?: string; message: string }[]) {
-          if (e.param) mapped[e.param] = e.message;
+          if (!e.param) continue;
+          // Los dos errores de los términos se muestran bajo la casilla. Si la
+          // versión cambió mientras se registraba, se recarga la vigente.
+          if (e.param === "accept_terms" || e.param === "terms_version") {
+            mapped.terms = e.message;
+            if (e.param === "terms_version") {
+              setTermsAccepted(false);
+              getCurrentTerms().then(setTerms).catch(() => {});
+            }
+          } else {
+            mapped[e.param] = e.message;
+          }
         }
         if (Object.keys(mapped).length > 0) {
           setErrors(mapped);
@@ -135,7 +175,7 @@ export default function RegisterScreen() {
     errorKey: string,
     // El ref y el `onFocus` van juntos o el hook no tiene qué revelar: uno dice
     // qué campo medir y el otro cuándo.
-    ref: React.RefObject<TextInput | null>,
+    ref: React.RefObject<TextInputInstance | null>,
     extra?: object,
   ) {
     return (
@@ -234,6 +274,34 @@ export default function RegisterScreen() {
         <Text style={styles.errorText}>{errors.confirmPassword}</Text>
       )}
 
+      {terms && (
+        <>
+          <Pressable
+            style={styles.termsRow}
+            onPress={() => setTermsAccepted((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: termsAccepted }}
+            accessibilityLabel={termsMessages.checkbox}
+          >
+            <Ionicons
+              name={termsAccepted ? "checkbox" : "square-outline"}
+              size={22}
+              color={errors.terms ? "#e53935" : "#1a73e8"}
+            />
+            <Text style={styles.termsText}>{termsMessages.checkbox}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTermsOpen(true)} accessibilityRole="link">
+            <Text style={styles.termsLink}>{termsMessages.open}</Text>
+          </Pressable>
+          {errors.terms && <Text style={styles.errorText}>{errors.terms}</Text>}
+          <TermsModal
+            terms={terms}
+            visible={termsOpen}
+            onClose={() => setTermsOpen(false)}
+          />
+        </>
+      )}
+
       <Pressable
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleRegister}
@@ -299,6 +367,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   inputError: { borderColor: "#e53935" },
+  termsRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
+  termsText: { flex: 1, fontSize: 14, color: "#374151" },
+  termsLink: { color: "#1a73e8", fontSize: 14, marginTop: 6, marginLeft: 30, marginBottom: 4 },
   errorText: { color: "#e53935", fontSize: 12, marginBottom: 8 },
   button: {
     backgroundColor: "#1a73e8",

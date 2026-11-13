@@ -4,6 +4,7 @@ import { Linking, Platform } from "react-native";
 import WorkReportScreen from "../../../app/(app)/work-report/[id]";
 import { api } from "../../api/client";
 import type { ReportDetail } from "../../api/reports";
+import { PROCESSING_POLL_MS } from "../../lib/useRefetchOnFocus";
 import { renderWithProviders } from "../../test/renderWithProviders";
 
 const mockedPush = jest.fn();
@@ -77,6 +78,8 @@ const WORK: ReportDetail = {
   resolution_appeals: [],
   objection_deadline: null,
   can_appeal: false,
+  moderation: null,
+  share_url: null,
   status_history: [],
   can_edit: false,
 };
@@ -154,6 +157,46 @@ describe("detalle del trabajo del operario", () => {
     expect(await screen.findByText("Resolución registrada")).toBeTruthy();
     expect(screen.getByText("Bache tapado con asfalto en frío")).toBeTruthy();
     expect(screen.queryByText("Registrar la resolución")).toBeNull();
+  });
+
+  it("vuelve a mirar mientras la foto del cierre se difumina, hasta verla publicada", async () => {
+    // US-042: al volver del formulario la evidencia todavía está en
+    // `pendiente`. Antes la pantalla se quedaba así hasta salir y volver.
+    jest.useFakeTimers();
+    try {
+      const closed = {
+        id: 11,
+        photo: null,
+        photo_removed_at: null,
+        photo_status: "pendiente" as const,
+        description: "Bache tapado con asfalto en frío",
+        created_at: "2026-09-01T09:00:00Z",
+        operational_area: "Obras Públicas",
+      };
+      mockedGet
+        .mockResolvedValueOnce({ ...WORK, status: "resuelto", resolution_evidences: [closed] })
+        .mockResolvedValue({
+          ...WORK,
+          status: "resuelto",
+          resolution_evidences: [
+            { ...closed, photo: "https://example.test/cierre.jpg", photo_status: "procesada" },
+          ],
+        });
+
+      renderDetail();
+
+      expect(await screen.findByLabelText(/Procesando la imagen/)).toBeTruthy();
+
+      jest.advanceTimersByTime(PROCESSING_POLL_MS);
+
+      await waitFor(() => expect(screen.queryByLabelText(/Procesando la imagen/)).toBeNull());
+      const calls = mockedGet.mock.calls.length;
+      // Publicada la foto, el sondeo se corta.
+      jest.advanceTimersByTime(PROCESSING_POLL_MS * 3);
+      expect(mockedGet.mock.calls.length).toBe(calls);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("muestra el compromiso que el municipio asumió con el vecino", async () => {

@@ -18,8 +18,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { imageSource } from "../../src/api/client";
 import { describeApiError, type ApiErrorDescription } from "../../src/api/errors";
+import { participatesAsCitizen } from "../../src/api/users";
 import { useAuth } from "../../src/auth/AuthContext";
 import { Notice } from "../../src/components/Notice";
+import { accountMessages } from "../../src/messages/account";
 import { useMe, useUpdateMe } from "../../src/queries/users";
 
 export default function EditProfileScreen() {
@@ -236,6 +238,19 @@ export default function EditProfileScreen() {
             )}
           </Pressable>
         </View>
+
+        {/* La baja de la cuenta (N-09), a propósito discreta: un enlace chico
+            al pie y no una acción del perfil, para que no se toque por error.
+            Solo el vecino: las cuentas de trabajo siguen con la baja lógica. */}
+        {participatesAsCitizen(user) && (
+          <Pressable
+            style={styles.deleteLink}
+            onPress={() => router.push("/(app)/delete-account")}
+            accessibilityRole="link"
+          >
+            <Text style={styles.deleteLinkText}>{accountMessages.profileEntry}</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -244,6 +259,8 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: "#f8f9fa", flexGrow: 1, justifyContent: "center" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  deleteLink: { alignSelf: "center", marginTop: 32, padding: 8 },
+  deleteLinkText: { fontSize: 13, color: "#9ca3af" },
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,

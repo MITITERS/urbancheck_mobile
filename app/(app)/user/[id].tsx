@@ -163,7 +163,7 @@ export default function PublicProfileScreen() {
               ? "Todavía no publicaste ningún reporte."
               : "Todavía no publicó ningún reporte."}
           </Text>
-        ) : null
+        ) : undefined
       }
     />
   );

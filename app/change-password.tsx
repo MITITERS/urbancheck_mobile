@@ -27,7 +27,7 @@ const MIN_LENGTH = 8;
  * indique que la contraseña sigue siendo la temporal del alta.
  */
 export default function ChangePasswordScreen() {
-  const { refreshUser, signOut } = useAuth();
+  const { refreshUser, replaceToken, signOut } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -55,7 +55,11 @@ export default function ChangePasswordScreen() {
 
     setSaving(true);
     try {
-      await changePassword(current, next);
+      const response = await changePassword(current, next);
+      // allauth rota el token y cierra las demás sesiones (N-04): sin adoptar
+      // el nuevo, la app quedaba con uno que ya no vale.
+      const rotated = response?.meta?.session_token;
+      if (rotated) await replaceToken(rotated);
       await refreshUser();
     } catch (err) {
       if (isRateLimited(err)) {

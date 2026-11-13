@@ -17,9 +17,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { imageSource } from "../../../src/api/client";
 import { describeApiError } from "../../../src/api/errors";
 import { operatorKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  PROCESSING_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
 import { useAssignedReport } from "../../../src/queries/operator";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
+import { ProcessingPhoto } from "../../../src/reports/ProcessingPhoto";
 import { RemovedPhoto } from "../../../src/reports/RemovedPhoto";
 
 /**
@@ -37,11 +41,19 @@ export default function WorkReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const query = useAssignedReport(Number(id));
+  const report = query.data ?? null;
+  // La foto del cierre se difumina en el servidor (US-042) y tarda alrededor
+  // de un segundo: al volver del formulario todavía está en `pendiente`, y sin
+  // sondeo el operario no la veía publicada hasta salir y volver a entrar.
+  const evidenceProcessing =
+    report?.resolution_evidences.some((e) => e.photo_status === "pendiente") ??
+    false;
   // Al enfocarse y no solo al montar: se vuelve acá desde el formulario de
   // cierre, y el reporte tiene que reflejar que ya se cerró.
-  useRefetchOnFocus(operatorKeys.details());
+  useRefetchOnFocus(operatorKeys.details(), {
+    pollMs: evidenceProcessing ? PROCESSING_POLL_MS : undefined,
+  });
 
-  const report = query.data ?? null;
   const loading = query.isPending;
   const error = query.isError
     ? describeApiError(query.error, "No pudimos abrir este trabajo").message
@@ -170,8 +182,15 @@ export default function WorkReportScreen() {
             <Text style={styles.sectionTitle}>Resolución registrada</Text>
             {evidence.photo ? (
               <Image source={imageSource(evidence.photo)} style={styles.evidencePhoto} />
+            ) : evidence.photo_removed_at ? (
+              <RemovedPhoto style={styles.evidencePhoto} />
             ) : (
-              evidence.photo_removed_at && <RemovedPhoto style={styles.evidencePhoto} />
+              evidence.photo_status !== "procesada" && (
+                <ProcessingPhoto
+                  failed={evidence.photo_status === "fallida"}
+                  style={styles.evidencePhoto}
+                />
+              )
             )}
             <Text style={styles.description}>{evidence.description}</Text>
             <Text style={styles.meta}>

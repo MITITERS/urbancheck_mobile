@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,7 +64,7 @@ export default function CloseReportScreen() {
   // El campo de descripción es el último del formulario: sin esto el teclado lo
   // tapa y el operario escribe a ciegas el parte de trabajo. Es el mismo hook
   // que usan el alta y la edición de un reporte, que ya resolvieron esto.
-  const descriptionField = useRef<TextInput>(null);
+  const descriptionField = useRef<TextInputInstance>(null);
   const keyboard = useKeyboardAwareScroll();
 
   const location = useCurrentLocation({

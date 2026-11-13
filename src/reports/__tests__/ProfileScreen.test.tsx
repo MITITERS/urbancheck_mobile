@@ -60,6 +60,7 @@ function signedInAs(profile: UserProfile, routes: Record<string, unknown> = {}) 
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
   respondWith({ [ME_URL]: profile, ...routes });
 }
@@ -77,6 +78,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   url: "/api/users/1/",
 };
@@ -89,6 +91,7 @@ const OPERATOR: UserProfile = {
   role: "operario",
   municipality: { id: 4, name: "Villa María" },
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   operational_area: { id: 2, name: "Alumbrado", is_active: true },
   url: "/api/users/7/",
@@ -222,6 +225,41 @@ describe("perfil", () => {
     expect(await screen.findByText("Editar perfil")).toBeTruthy();
     expect(screen.getByText("Notificaciones")).toBeTruthy();
     expect(screen.getByText("Cerrar sesión")).toBeTruthy();
+  });
+});
+
+describe("«Ver tutorial» en el perfil (US-051)", () => {
+  it("CP-051-M10 (US-051 E7) · el vecino puede volver a ver el tutorial", async () => {
+    renderProfile();
+
+    expect(await screen.findByText("Ver tutorial")).toBeTruthy();
+  });
+
+  it("CP-051-M11 (US-051 E8) · una cuenta de trabajo no tiene la opción", async () => {
+    asOperator([]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Editar perfil")).toBeTruthy();
+    expect(screen.queryByText("Ver tutorial")).toBeNull();
+  });
+});
+
+describe("«Eliminar mi cuenta» no está en el perfil (N-09)", () => {
+  it("el vecino la encuentra en Editar perfil, no acá", async () => {
+    renderProfile();
+
+    expect(await screen.findByText("Editar perfil")).toBeTruthy();
+    expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
+  });
+
+  it("una cuenta de trabajo no: sigue con la baja lógica", async () => {
+    asOperator([]);
+
+    renderProfile();
+
+    expect(await screen.findByText("Editar perfil")).toBeTruthy();
+    expect(screen.queryByText("Eliminar mi cuenta")).toBeNull();
   });
 });
 

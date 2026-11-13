@@ -9,6 +9,7 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -25,6 +26,7 @@ import {
   addComment,
   deleteComment,
   deleteReport,
+  isModerationNotice,
   likeReport,
   type Comment,
   type ReportDetail,
@@ -32,11 +34,12 @@ import {
 } from "../../../../src/api/reports";
 import { reportKeys } from "../../../../src/lib/queryKeys";
 import {
+  PROCESSING_POLL_MS,
   PUBLIC_LIST_POLL_MS,
   useRefetchOnFocus,
 } from "../../../../src/lib/useRefetchOnFocus";
 import { useInvalidateReports, useReport } from "../../../../src/queries/reports";
-import { describeApiError } from "../../../../src/api/errors";
+import { describeApiError, isNetworkFailure } from "../../../../src/api/errors";
 import { participatesAsCitizen } from "../../../../src/api/users";
 import { useAuth } from "../../../../src/auth/AuthContext";
 import { useFloatingTabBarInset } from "../../../../src/components/floatingTabBar";
@@ -49,6 +52,13 @@ import {
 import { ProcessingPhoto } from "../../../../src/reports/ProcessingPhoto";
 import { RemovedPhoto } from "../../../../src/reports/RemovedPhoto";
 import { ComplaintModal } from "../../../../src/reports/ComplaintModal";
+import { ModerationBanner } from "../../../../src/reports/ModerationBanner";
+import { ShareSheet } from "../../../../src/reports/ShareSheet";
+import { accountMessages } from "../../../../src/messages/account";
+import { errorMessages } from "../../../../src/messages/errors";
+import { RetryButton } from "../../../../src/components/AppErrorBoundary";
+import { shareMessages } from "../../../../src/messages/share";
+import { ModerationNoticeView } from "../../../../src/reports/ModerationNoticeView";
 import { canReportReport } from "../../../../src/reports/complaints";
 import { usePrivacyReview } from "../../../../src/reports/usePrivacyReview";
 import { canValidateReport } from "../../../../src/validation/canValidateReport";
@@ -100,14 +110,17 @@ export default function ReportDetailScreen() {
   // que sin esto la pantalla seguía mostrando lo que ya no se puede ver.
   const unavailable =
     query.isError && (query.error as { status?: number } | null)?.status === 404;
-  const report = unavailable ? null : (query.data ?? null);
+  // Un reporte descartado por moderación que abre un tercero llega como aviso
+  // reducido (US-049): solo el motivo, sin foto ni autor.
+  const moderationNotice = isModerationNotice(query.data) ? query.data : null;
+  const report = unavailable || moderationNotice ? null : (query.data ?? null);
   // Denunciar una imagen con un dato personal visible (US-043). Para quien no
   // es el autor, el reporte deja de verse en ese momento: se vuelve atrás. El
   // autor lo sigue viendo, marcado como en revisión.
   const privacyReview = usePrivacyReview({
     reportId: Number(id),
     onSubmitted: () => {
-      if (report && user?.id === report.author.id) {
+      if (report && user?.id === report.author?.id) {
         void query.refetch();
       } else {
         router.back();
@@ -117,6 +130,8 @@ export default function ReportDetailScreen() {
 
   // El formulario de *Denunciar* (US-021), abierto o no.
   const [isReporting, setIsReporting] = useState(false);
+  // La hoja de compartir (US-030), abierta o no.
+  const [isSharing, setIsSharing] = useState(false);
 
   /** Reescribe el reporte en la caché, que es de donde la pantalla lo lee. */
   const setReport = useCallback(
@@ -132,10 +147,14 @@ export default function ReportDetailScreen() {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activePage, setActivePage] = useState(0);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  // Qué foto terminó de cargar (o falló), por su URL y no como bandera: así un
+  // reporte nuevo, o una foto reemplazada, arranca sin cargar sin depender de
+  // que `onLoadStart` llegue en el orden esperado.
+  const [loadedPhoto, setLoadedPhoto] = useState<string | null>(null);
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
   const mapRef = useRef<MapView>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [isEnlarged, setIsEnlarged] = useState(false);
   // Los comentarios arrancan a la vista: esconderlos por defecto se lee como
   // que no hay ninguno. El desplegable es para poder achicar la sección cuando
@@ -185,8 +204,7 @@ export default function ReportDetailScreen() {
   // foto cargada y la página del carrusel. El reporte en sí lo cambia la caché,
   // porque su clave incluye el id.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetear la foto cargada y la página del carrusel al cambiar de reporte
-    setImgLoaded(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetear la página del carrusel al cambiar de reporte
     setActivePage(0);
   }, [id]);
 
@@ -214,11 +232,20 @@ export default function ReportDetailScreen() {
   // Lo mismo mientras la imagen se difumina (US-042): lo resuelve una tarea
   // del servidor, y sin esto el autor se queda mirando "procesando" sobre un
   // reporte que ya se publicó.
-  const photoProcessing = report?.photo_status === "pendiente";
-  const waitingOnTheServer = underReview || photoProcessing;
+  // Cuenta también la foto de un cierre o de una objeción: el operario que
+  // acaba de cerrar se quedaba mirando "procesando" sobre su propia evidencia.
+  const photoProcessing =
+    report?.photo_status === "pendiente" ||
+    report?.resolution_evidences.some((e) => e.photo_status === "pendiente") ||
+    report?.resolution_appeals.some((a) => a.photo_status === "pendiente") ||
+    false;
   useRefetchOnFocus(reportKeys.detail(Number(id)), {
     onlyStale: false,
-    pollMs: waitingOnTheServer ? PUBLIC_LIST_POLL_MS : undefined,
+    pollMs: photoProcessing
+      ? PROCESSING_POLL_MS
+      : underReview
+        ? PUBLIC_LIST_POLL_MS
+        : undefined,
   });
   // Cuando la revisión termina, "Mis reportes" y el feed también cambian: el
   // reporte deja de figurar en revisión y vuelve a verse para todos.
@@ -304,14 +331,35 @@ export default function ReportDetailScreen() {
     );
   }
 
+  if (moderationNotice) {
+    return <ModerationNoticeView notice={moderationNotice} />;
+  }
+
   if (!report) {
+    // N-20: un 404 no es lo mismo que un servidor caído o la falta de red. El
+    // 404 de un reporte que se estaba mostrando es que dejó de estar
+    // disponible (US-043); el de uno que nunca llegó, que no existe.
+    if (unavailable || !query.isError) {
+      return (
+        <View style={styles.center}>
+          <Text>
+            {unavailable && query.data !== undefined
+              ? errorMessages.reportGone
+              : errorMessages.reportNotFound}
+          </Text>
+        </View>
+      );
+    }
+    const offline = isNetworkFailure(query.error);
     return (
       <View style={styles.center}>
-        <Text>
-          {unavailable
-            ? "Este reporte ya no está disponible."
-            : "Reporte no encontrado."}
+        <Text style={styles.errorTitle}>
+          {offline ? errorMessages.offlineTitle : errorMessages.serverTitle}
         </Text>
+        <Text style={styles.errorBody}>
+          {offline ? errorMessages.offlineBody : errorMessages.serverBody}
+        </Text>
+        <RetryButton onPress={() => void query.refetch()} />
       </View>
     );
   }
@@ -334,24 +382,39 @@ export default function ReportDetailScreen() {
    * se achica, así que suponer que sí dejaba el cajón debajo del teclado—.
    */
   const composerBottom = keyboardOffset > 0 ? keyboardOffset : tabBarInset;
-  const isAuthor = user !== null && user.id === report.author.id;
+  const isAuthor = user !== null && user.id === report.author?.id;
   const canReport = canReportReport(report, user);
 
   // La foto, o el aviso de por qué no está: retirada por protección de datos
   // (US-043), o todavía en el difuminado (US-042). Es la misma en las dos
   // variantes de la cabecera, con mapa y sin él.
-  const photoSlide = report.photo ? (
+  const photo = report.photo;
+  const photoSlide = photo ? (
     <>
       <Image
-        source={imageSource(report.photo)}
+        source={imageSource(photo)}
         style={{ width, height: "100%" }}
-        onLoadStart={() => setImgLoaded(false)}
-        onLoad={() => setImgLoaded(true)}
+        // `onLoadEnd` llega tanto si cargó como si falló: el indicador nunca
+        // queda tapando una foto que ya está, que es lo que pasaba esperando
+        // solo `onLoad`.
+        onLoadEnd={() => setLoadedPhoto(photo)}
+        onError={(event) => {
+          console.warn("No se pudo cargar la foto del reporte", photo, event.nativeEvent.error);
+          setFailedPhoto(photo);
+        }}
+        accessibilityLabel="Foto del reporte"
       />
-      {!imgLoaded && (
+      {failedPhoto === photo ? (
         <View style={styles.photoSkeleton}>
-          <ActivityIndicator color="#bbb" />
+          <Ionicons name="image-outline" size={28} color="#9aa3ad" />
+          <Text style={styles.photoErrorText}>No pudimos cargar la foto</Text>
         </View>
+      ) : (
+        loadedPhoto !== photo && (
+          <View style={styles.photoSkeleton} testID="photo-loading">
+            <ActivityIndicator color="#bbb" />
+          </View>
+        )
       )}
       {/* Siempre disponible: antes solo aparecía si la foto era vertical, y
           con una apaisada —o si `Image.getSize` fallaba, que es fácil detrás de
@@ -569,13 +632,18 @@ export default function ReportDetailScreen() {
           <Text style={styles.description}>{report.description}</Text>
           <Text style={styles.meta}>
             Por{" "}
-            <Text
-              style={styles.authorLink}
-              onPress={() => router.push(`/(app)/user/${report.author.id}`)}
-              suppressHighlighting
-            >
-              {report.author.name}
-            </Text>{" "}
+            {report.author ? (
+              <Text
+                style={styles.authorLink}
+                onPress={() => router.push(`/(app)/user/${report.author?.id}`)}
+                suppressHighlighting
+              >
+                {report.author.name}
+              </Text>
+            ) : (
+              // El vecino borró su cuenta (N-09): el reporte quedó sin autor.
+              accountMessages.deletedUser
+            )}{" "}
             • {new Date(report.created_at).toLocaleDateString("es-AR")}
           </Text>
           {/* La dirección primero y las coordenadas solo como último recurso.
@@ -633,6 +701,12 @@ export default function ReportDetailScreen() {
               publicarse. Editalo y cargá otra imagen para volver a intentarlo.
             </Text>
           </View>
+        )}
+
+        {/* Descartado por moderación municipal (US-049): el motivo es
+            público, y el autor ve además su apelación. */}
+        {report.moderation && (
+          <ModerationBanner reportId={report.id} moderation={report.moderation} />
         )}
 
         {report.under_privacy_review && (
@@ -713,18 +787,43 @@ export default function ReportDetailScreen() {
           </Pressable>
         )}
 
-        {canParticipate ? (
-          <Pressable style={styles.likeBtn} onPress={handleLike}>
-            <Text style={styles.likeBtnText}>
-              {report.is_liked ? "♥" : "♡"} {report.like_count}
-            </Text>
-          </Pressable>
-        ) : (
-          // El contador se sigue viendo: es información del reporte. Lo que se
-          // saca es poder tocarlo.
-          <View style={styles.likeCount}>
-            <Text style={styles.likeCountText}>♡ {report.like_count}</Text>
-          </View>
+        <View style={styles.socialRow}>
+          {canParticipate ? (
+            <Pressable style={styles.likeBtn} onPress={handleLike}>
+              <Text style={styles.likeBtnText}>
+                {report.is_liked ? "♥" : "♡"} {report.like_count}
+              </Text>
+            </Pressable>
+          ) : (
+            // El contador se sigue viendo: es información del reporte. Lo que se
+            // saca es poder tocarlo.
+            <View style={styles.likeCount}>
+              <Text style={styles.likeCountText}>♡ {report.like_count}</Text>
+            </View>
+          )}
+          {/* Compartir (US-030): solo si el reporte es público. El servidor
+              no manda el enlace de uno que nadie más puede ver. */}
+          {report.share_url && (
+            <Pressable
+              style={styles.shareBtn}
+              onPress={() => setIsSharing(true)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="share-social-outline" size={17} color="#1a73e8" />
+              <Text style={styles.shareBtnText}>{shareMessages.button}</Text>
+            </Pressable>
+          )}
+        </View>
+        {report.share_url && (
+          <ShareSheet
+            visible={isSharing}
+            onClose={() => setIsSharing(false)}
+            url={report.share_url}
+            message={shareMessages.message(
+              (CATEGORY_LABEL[report.category] ?? report.category).toLowerCase(),
+              report.address ? shortAddress(report.address) : "",
+            )}
+          />
         )}
 
         {/* La evidencia de resolución (US-046) y la objeción del vecino
@@ -1268,7 +1367,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   container: { flex: 1, backgroundColor: "#fff" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, gap: 8 },
+  errorTitle: { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center" },
+  errorBody: { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20 },
   photo: { width: "100%", height: 240 },
   privacyNotice: {
     flexDirection: "row",
@@ -1313,6 +1414,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  photoErrorText: {
+    marginTop: 6,
+    fontSize: 13,
+    color: "#6b7280",
+  },
   dotsContainer: {
     position: "absolute",
     bottom: 12,
@@ -1349,8 +1455,24 @@ const styles = StyleSheet.create({
   description: { fontSize: 15, color: "#333", marginBottom: 8, lineHeight: 22 },
   meta: { fontSize: 12, color: "#888" },
   location: { fontSize: 13, color: "#666", marginTop: 6 },
-  likeBtn: {
+  socialRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     margin: 16,
+  },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#1a73e8",
+  },
+  shareBtnText: { color: "#1a73e8", fontWeight: "600", fontSize: 15 },
+  likeBtn: {
     alignSelf: "flex-start",
     paddingHorizontal: 20,
     paddingVertical: 8,
@@ -1431,7 +1553,6 @@ const styles = StyleSheet.create({
   commentText: { fontSize: 14, color: "#333" },
   commentDate: { fontSize: 11, color: "#aaa", marginTop: 4 },
   likeCount: {
-    margin: 16,
     alignSelf: "flex-start",
     paddingVertical: 8,
   },

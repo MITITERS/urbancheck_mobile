@@ -1,5 +1,13 @@
 import { api } from "../client";
-import { canValidate, getMe, getPublicProfile, participatesAsCitizen, patchMe } from "../users";
+import {
+  acceptTerms,
+  canValidate,
+  getCurrentTerms,
+  getMe,
+  getPublicProfile,
+  participatesAsCitizen,
+  patchMe,
+} from "../users";
 import type { UserProfile } from "../users";
 
 jest.mock("../client", () => ({
@@ -16,6 +24,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   url: "/api/users/1/",
 };
@@ -61,7 +70,50 @@ describe("users api", () => {
     expect(canValidate(null)).toBe(false);
   });
 
+  it("canValidate también pide la cuenta de trabajo activa (C-11)", () => {
+    // Igual que `User.can_validate` en el backend: un validador dado de baja
+    // no ve la opción, en vez de verla y recibir un 403 al usarla.
+    const validator: UserProfile = { ...CITIZEN, role: "validador" };
+    expect(canValidate({ ...validator, is_work_account_active: false })).toBe(false);
+    expect(canValidate({ ...validator, is_work_account_active: true })).toBe(true);
+  });
+
   it("el administrador de plataforma tampoco participa como vecino", () => {
     expect(participatesAsCitizen({ ...CITIZEN, role: "admin_plataforma" })).toBe(false);
+  });
+});
+
+describe("términos y condiciones (RN-10)", () => {
+  it("getCurrentTerms devuelve la versión vigente", async () => {
+    const terms = {
+      version: "2026-10",
+      published_at: "2026-10-22T00:00:00Z",
+      terms: "t",
+      privacy: "p",
+    };
+    mockedApi.get.mockResolvedValueOnce(terms);
+
+    await expect(getCurrentTerms()).resolves.toEqual(terms);
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/terms/current/");
+  });
+
+  it("getCurrentTerms devuelve null si no hay términos publicados", async () => {
+    mockedApi.get.mockRejectedValueOnce({ status: 404, detail: "No hay" });
+
+    await expect(getCurrentTerms()).resolves.toBeNull();
+  });
+
+  it("getCurrentTerms propaga los demás errores", async () => {
+    mockedApi.get.mockRejectedValueOnce({ status: 500 });
+
+    await expect(getCurrentTerms()).rejects.toEqual({ status: 500 });
+  });
+
+  it("acceptTerms manda la versión leída", () => {
+    acceptTerms("2026-10");
+
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/users/me/accept-terms/", {
+      version: "2026-10",
+    });
   });
 });

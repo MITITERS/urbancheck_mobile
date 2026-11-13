@@ -281,7 +281,7 @@ export default function FeedScreen() {
         ListFooterComponent={
           feed.isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 16 }} />
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           isOutOfCoverage ? (

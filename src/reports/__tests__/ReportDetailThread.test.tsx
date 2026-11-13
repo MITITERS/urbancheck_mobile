@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react-native";
+import { fireEvent, screen } from "@testing-library/react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
 import ReportDetailScreen from "../../../app/(app)/(tabs)/report/[id]";
@@ -77,6 +77,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   url: "/api/users/1/",
 };
@@ -159,8 +160,57 @@ beforeEach(() => {
     signOut: jest.fn(),
     setUser: jest.fn(),
     refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
   });
   mockedGet.mockResolvedValue(detail() as never);
+});
+
+describe("errores al cargar (N-20)", () => {
+  it("un 404 al abrirlo dice que no se encontró, sin ofrecer reintentar", async () => {
+    mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
+
+    renderDetail();
+
+    expect(await screen.findByText("Reporte no encontrado.")).toBeTruthy();
+    expect(screen.queryByText("Reintentar")).toBeNull();
+  });
+
+  it("un error del servidor no se confunde con un reporte inexistente", async () => {
+    mockedGet.mockRejectedValueOnce({ status: 500, detail: "Server Error" });
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("No pudimos cargar el reporte")).toBeTruthy();
+    expect(screen.queryByText("Reporte no encontrado.")).toBeNull();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+
+  it("sin red lo dice y deja reintentar", async () => {
+    mockedGet.mockRejectedValueOnce(new Error("Network request failed"));
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("Sin conexión")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+});
+
+describe("autor del reporte", () => {
+  it("N-09 · si el vecino borró su cuenta dice «Usuario eliminado»", async () => {
+    mockedGet.mockResolvedValue(detail({ author: null }) as never);
+
+    renderDetail();
+
+    expect(await screen.findByText(/Usuario eliminado/)).toBeTruthy();
+  });
 });
 
 describe("ubicación del reporte", () => {
@@ -385,5 +435,42 @@ describe("respuestas oficiales en el detalle del vecino", () => {
 
     expect(await screen.findByText("Vereda rota")).toBeTruthy();
     expect(screen.queryByText("Respuestas oficiales")).toBeNull();
+  });
+});
+
+describe("foto del reporte en el detalle", () => {
+  it("el indicador de carga se va cuando la foto termina de cargar", async () => {
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    expect(screen.getByTestId("photo-loading")).toBeTruthy();
+
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+  });
+
+  it("aunque nunca llegue onLoad, onLoadEnd no la deja tapada", async () => {
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    fireEvent(photo, "loadStart");
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+  });
+
+  it("si la foto no carga, lo dice en lugar de quedar girando", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    fireEvent(photo, "error", { nativeEvent: { error: "HTTP 404" } });
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.getByText("No pudimos cargar la foto")).toBeTruthy();
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

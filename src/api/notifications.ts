@@ -31,7 +31,9 @@ export type NotificationKind =
   // El acuse de una denuncia, para quien la presentó (US-021).
   | "denuncia_recibida"
   // Al autor: su reporte recibió una denuncia. No dice de quién (US-021).
-  | "reporte_denunciado";
+  | "reporte_denunciado"
+  // Al autor: la plataforma mantuvo el descarte de su reporte (US-049).
+  | "apelacion_moderacion_rechazada";
 
 export interface Notification {
   id: number;

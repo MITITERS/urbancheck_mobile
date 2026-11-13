@@ -14,7 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { imageSource } from "../../../src/api/client";
 import { formatDistance, type PendingReport } from "../../../src/api/validation";
 import { validationKeys } from "../../../src/lib/queryKeys";
-import { useRefetchOnFocus } from "../../../src/lib/useRefetchOnFocus";
+import {
+  INBOX_POLL_MS,
+  useRefetchOnFocus,
+} from "../../../src/lib/useRefetchOnFocus";
 import { usePendingValidation } from "../../../src/queries/validation";
 import { CATEGORY_LABEL } from "../../../src/reports/labels";
 import { useValidatorLocation } from "../../../src/validation/useValidatorLocation";
@@ -37,8 +40,12 @@ export default function ValidateTab() {
   // La ubicación se pide una vez al entrar; no se re-consulta en cada scroll.
   const pending = usePendingValidation(coords, 1, permission !== "checking");
   // Después de validar o rechazar, el reporte tiene que salir de la bandeja al
-  // volver acá. Refresca por detrás, sin tapar la lista.
-  useRefetchOnFocus(validationKeys.lists());
+  // volver acá, y uno recién cargado tiene que entrar sin salir de la pestaña.
+  // Refresca por detrás, sin tapar la lista.
+  useRefetchOnFocus(validationKeys.lists(), {
+    onlyStale: false,
+    pollMs: INBOX_POLL_MS,
+  });
 
   const reports: PendingReport[] = pending.data?.results ?? [];
   const loading = pending.isPending && permission !== "checking";

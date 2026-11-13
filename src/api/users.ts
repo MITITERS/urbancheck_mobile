@@ -30,6 +30,18 @@ export interface UserProfile {
   municipality: Municipality | null;
   /** Mientras sea true, el usuario debe cambiar la contraseña temporal. */
   must_change_password: boolean;
+  /**
+   * Cuándo terminó u omitió el tutorial de bienvenida (US-051). Nulo mientras
+   * no lo vio. Vive en la cuenta y no en el teléfono: reinstalar la app o
+   * entrar desde otro dispositivo no lo vuelve a mostrar.
+   */
+  onboarding_completed_at: string | null;
+  /**
+   * RN-10: el vecino todavía no aceptó la versión vigente de los términos y
+   * condiciones. Mientras sea true, la app solo le muestra esa pantalla.
+   * Opcional porque un backend anterior no lo manda: sin el campo, no se exige.
+   */
+  must_accept_terms?: boolean;
   /** US-027: si es false, el perfil público solo muestra nombre y avatar. */
   is_public: boolean;
   /** Solo para el rol operario: el área cuyos reportes ve (US-044). */
@@ -63,20 +75,44 @@ export function getPublicProfile(id: number) {
   return api.get<PublicProfile>(`/api/users/${id}/`);
 }
 
+/**
+ * Marca el tutorial de bienvenida como visto (US-051). Terminarlo y omitirlo
+ * llaman a lo mismo. Es idempotente en el servidor: un reintento no pisa la
+ * fecha original.
+ */
+export function completeOnboarding() {
+  return api.post<UserProfile>("/api/users/me/onboarding/");
+}
+
 export function patchMe(data: FormData) {
   return api.patch<UserProfile>("/api/users/me/", data);
 }
 
 /**
+ * Borra la cuenta del vecino (N-09), confirmada con su contraseña. El backend
+ * borra lo que el municipio nunca gestionó y conserva sin autor lo demás.
+ */
+export function deleteAccount(password: string) {
+  return api.delete<void>("/api/users/me/", { password });
+}
+
+/**
  * Única regla de "este usuario puede validar" del lado del cliente (US-035).
  *
- * El backend la vuelve a verificar en cada request —es la fuente de verdad—;
- * esto solo decide qué se muestra. La baja lógica del validador no viaja en el
- * perfil, así que un validador desactivado ve la opción y recibe un 403 al
- * usarla: por eso las pantallas manejan ese error en lugar de confiar en esto.
+ * Las mismas tres condiciones que `User.can_validate` en el backend (C-11): el
+ * rol, la cuenta de trabajo activa y la contraseña temporal ya cambiada. El
+ * backend la vuelve a verificar en cada request —es la fuente de verdad—; esto
+ * solo decide qué se muestra. Si el perfil no trae `is_work_account_active`
+ * (un backend anterior a la baja lógica), la cuenta se asume activa. Las
+ * pantallas igual manejan el 403: la baja puede llegar con la app abierta.
  */
 export function canValidate(user: UserProfile | null): boolean {
-  return user !== null && user.role === "validador" && !user.must_change_password;
+  return (
+    user !== null &&
+    user.role === "validador" &&
+    user.is_work_account_active !== false &&
+    !user.must_change_password
+  );
 }
 
 /**
@@ -124,4 +160,37 @@ export function participatesAsCitizen(user: UserProfile | null): boolean {
  */
 export function isOperator(user: UserProfile | null): boolean {
   return user !== null && user.role === "operario";
+}
+
+/**
+ * Una versión publicada de los términos y condiciones y la política de
+ * privacidad (RN-10). Los dos documentos comparten versión y se aceptan juntos.
+ * Los textos vienen en Markdown.
+ */
+export interface TermsOfService {
+  version: string;
+  published_at: string;
+  terms: string;
+  privacy: string;
+}
+
+/**
+ * Los términos vigentes, o `null` si todavía no hay ninguna versión publicada
+ * (el backend responde 404): en ese caso no hay nada que aceptar.
+ */
+export async function getCurrentTerms(): Promise<TermsOfService | null> {
+  try {
+    return await api.get<TermsOfService>("/api/terms/current/");
+  } catch (err) {
+    if ((err as { status?: number })?.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Registra que el vecino aceptó `version` (RN-10). El servidor responde 400 si
+ * ya no es la vigente: se publicó otra mientras la leía.
+ */
+export function acceptTerms(version: string) {
+  return api.post<UserProfile>("/api/users/me/accept-terms/", { version });
 }

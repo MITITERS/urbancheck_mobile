@@ -45,6 +45,7 @@ const CITIZEN: UserProfile = {
   role: "ciudadano",
   municipality: null,
   must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
   is_public: true,
   url: "/api/users/1/",
 };
@@ -118,6 +119,39 @@ describe("signIn", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("tok", false));
     expect(result.current.token).toBe("tok");
+    expect(mockedStore.setItemAsync).not.toHaveBeenCalled();
+  });
+});
+
+// N-04: allauth rota el token al cambiar la contraseña y cierra las demás
+// sesiones; la app tiene que seguir con el token nuevo.
+describe("replaceToken", () => {
+  it("adopts the rotated token and keeps it stored if it was", async () => {
+    mockedStore.getItemAsync.mockResolvedValue(null);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.signIn("old", true));
+    mockedStore.getItemAsync.mockResolvedValue("old");
+
+    await act(() => result.current.replaceToken("rotated"));
+
+    expect(result.current.token).toBe("rotated");
+    expect(mockedSetSessionToken).toHaveBeenLastCalledWith("rotated");
+    expect(mockedStore.setItemAsync).toHaveBeenLastCalledWith(
+      "urbancheck_session_token",
+      "rotated",
+    );
+  });
+
+  it("does not persist a token that was not remembered", async () => {
+    mockedStore.getItemAsync.mockResolvedValue(null);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(() => result.current.signIn("old", false));
+
+    await act(() => result.current.replaceToken("rotated"));
+
+    expect(result.current.token).toBe("rotated");
     expect(mockedStore.setItemAsync).not.toHaveBeenCalled();
   });
 });

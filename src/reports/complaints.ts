@@ -20,7 +20,7 @@ export function canReportReport(
   user: UserProfile | null,
 ): boolean {
   if (!participatesAsCitizen(user) || user === null) return false;
-  if (user.id === report.author.id) return false;
+  if (user.id === report.author?.id) return false;
   if (report.photo_removed_at) return false;
   return !NOT_PUBLIC_STATUSES.includes(report.status);
 }

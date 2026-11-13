@@ -1,10 +1,13 @@
 # UrbanCheck — App móvil
 
-Aplicación de ciudadanos y validadores de UrbanCheck (Expo + React Native +
-TypeScript). El panel municipal es otro repositorio (`urbancheck_frontend`) y la
+Aplicación de ciudadanos, validadores y operarios de UrbanCheck (Expo + React
+Native + TypeScript). El panel municipal es otro repositorio (`urbancheck_frontend`) y la
 API vive en `urbancheck_backend`.
 
 ## Levantar el proyecto
+
+Node 22 LTS: es la versión de `.nvmrc`, de `engines` y del CI (C-17). Con nvm,
+`nvm use` la toma de `.nvmrc`.
 
 ```bash
 npm install
@@ -34,15 +37,22 @@ npx tsc --noEmit  # typecheck
 
 ## Roles
 
-La plataforma tiene cuatro roles: `ciudadano`, `validador`, `agente_municipal` y
-`admin_plataforma`. **Esta app es para los dos primeros**; los municipales
-trabajan desde el panel web.
+La plataforma tiene cinco roles: `ciudadano`, `validador`, `operario`,
+`agente_municipal` y `admin_plataforma`. **Esta app es para los tres primeros**;
+el agente y el admin trabajan desde el panel web.
 
-Las cuentas de **validador** y de **agente municipal** son **cuentas de
-trabajo**: solo ven reportes de la municipalidad que se les asignó, también en el
-feed y en el mapa. Un reporte de otra jurisdicción directamente no existe para
-esas cuentas. Quien además quiera usar UrbanCheck como vecino se crea una cuenta
-personal aparte.
+| Rol         | Pestañas (`app/(app)/(tabs)/_layout.tsx`)                     |
+| ----------- | ------------------------------------------------------------- |
+| `ciudadano` | Reportes, Mapa, Reportar, Avisos y Perfil                     |
+| `validador` | Reportes, Mapa, Validar, Avisos y Perfil, de su municipalidad |
+| `operario`  | Trabajos (los de su área) y Perfil (ver US-044 más abajo)     |
+
+Las cuentas de **validador**, **operario** y **agente municipal** son **cuentas
+de trabajo**: solo ven reportes de la municipalidad que se les asignó (el
+operario, además, solo los de su área). Un reporte de otra jurisdicción
+directamente no existe para esas cuentas, y ninguna participa como vecino: no
+reporta, no comenta ni da me gusta, esté activa o dada de baja. Quien además
+quiera usar UrbanCheck como vecino se crea una cuenta personal aparte.
 
 El filtro lo aplica el backend, así que la app no tiene que saber nada: pide el
 feed como siempre y recibe solo lo que corresponde.
@@ -115,9 +125,11 @@ decide si se muestran las acciones de validación. **El backend vuelve a
 verificarlo en cada request y es la fuente de verdad**; estas funciones solo
 deciden qué se dibuja.
 
-La baja lógica del validador (`is_validator_active`) no viaja en el perfil, así
-que un validador desactivado ve la opción y recibe un `403` al usarla. Por eso
-las pantallas manejan ese error en vez de confiar en el cálculo local.
+`canValidate()` pide las mismas tres condiciones que `User.can_validate` en el
+backend: rol `validador`, cuenta de trabajo activa (`is_work_account_active`,
+que viaja en el perfil) y contraseña temporal ya cambiada (C-11). Si el perfil
+no trae el campo, la cuenta se asume activa. Las pantallas igual manejan el
+`403`: la baja puede llegar con la app abierta y el perfil en caché.
 
 ### Un problema ya reportado: sumarse en vez de duplicar (US-032)
 
@@ -407,6 +419,19 @@ Mientras el backend informe `must_change_password: true`, el guard del layout
 raíz deja accesible **solo** la pantalla de cambio de contraseña. Vive ahí y no
 en cada pantalla para que no se pueda saltear navegando a una ruta directa.
 
+### Términos y condiciones (RN-10, C-23)
+
+Si hay términos publicados (`GET /api/terms/current/`; un `404` es que no hay),
+el registro muestra una casilla y un enlace al texto, y no deja crear la cuenta
+sin marcarla. Se manda la versión aceptada junto con la aceptación: si cambió
+mientras tanto, el backend la rechaza y la app recarga la vigente.
+
+El vecino con `must_accept_terms: true` —cuenta anterior a la publicación, o
+versión nueva— queda frenado por el mismo guard del layout raíz en la pantalla
+`accept-terms`, que solo deja aceptar o cerrar sesión. Va después de la
+contraseña temporal y antes del tutorial. Las cuentas de trabajo no pasan por
+ahí. Sin términos publicados no aparece nada de esto.
+
 ### Las fotos y el túnel de desarrollo
 
 `imageSource()` (en `src/api/client.ts`) es lo que va en el `source` de toda
@@ -631,9 +656,12 @@ contra un GPS falsificado.
 
 ### Notificaciones
 
-La bandeja muestra los avisos sociales (comentarios y likes) y los de cambio de
-estado del reporte, con ícono propio por tipo y un contador de no leídos que
-incluye ambos.
+La bandeja muestra todos los tipos de aviso que manda el backend: los sociales
+(comentarios y me gusta, que se generan desde C-09), los del avance del reporte
+(cambio de estado, respuesta oficial, archivado y confirmación próximos) y los de
+denuncias, moderación e imágenes. Cada tipo tiene ícono propio (`KIND_STYLE` en
+`notices.tsx`) y el contador de no leídos los incluye a todos. El operario no
+tiene bandeja de avisos.
 
 Las preferencias (`app/(app)/notification-preferences.tsx`) recorren el catálogo
 de tipos que devuelve el backend, así que **un tipo nuevo aparece en la pantalla
@@ -923,6 +951,62 @@ del cierre y en la apelación.
   difumine. Es correcto —no se publica una imagen sin procesar— pero es un
   cambio visible, y sin avisarlo se lee como un bug.
 
+### Tutorial de bienvenida en el primer ingreso (US-051)
+
+- **Se decide en el arranque de sesión**, en `app/_layout.tsx`, con un
+  `Stack.Protected` más: el mismo punto que resuelve la contraseña temporal y la
+  navegación por rol, no la pantalla del feed. Se muestra solo a un vecino cuya
+  cuenta tiene `onboarding_completed_at` nulo; la contraseña temporal va
+  primero.
+- Los pasos son una **lista de datos** (`src/onboarding/steps.ts`): agregar o
+  quitar uno es editar esa lista. Los textos están en
+  `src/messages/onboarding.ts`, el primer archivo de mensajes centralizado de la
+  app.
+- El recorrido (`src/onboarding/OnboardingTour.tsx`) es un `ScrollView`
+  horizontal con `pagingEnabled`, el mismo patrón que la galería del detalle, en
+  vez de una dependencia nativa de paginado. Omitir está en todos los pasos
+  menos el último, donde lo reemplaza Empezar. No pide permisos: la cámara y la
+  ubicación se piden al crear el reporte.
+- **Terminar y omitir marcan la cuenta en el backend.** Si el POST falla por
+  red, el vecino entra al feed igual y queda anotado en SecureStore, por cuenta,
+  que la marca está pendiente. `AuthContext` la reintenta en silencio en el
+  siguiente ingreso (`reconcileOnboarding`), y mientras no se confirme el
+  tutorial tampoco se vuelve a mostrar. Si la app se cierra a mitad del
+  recorrido no se marcó nada, así que arranca otra vez desde el primer paso.
+- «Ver tutorial» en el perfil abre `/(app)/tutorial`, una ruta aparte dentro del
+  área autenticada que reutiliza el mismo recorrido sin Omitir y sin tocar
+  ninguna marca. Solo la ven los vecinos.
+
+### Un reporte descartado por moderación (US-049)
+
+- Un tercero que abre un reporte descartado recibe del servidor solo el aviso
+  (`is_moderation_notice`), y la pantalla de detalle dibuja `ModerationNoticeView`
+  con el motivo y nada más. `getReport()` sigue tipado como `ReportDetail`; la
+  pantalla lo distingue con `isModerationNotice()`.
+- El autor ve el detalle completo con `ModerationBanner`: el motivo, en qué
+  quedó su apelación y, si `moderation.can_appeal`, el botón para apelar.
+- La apelación tiene **pantalla propia** (`/(app)/moderation-appeal/[id]`) y no
+  reutiliza la de objetar un cierre: aquella gira alrededor de una foto
+  obligatoria y esta pide solo el motivo. El mecanismo del backend sí es el
+  mismo (`ResolutionAppeal` con `kind="moderacion"`).
+- Textos en `src/messages/moderation.ts`.
+
+### Compartir un reporte (US-030)
+
+- «Compartir» aparece en el detalle solo si el servidor manda `share_url`, o sea,
+  si el reporte es público. Abre `ShareSheet` con WhatsApp
+  (`whatsapp://send`, o WhatsApp Web si no está instalada), Instagram, copiar el
+  enlace (`expo-clipboard`) y «Más opciones». Instagram no recibe texto por URL,
+  así que abre la hoja del sistema, donde aparece si está instalada.
+- **`expo-clipboard` es un módulo nativo nuevo**: anda en Expo Go, pero el dev
+  build hay que regenerarlo (`npx expo prebuild --clean` y un build nuevo).
+- El enlace `https://urbancheck.com.ar/r/<token>` (y `urbancheck://r/<token>`)
+  abre `app/r/[token].tsx`, que vive en la raíz y sin guard, como
+  `reset-password`. Resuelve el token con el endpoint público y, con sesión, va
+  al detalle; si ya no está disponible lo dice. Android lo toma por el
+  `intentFilter` con `pathPrefix: "/r/"`.
+- Textos en `src/messages/share.ts`.
+
 ## Nota: `feature/sprint-3` no salió de `develop`
 
 Esta rama arranca de un punto **anterior** al merge de Sprint 2 en `develop`, así
@@ -949,3 +1033,8 @@ Antes de seguir sumando trabajo a esta rama conviene decidir qué pasa con la
 otra: un merge de `develop` va a chocar en los mismos archivos, y cuanto más
 tiempo pase, peor. Comparar `git log --oneline origin/develop ^HEAD` da la lista
 completa.
+
+## Licencia
+
+Propietaria, todos los derechos reservados: ver [`LICENSE`](LICENSE). Es la
+misma en los tres repositorios de UrbanCheck (C-14).

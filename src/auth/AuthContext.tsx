@@ -12,6 +12,7 @@ import { setSessionToken, setUnauthorizedHandler } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { getMe, type UserProfile } from "../api/users";
+import { reconcileOnboarding } from "../onboarding/mark";
 
 const SECURE_STORE_KEY = "urbancheck_session_token";
 
@@ -26,6 +27,7 @@ interface AuthContextValue extends AuthState {
   signOut: () => Promise<void>;
   setUser: (user: UserProfile) => void;
   refreshUser: () => Promise<void>;
+  replaceToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,9 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const session = await getSession();
         const token = session.meta.session_token ?? storedToken;
         setSessionToken(token);
-        // El perfil se carga acá y no en cada pantalla: el rol y el flag de
-        // contraseña temporal deciden qué se muestra desde el primer render.
-        const user = await getMe().catch(() => null);
+        // El perfil se carga acá y no en cada pantalla: el rol, el flag de
+        // contraseña temporal y la marca del tutorial deciden qué se muestra
+        // desde el primer render. Si la marca del tutorial había quedado
+        // pendiente por un error de red, se reintenta ahora (US-051).
+        const user = await reconcileOnboarding(await getMe().catch(() => null));
         setState({ token, user, isLoading: false });
       } catch {
         setSessionToken(null);
@@ -85,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (rememberMe) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, token);
     }
-    const user = await getMe().catch(() => null);
+    const user = await reconcileOnboarding(await getMe().catch(() => null));
     setState({ token, user, isLoading: false });
   }, []);
 
@@ -99,9 +103,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user) setState((s) => ({ ...s, user }));
   }, []);
 
+  /**
+   * Adopta el token nuevo de la misma sesión. allauth lo rota al cambiar la
+   * contraseña (N-04): el viejo deja de valer, y seguir usándolo cerraba la
+   * sesión. Se guarda solo si ya estaba guardado ("recordarme").
+   */
+  const replaceToken = useCallback(async (token: string) => {
+    setSessionToken(token);
+    const stored = await SecureStore.getItemAsync(SECURE_STORE_KEY).catch(() => null);
+    if (stored) {
+      await SecureStore.setItemAsync(SECURE_STORE_KEY, token).catch(() => {});
+    }
+    setState((s) => ({ ...s, token }));
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ ...state, signIn, signOut, setUser, refreshUser }}
+      value={{ ...state, signIn, signOut, setUser, refreshUser, replaceToken }}
     >
       {children}
     </AuthContext.Provider>
