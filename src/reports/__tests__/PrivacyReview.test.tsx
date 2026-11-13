@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
 import { Alert, type AlertButton } from "react-native";
 import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
 
@@ -381,14 +381,21 @@ describe("Denunciar imagen (US-043)", () => {
     try {
       signIn(profile({ id: AUTHOR.id }));
       renderDetail(detail({ under_privacy_review: true }));
-      expect(await screen.findByText(/Tu reporte está oculto/)).toBeTruthy();
+      // Con timers falsos, `findBy*`/`waitFor` avanzan el reloj de a 50 ms y
+      // esperan entre vueltas: tardaba ~3,6 s y en el CI pasaba los 5 s del
+      // test. React Query agenda con timers, así que se avanza el reloj un
+      // poco (lejos de los 30 s del sondeo) para que llegue la primera carga.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(100);
+      });
+      expect(screen.getByText(/Tu reporte está oculto/)).toBeTruthy();
 
       mockedGet.mockResolvedValue(detail({ under_privacy_review: false }));
       await act(async () => {
-        jest.advanceTimersByTime(30_000);
+        await jest.advanceTimersByTimeAsync(30_000);
       });
 
-      await waitFor(() => expect(screen.queryByText(/Tu reporte está oculto/)).toBeNull());
+      expect(screen.queryByText(/Tu reporte está oculto/)).toBeNull();
     } finally {
       jest.useRealTimers();
     }
