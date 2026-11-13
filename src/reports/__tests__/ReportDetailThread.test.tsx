@@ -1,0 +1,476 @@
+import { fireEvent, screen } from "@testing-library/react-native";
+import { SafeAreaProvider, type Metrics } from "react-native-safe-area-context";
+
+import ReportDetailScreen from "../../../app/(app)/(tabs)/report/[id]";
+import { api } from "../../api/client";
+import type { ReportDetail } from "../../api/reports";
+import type { UserProfile } from "../../api/users";
+import { useAuth } from "../../auth/AuthContext";
+import { renderWithProviders } from "../../test/renderWithProviders";
+
+/**
+ * El hilo de resolución del detalle, tal como lo ve el vecino (US-046, US-048).
+ *
+ * Lo que importa acá es que se puedan **comparar las dos fotos**: la del cierre
+ * que hizo el municipio y la del estado real que aporta quien objeta. La de la
+ * objeción no se mostraba, así que el hilo contaba la mitad de la historia.
+ */
+
+jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: jest.fn(), back: jest.fn() }),
+  useLocalSearchParams: () => ({ id: "7" }),
+  useFocusEffect: (callback: () => void) =>
+    (jest.requireActual("react") as typeof import("react")).useEffect(callback, [callback]),
+}));
+
+jest.mock("react-native-maps", () => {
+  const React = jest.requireActual("react");
+  const { View } = jest.requireActual("react-native");
+  const MapView = React.forwardRef(function MapView(props: Record<string, unknown>, ref: unknown) {
+    React.useImperativeHandle(ref, () => ({ animateToRegion: jest.fn() }));
+    return React.createElement(View, props);
+  });
+  return { __esModule: true, default: MapView, Marker: View };
+});
+
+jest.mock("@expo/vector-icons", () => {
+  const { View } = jest.requireActual("react-native");
+  return { Ionicons: View };
+});
+
+// Las acciones de validación traen ubicación y permisos, que no son de esta
+// prueba: se reemplazan por nada.
+jest.mock("../../validation/ValidationActions", () => ({
+  ValidationActions: () => null,
+}));
+
+jest.mock("../../api/client", () => ({
+  ...jest.requireActual("../../api/client"),
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+}));
+jest.mock("../../auth/AuthContext", () => ({ useAuth: jest.fn() }));
+
+const mockedGet = api.get as jest.MockedFunction<typeof api.get>;
+const mockedUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+
+/** La pantalla reserva el espacio de la barra flotante: necesita las insets. */
+const METRICS: Metrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
+
+function renderDetail() {
+  return renderWithProviders(
+    <SafeAreaProvider initialMetrics={METRICS}>
+      <ReportDetailScreen />
+    </SafeAreaProvider>,
+  );
+}
+
+const AUTHOR = { id: 1, name: "Vecina", avatar: null };
+
+const CITIZEN: UserProfile = {
+  id: 1,
+  name: "Vecina",
+  email: "vecina@test.com",
+  avatar: null,
+  role: "ciudadano",
+  municipality: null,
+  must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
+  is_public: true,
+  url: "/api/users/1/",
+};
+
+const CLOSURE_PHOTO = "https://example.test/cierre.jpg";
+const APPEAL_PHOTO = "https://example.test/objecion.jpg";
+
+function detail(overrides: Partial<ReportDetail> = {}): ReportDetail {
+  return {
+    id: 7,
+    number: 32,
+    photo: "https://example.test/reporte.jpg",
+    photo_removed_at: null,
+    photo_status: "procesada" as const,
+    under_privacy_review: false,
+    description: "Vereda rota",
+    category: "vereda",
+    latitude: null,
+    longitude: null,
+    address: "Buenos Aires 100",
+    status: "en_proceso",
+    author: AUTHOR,
+    like_count: 0,
+    comment_count: 0,
+    created_at: "2026-09-01T10:00:00Z",
+    has_official_response: false,
+    archived_at: null,
+    area_assigned_at: null,
+    appeal_count: 1,
+    is_liked: false,
+    comments: [],
+    official_responses: [],
+    resolution_evidences: [
+      {
+        id: 1,
+        photo: CLOSURE_PHOTO,
+        photo_removed_at: null,
+        photo_status: "procesada" as const,
+        description: "Se repuso la baldosa.",
+        created_at: "2026-09-09T13:46:00Z",
+        operational_area: "Obras Públicas",
+      },
+    ],
+    resolution_appeals: [
+      {
+        id: 1,
+        photo: APPEAL_PHOTO,
+        photo_status: "procesada" as const,
+        reason: "Sigue igual.",
+        created_at: "2026-09-09T13:47:00Z",
+      },
+    ],
+    objection_deadline: null,
+    can_appeal: false,
+    status_history: [],
+    can_edit: false,
+    ...overrides,
+  } as ReportDetail;
+}
+
+/** Las URLs de las imágenes que la pantalla dibujó, en orden. */
+function renderedPhotos(): string[] {
+  return screen
+    .UNSAFE_getAllByType(
+      (jest.requireActual("react-native") as typeof import("react-native")).Image,
+    )
+    .map((node) => {
+      const source = node.props.source as { uri?: string } | undefined;
+      return source?.uri ?? "";
+    })
+    .filter(Boolean);
+}
+
+beforeEach(() => {
+  mockedUseAuth.mockReturnValue({
+    user: CITIZEN,
+    token: "t",
+    isLoading: false,
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    setUser: jest.fn(),
+    refreshUser: jest.fn(),
+    replaceToken: jest.fn(),
+  });
+  mockedGet.mockResolvedValue(detail() as never);
+});
+
+describe("errores al cargar (N-20)", () => {
+  it("un 404 al abrirlo dice que no se encontró, sin ofrecer reintentar", async () => {
+    mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
+
+    renderDetail();
+
+    expect(await screen.findByText("Reporte no encontrado.")).toBeTruthy();
+    expect(screen.queryByText("Reintentar")).toBeNull();
+  });
+
+  it("un error del servidor no se confunde con un reporte inexistente", async () => {
+    mockedGet.mockRejectedValueOnce({ status: 500, detail: "Server Error" });
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("No pudimos cargar el reporte")).toBeTruthy();
+    expect(screen.queryByText("Reporte no encontrado.")).toBeNull();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+
+  it("sin red lo dice y deja reintentar", async () => {
+    mockedGet.mockRejectedValueOnce(new Error("Network request failed"));
+    mockedGet.mockResolvedValue(detail() as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("Sin conexión")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Reintentar"));
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+  });
+});
+
+describe("autor del reporte", () => {
+  it("N-09 · si el vecino borró su cuenta dice «Usuario eliminado»", async () => {
+    mockedGet.mockResolvedValue(detail({ author: null }) as never);
+
+    renderDetail();
+
+    expect(await screen.findByText(/Usuario eliminado/)).toBeTruthy();
+  });
+});
+
+describe("ubicación del reporte", () => {
+  it("muestra la calle, no las coordenadas", async () => {
+    // **Con coordenadas cargadas**, que es el caso real y el que fallaba: la
+    // versión vieja las prefería y pintaba «-32.410300, -63.240000», que no le
+    // dice nada a nadie. Sin coordenadas el bug no se ve.
+    mockedGet.mockResolvedValue(
+      detail({ latitude: "-32.410300", longitude: "-63.240000" }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(/Buenos Aires 100/)).toBeTruthy();
+    expect(screen.queryByText(/-32\.410300/)).toBeNull();
+  });
+
+  it("acorta la cola administrativa del geocodificador", async () => {
+    mockedGet.mockResolvedValue(
+      detail({
+        address:
+          "442, La Rioja, General Güemes, Villa María, Pedanía Villa María, " +
+          "Departamento General San Martín, Córdoba, X5900, Argentina",
+      }) as never,
+    );
+
+    renderDetail();
+
+    // Tres tramos alcanzan para ubicarlo; el resto empuja el alto sin informar.
+    expect(await screen.findByText(/442, La Rioja, General Güemes/)).toBeTruthy();
+    expect(screen.queryByText(/Argentina/)).toBeNull();
+  });
+
+  it("sin dirección cae a las coordenadas, que es mejor que nada", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ address: "", latitude: "-32.410300", longitude: "-63.240000" }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(/-32\.410300/)).toBeTruthy();
+  });
+});
+
+describe("hilo de resolución del detalle", () => {
+  it("va en orden: cierre, objeción, cierre final", async () => {
+    // El caso de una apelación: el operario cierra, el vecino objeta, el
+    // operario vuelve a cerrar. Antes se pintaban las dos listas seguidas
+    // —los dos cierres y después la objeción— y el hilo quedaba al revés de
+    // como pasó: parecía que el vecino objetó el trabajo final.
+    mockedGet.mockResolvedValue(
+      detail({
+        resolution_evidences: [
+          {
+            id: 1,
+            photo: CLOSURE_PHOTO,
+            photo_removed_at: null,
+            photo_status: "procesada" as const,
+            description: "Primer cierre.",
+            created_at: "2026-09-09T13:00:00Z",
+            operational_area: "Obras Públicas",
+          },
+          {
+            id: 2,
+            photo: "https://example.test/cierre-2.jpg",
+            photo_removed_at: null,
+            photo_status: "procesada" as const,
+            description: "Cierre final.",
+            created_at: "2026-09-09T15:00:00Z",
+            operational_area: "Obras Públicas",
+          },
+        ],
+        resolution_appeals: [
+          {
+            id: 1,
+            photo: APPEAL_PHOTO,
+            photo_status: "procesada" as const,
+            photo_removed_at: null,
+            reason: "Sigue igual.",
+            created_at: "2026-09-09T14:00:00Z",
+          },
+        ],
+      }) as never,
+    );
+
+    renderDetail();
+    await screen.findByText("Primer cierre.");
+
+    // La objeción queda **entre** los dos cierres, no al final.
+    const textos = ["Primer cierre.", "Sigue igual.", "Cierre final."].map(
+      (t) => screen.getByText(t),
+    );
+    const orden = renderedPhotos();
+    expect(orden).toEqual([
+      "https://example.test/reporte.jpg",
+      CLOSURE_PHOTO,
+      APPEAL_PHOTO,
+      "https://example.test/cierre-2.jpg",
+    ]);
+    expect(textos).toHaveLength(3);
+  });
+
+
+  it("muestra la foto del cierre y la de la objeción, para poder compararlas", async () => {
+    renderDetail();
+
+    expect(await screen.findByText("Se repuso la baldosa.")).toBeTruthy();
+    expect(screen.getByText("Sigue igual.")).toBeTruthy();
+
+    const photos = renderedPhotos();
+    expect(photos).toContain(CLOSURE_PHOTO);
+    // La que faltaba: sin ella el hilo mostraba lo que dice el municipio y no
+    // lo que aporta quien objeta.
+    expect(photos).toContain(APPEAL_PHOTO);
+  });
+
+  it("una objeción sin foto no deja un hueco", async () => {
+    mockedGet.mockResolvedValue(
+      detail({
+        resolution_appeals: [
+          {
+            id: 1,
+            photo: "",
+            photo_status: "procesada" as const,
+            photo_removed_at: null,
+            reason: "Sigue igual.",
+            created_at: "2026-09-09T13:47:00Z",
+          },
+        ],
+      }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText("Sigue igual.")).toBeTruthy();
+    expect(renderedPhotos()).not.toContain(APPEAL_PHOTO);
+  });
+});
+
+/**
+ * El hilo institucional del detalle ciudadano (US-024).
+ *
+ * Tres bloques distintos conviven en la misma pantalla —la descripción del
+ * vecino, la respuesta oficial del municipio y el parte de trabajo del
+ * operario— y el escenario 10 pide que no puedan confundirse entre sí ni con
+ * los comentarios. Quien firma la respuesta ante el vecino es la municipalidad:
+ * la identidad del agente vive solo en el panel (escenario 11).
+ */
+describe("respuestas oficiales en el detalle del vecino", () => {
+  const RESPONSES = [
+    {
+      id: 1,
+      text: "Enviamos la cuadrilla el lunes.",
+      created_at: "2026-09-02T09:00:00Z",
+      municipality: "Villa María",
+    },
+    {
+      id: 2,
+      text: "El trabajo se reprogramó para el jueves por la lluvia.",
+      created_at: "2026-09-04T09:00:00Z",
+      municipality: "Villa María",
+    },
+  ];
+
+  it("firma la municipalidad y la fecha, y nunca al agente que la escribió", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ official_responses: [RESPONSES[0]], has_official_response: true }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
+    expect(screen.getByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText("Villa María")).toBeTruthy();
+    expect(screen.getByText("2/9/2026")).toBeTruthy();
+  });
+
+  it("acumula el hilo en orden: la segunda respuesta no pisa a la primera", async () => {
+    mockedGet.mockResolvedValue(
+      detail({ official_responses: RESPONSES, has_official_response: true }) as never,
+    );
+
+    renderDetail();
+
+    expect(await screen.findByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText(RESPONSES[1].text)).toBeTruthy();
+  });
+
+  it("el bloque institucional no se mezcla con los comentarios de los vecinos", async () => {
+    mockedGet.mockResolvedValue(
+      detail({
+        official_responses: [RESPONSES[0]],
+        has_official_response: true,
+        comments: [
+          {
+            id: 9,
+            text: "Yo también me caí ahí.",
+            created_at: "2026-09-03T09:00:00Z",
+            author: { id: 4, name: "Otro vecino", avatar: null },
+            is_mine: false,
+            can_delete: false,
+          },
+        ],
+      }) as never,
+    );
+
+    renderDetail();
+
+    // Cada uno bajo su propio título: el compromiso del municipio no queda
+    // colgando del listado de comentarios.
+    expect(await screen.findByText("Respuestas oficiales")).toBeTruthy();
+    expect(screen.getByText(RESPONSES[0].text)).toBeTruthy();
+    expect(screen.getByText("Yo también me caí ahí.")).toBeTruthy();
+    // Y el parte de trabajo del operario sigue siendo un tercer bloque.
+    expect(screen.getByText("Se repuso la baldosa.")).toBeTruthy();
+  });
+
+  it("un reporte sin respuestas no deja el bloque vacío en la pantalla", async () => {
+    mockedGet.mockResolvedValue(detail({ official_responses: [] }) as never);
+
+    renderDetail();
+
+    expect(await screen.findByText("Vereda rota")).toBeTruthy();
+    expect(screen.queryByText("Respuestas oficiales")).toBeNull();
+  });
+});
+
+describe("foto del reporte en el detalle", () => {
+  it("el indicador de carga se va cuando la foto termina de cargar", async () => {
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    expect(screen.getByTestId("photo-loading")).toBeTruthy();
+
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+  });
+
+  it("aunque nunca llegue onLoad, onLoadEnd no la deja tapada", async () => {
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    fireEvent(photo, "loadStart");
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+  });
+
+  it("si la foto no carga, lo dice en lugar de quedar girando", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    renderDetail();
+
+    const photo = await screen.findByLabelText("Foto del reporte");
+    fireEvent(photo, "error", { nativeEvent: { error: "HTTP 404" } });
+    fireEvent(photo, "loadEnd");
+
+    expect(screen.getByText("No pudimos cargar la foto")).toBeTruthy();
+    expect(screen.queryByTestId("photo-loading")).toBeNull();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

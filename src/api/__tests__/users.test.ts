@@ -1,0 +1,119 @@
+import { api } from "../client";
+import {
+  acceptTerms,
+  canValidate,
+  getCurrentTerms,
+  getMe,
+  getPublicProfile,
+  participatesAsCitizen,
+  patchMe,
+} from "../users";
+import type { UserProfile } from "../users";
+
+jest.mock("../client", () => ({
+  api: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
+}));
+
+const mockedApi = api as jest.Mocked<typeof api>;
+
+const CITIZEN: UserProfile = {
+  id: 1,
+  name: "Vecina",
+  email: "vecina@test.com",
+  avatar: null,
+  role: "ciudadano",
+  municipality: null,
+  must_change_password: false,
+  onboarding_completed_at: "2026-01-01T00:00:00Z",
+  is_public: true,
+  url: "/api/users/1/",
+};
+
+describe("users api", () => {
+  it("getMe asks for the authenticated user", () => {
+    getMe();
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/users/me/");
+  });
+
+  it("getPublicProfile asks for that user's detail", () => {
+    getPublicProfile(7);
+
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/users/7/");
+  });
+
+  it("patchMe manda el FormData al propio perfil", () => {
+    // Va como FormData y no como JSON porque el avatar viaja en el mismo
+    // request que el nombre.
+    const form = new FormData();
+    form.append("name", "Vecina");
+
+    patchMe(form);
+
+    expect(mockedApi.patch).toHaveBeenCalledWith("/api/users/me/", form);
+  });
+
+  it("participatesAsCitizen deja afuera a las cuentas de trabajo", () => {
+    expect(participatesAsCitizen(CITIZEN)).toBe(true);
+    expect(participatesAsCitizen({ ...CITIZEN, role: "validador" })).toBe(false);
+    expect(participatesAsCitizen({ ...CITIZEN, role: "agente_municipal" })).toBe(false);
+    expect(participatesAsCitizen(null)).toBe(false);
+  });
+
+  it("canValidate pide rol y contraseña ya cambiada", () => {
+    const validator: UserProfile = { ...CITIZEN, role: "validador" };
+    expect(canValidate(validator)).toBe(true);
+    // La contraseña temporal bloquea la validación hasta que se cambie: es la
+    // misma regla que aplica el backend (US-035).
+    expect(canValidate({ ...validator, must_change_password: true })).toBe(false);
+    expect(canValidate(CITIZEN)).toBe(false);
+    expect(canValidate(null)).toBe(false);
+  });
+
+  it("canValidate también pide la cuenta de trabajo activa (C-11)", () => {
+    // Igual que `User.can_validate` en el backend: un validador dado de baja
+    // no ve la opción, en vez de verla y recibir un 403 al usarla.
+    const validator: UserProfile = { ...CITIZEN, role: "validador" };
+    expect(canValidate({ ...validator, is_work_account_active: false })).toBe(false);
+    expect(canValidate({ ...validator, is_work_account_active: true })).toBe(true);
+  });
+
+  it("el administrador de plataforma tampoco participa como vecino", () => {
+    expect(participatesAsCitizen({ ...CITIZEN, role: "admin_plataforma" })).toBe(false);
+  });
+});
+
+describe("términos y condiciones (RN-10)", () => {
+  it("getCurrentTerms devuelve la versión vigente", async () => {
+    const terms = {
+      version: "2026-10",
+      published_at: "2026-10-22T00:00:00Z",
+      terms: "t",
+      privacy: "p",
+    };
+    mockedApi.get.mockResolvedValueOnce(terms);
+
+    await expect(getCurrentTerms()).resolves.toEqual(terms);
+    expect(mockedApi.get).toHaveBeenCalledWith("/api/terms/current/");
+  });
+
+  it("getCurrentTerms devuelve null si no hay términos publicados", async () => {
+    mockedApi.get.mockRejectedValueOnce({ status: 404, detail: "No hay" });
+
+    await expect(getCurrentTerms()).resolves.toBeNull();
+  });
+
+  it("getCurrentTerms propaga los demás errores", async () => {
+    mockedApi.get.mockRejectedValueOnce({ status: 500 });
+
+    await expect(getCurrentTerms()).rejects.toEqual({ status: 500 });
+  });
+
+  it("acceptTerms manda la versión leída", () => {
+    acceptTerms("2026-10");
+
+    expect(mockedApi.post).toHaveBeenCalledWith("/api/users/me/accept-terms/", {
+      version: "2026-10",
+    });
+  });
+});

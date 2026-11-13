@@ -1,0 +1,389 @@
+import { Link } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  type TextInputInstance,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
+import { signup, logout } from "../../src/api/auth";
+import { describeApiError, isRateLimited } from "../../src/api/errors";
+import { useAuth } from "../../src/auth/AuthContext";
+import { getCurrentTerms, type TermsOfService } from "../../src/api/users";
+import { useKeyboardAwareScroll } from "../../src/components/useKeyboardAwareScroll";
+import { termsMessages } from "../../src/messages/terms";
+import { TermsModal } from "../../src/terms/TermsModal";
+
+/** Aire al final del formulario, antes de sumarle lo que ocupe el teclado. */
+const CONTENT_BOTTOM_PADDING = 24;
+
+export default function RegisterScreen() {
+  const { signIn } = useAuth();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Términos y condiciones (RN-10): si hay una versión publicada, aceptarla es
+  // obligatorio para crear la cuenta. Sin términos publicados no se muestra la
+  // casilla, y el backend tampoco la pide.
+  const [terms, setTerms] = useState<TermsOfService | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  // Son cuatro campos más el logo: en un teléfono chico el teclado tapaba la
+  // confirmación de contraseña y el botón, y se escribía a ciegas. El hook mide
+  // cuánto tapa el teclado de verdad y sube solo al campo enfocado, igual que
+  // en el alta y el cierre de un reporte.
+  const nameField = useRef<TextInputInstance>(null);
+  const emailField = useRef<TextInputInstance>(null);
+  const passwordField = useRef<TextInputInstance>(null);
+  const confirmField = useRef<TextInputInstance>(null);
+  const keyboard = useKeyboardAwareScroll();
+
+  useEffect(() => {
+    // Si falla, la casilla no aparece y el backend rechaza el alta con su
+    // propio mensaje: no se puede crear una cuenta sin aceptar por esta vía.
+    getCurrentTerms()
+      .then(setTerms)
+      .catch(() => setTerms(null));
+  }, []);
+
+  async function handleRegister() {
+    // Si queda abierto, tapa los errores de validación que se muestran debajo
+    // de cada campo.
+    Keyboard.dismiss();
+    const tempErrors: Record<string, string> = {};
+
+    // Validate Name
+    if (!name.trim()) {
+      tempErrors.name = "El nombre completo es obligatorio.";
+    } else if (name.trim().split(" ").length < 2) {
+      tempErrors.name = "Por favor, ingresá tu nombre y apellido.";
+    }
+
+    // Validate Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      tempErrors.email = "El correo electrónico es obligatorio.";
+    } else if (!emailRegex.test(email.trim())) {
+      tempErrors.email = "El correo electrónico no es válido.";
+    }
+
+    // Validate Password
+    if (!password) {
+      tempErrors.password = "La contraseña es obligatoria.";
+    } else if (password.length < 8) {
+      tempErrors.password = "La contraseña debe tener al menos 8 caracteres.";
+    }
+
+    // Validate Confirm Password
+    if (!confirmPassword) {
+      tempErrors.confirmPassword = "Debes confirmar tu contraseña.";
+    } else if (password !== confirmPassword) {
+      tempErrors.confirmPassword = "Las contraseñas no coinciden.";
+    }
+
+    if (terms && !termsAccepted) {
+      tempErrors.terms = termsMessages.required;
+    }
+
+    if (Object.keys(tempErrors).length > 0) {
+      setErrors(tempErrors);
+      return;
+    }
+
+    const data = {
+      name,
+      email,
+      password,
+      ...(terms ? { accept_terms: true, terms_version: terms.version } : {}),
+    };
+
+    setLoading(true);
+    try {
+      const res = await signup(data);
+      await signIn(res.meta.session_token, false);
+    } catch (err: unknown) {
+      let currentErr = err;
+      const data = currentErr as any;
+      if (data?.status === 409) {
+        try {
+          await logout();
+        } catch {}
+        try {
+          const res = await signup(data);
+          await signIn(res.meta.session_token, false);
+          return;
+        } catch (retryErr) {
+          currentErr = retryErr;
+        }
+      }
+      const data2 = currentErr as Record<string, unknown>;
+      if (isRateLimited(currentErr)) {
+        const described = describeApiError(currentErr, "No pudimos crear la cuenta");
+        Alert.alert(described.title, described.message);
+      } else if (data2?.errors) {
+        const mapped: Record<string, string> = {};
+        for (const e of data2.errors as { param?: string; message: string }[]) {
+          if (!e.param) continue;
+          // Los dos errores de los términos se muestran bajo la casilla. Si la
+          // versión cambió mientras se registraba, se recarga la vigente.
+          if (e.param === "accept_terms" || e.param === "terms_version") {
+            mapped.terms = e.message;
+            if (e.param === "terms_version") {
+              setTermsAccepted(false);
+              getCurrentTerms().then(setTerms).catch(() => {});
+            }
+          } else {
+            mapped[e.param] = e.message;
+          }
+        }
+        if (Object.keys(mapped).length > 0) {
+          setErrors(mapped);
+        } else {
+          const described = describeApiError(currentErr, "No pudimos crear la cuenta");
+          Alert.alert(described.title, described.message);
+        }
+      } else {
+        // Sin volcar el error crudo: el servidor caído y el túnel sin levantar
+        // se ven igual desde acá, y ninguno de los dos es culpa de lo que se
+        // escribió en el formulario.
+        const described = describeApiError(currentErr, "No pudimos crear la cuenta");
+        Alert.alert(described.title, described.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function field(
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    errorKey: string,
+    // El ref y el `onFocus` van juntos o el hook no tiene qué revelar: uno dice
+    // qué campo medir y el otro cuándo.
+    ref: React.RefObject<TextInputInstance | null>,
+    extra?: object,
+  ) {
+    return (
+      <>
+        <TextInput
+          ref={ref}
+          onFocus={() => keyboard.focusField(ref)}
+          style={[styles.input, errors[errorKey] && styles.inputError]}
+          placeholder={label}
+          value={value}
+          onChangeText={onChange}
+          {...extra}
+        />
+        {errors[errorKey] && (
+          <Text style={styles.errorText}>{errors[errorKey]}</Text>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.screen}
+      {...keyboard.scrollViewProps}
+      // Arrastrá y el teclado se baja. Sin esto quedaba arriba para siempre.
+      keyboardDismissMode="on-drag"
+      // El teclado se suma al espacio de abajo: sin ese lugar el scroll no
+      // tiene a dónde ir y el último campo no puede subir por encima de él.
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: CONTENT_BOTTOM_PADDING + keyboard.keyboardOffset },
+      ]}
+    >
+      <Image
+        source={require("../../assets/urbancheck_logo.png")}
+        style={styles.logo}
+      />
+
+      {field("Nombre completo", name, setName, "name", nameField)}
+      {field("Email", email, setEmail, "email", emailField, {
+        autoCapitalize: "none",
+        keyboardType: "email-address",
+      })}
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          ref={passwordField}
+          onFocus={() => keyboard.focusField(passwordField)}
+          style={[styles.passwordInput, errors.password && styles.inputError]}
+          placeholder="Contraseña (mín. 8 caracteres)"
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <Pressable
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
+        >
+          <Ionicons
+            name={showPassword ? "eye-outline" : "eye-off-outline"}
+            size={22}
+            color="#888"
+          />
+        </Pressable>
+      </View>
+      {errors.password && (
+        <Text style={styles.errorText}>{errors.password}</Text>
+      )}
+
+      <View style={styles.passwordContainer}>
+        <TextInput
+          ref={confirmField}
+          onFocus={() => keyboard.focusField(confirmField)}
+          style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}
+          placeholder="Confirmar contraseña"
+          secureTextEntry={!showConfirmPassword}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          // Último campo del formulario: la tecla del teclado envía, en vez de
+          // dejarlo abierto tapando los errores de validación.
+          returnKeyType="go"
+          onSubmitEditing={() => void handleRegister()}
+        />
+        <Pressable
+          style={styles.eyeButton}
+          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+        >
+          <Ionicons
+            name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
+            size={22}
+            color="#888"
+          />
+        </Pressable>
+      </View>
+      {errors.confirmPassword && (
+        <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+      )}
+
+      {terms && (
+        <>
+          <Pressable
+            style={styles.termsRow}
+            onPress={() => setTermsAccepted((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: termsAccepted }}
+            accessibilityLabel={termsMessages.checkbox}
+          >
+            <Ionicons
+              name={termsAccepted ? "checkbox" : "square-outline"}
+              size={22}
+              color={errors.terms ? "#e53935" : "#1a73e8"}
+            />
+            <Text style={styles.termsText}>{termsMessages.checkbox}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTermsOpen(true)} accessibilityRole="link">
+            <Text style={styles.termsLink}>{termsMessages.open}</Text>
+          </Pressable>
+          {errors.terms && <Text style={styles.errorText}>{errors.terms}</Text>}
+          <TermsModal
+            terms={terms}
+            visible={termsOpen}
+            onClose={() => setTermsOpen(false)}
+          />
+        </>
+      )}
+
+      <Pressable
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleRegister}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Registrarse</Text>
+        )}
+      </Pressable>
+
+      <Link href="/(auth)/login" style={styles.link}>
+        Ya tengo cuenta
+      </Link>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#fff" },
+  // `paddingBottom` lo pone el componente, que le suma el alto del teclado.
+  container: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    backgroundColor: "#fff",
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  logo: {
+    width: 150,
+    height: 150,
+    alignSelf: "center",
+    marginBottom: 20,
+    resizeMode: "contain",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 16,
+  },
+  passwordContainer: {
+    position: "relative",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
+    paddingRight: 48,
+    fontSize: 16,
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 12,
+    height: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  inputError: { borderColor: "#e53935" },
+  termsRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 },
+  termsText: { flex: 1, fontSize: 14, color: "#374151" },
+  termsLink: { color: "#1a73e8", fontSize: 14, marginTop: 6, marginLeft: 30, marginBottom: 4 },
+  errorText: { color: "#e53935", fontSize: 12, marginBottom: 8 },
+  button: {
+    backgroundColor: "#1a73e8",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  link: {
+    textAlign: "center",
+    marginTop: 16,
+    color: "#1a73e8",
+    fontSize: 14,
+  },
+});

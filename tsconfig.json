@@ -1,6 +1,10 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // TypeScript 6 (SDK 57) dejó de incluir automáticamente todo lo que hay en
+    // `node_modules/@types`. Sin esta lista, los globals de jest —`describe`,
+    // `it`, `expect`— no existen y la suite entera no tipa.
+    "types": ["jest", "node"]
   }
 }

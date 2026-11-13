@@ -1,0 +1,203 @@
+import { Tabs, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, type ColorValue } from "react-native";
+
+import {
+  participatesAsCitizen,
+  canValidate,
+  isOperator,
+} from "../../../src/api/users";
+import { useAuth } from "../../../src/auth/AuthContext";
+import {
+  FloatingTabBar,
+  TAB_BAR_HEIGHT,
+} from "../../../src/components/floatingTabBar";
+import {
+  formatUnreadBadge,
+  useUnread,
+} from "../../../src/notifications/UnreadContext";
+
+// RN 0.88 tipa el color de `tabBarIcon` como `ColorValue`, que admite `number`
+// y `null`; `@expo/vector-icons` 15 todavía pide `string`. El navegador siempre
+// pasa los strings del tema, así que el cast no esconde nada.
+const iconColor = (color: ColorValue) => color as string;
+
+export default function TabsLayout() {
+  const router = useRouter();
+  const { user } = useAuth();
+  // La bandeja de validación solo existe para validadores activos (US-037).
+  // `Tabs.Protected` la saca de la navegación, así que tampoco se alcanza
+  // escribiendo la ruta a mano.
+  const showValidation = canValidate(user);
+  // Las cuentas de trabajo no reportan: la pestaña de alta no existe para
+  // ellas, ni siquiera escribiendo la ruta.
+  const showCreate = participatesAsCitizen(user);
+  // El alcance del operario es deliberadamente acotado (US-045, escenario 8):
+  // ve su bandeja y nada más. La navegación se resuelve por rol acá, en el
+  // arranque de la sesión, y no pantalla por pantalla — así el feed, el mapa y
+  // los avisos no existen para él ni escribiendo la ruta a mano.
+  //
+  // El perfil sí se conserva: es de donde se cierra sesión y se cambia la
+  // contraseña, y sin él la cuenta quedaría encerrada en la app.
+  const operator = isOperator(user);
+  const { unread } = useUnread();
+
+  return (
+    <Tabs
+      // La barra flota sobre el contenido: las pantallas se reservan el espacio
+      // con `useFloatingTabBarInset()`.
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{
+        tabBarActiveTintColor: "#1a73e8",
+        tabBarInactiveTintColor: "#777",
+        tabBarStyle: {
+          borderTopWidth: 0,
+          // El fondo y las esquinas redondeadas los pinta la isla: un fondo
+          // opaco acá taparía esas esquinas con un rectángulo.
+          backgroundColor: "transparent",
+          // `BottomTabBar` trae `elevation: 8` propio. En iOS no hace nada,
+          // pero en Android la elevación dibuja una sombra con la forma del
+          // borde del elemento —y este es un rectángulo—, así que aparecía una
+          // sombra recta atravesando las esquinas redondeadas de la isla. La
+          // sombra la pone la isla, que sí es redondeada.
+          elevation: 0,
+          height: TAB_BAR_HEIGHT,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "600",
+        },
+        headerShown: true,
+      }}
+    >
+      <Tabs.Protected guard={operator}>
+        <Tabs.Screen
+          name="work"
+          options={{
+            title: "Trabajos",
+            headerTitle: "Trabajos de mi área",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "hammer" : "hammer-outline"}
+                size={25}
+                color={iconColor(color)}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Reportes",
+            headerTitle: "Reportes UrbanCheck",
+            tabBarLabel: "Feed",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "list" : "list-outline"} size={25} color={iconColor(color)} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="map"
+          options={{
+            title: "Mapa",
+            headerTitle: "Mapa de Incidentes",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "map" : "map-outline"} size={25} color={iconColor(color)} />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Protected guard={showCreate}>
+        <Tabs.Screen
+          name="create-tab"
+          options={{
+            title: "Reportar",
+            headerShown: false,
+            tabBarIcon: ({ color }) => (
+              <Ionicons name="add-circle" size={32} color="#1a73e8" style={{ marginTop: -2 }} />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Protected guard={showValidation}>
+        <Tabs.Screen
+          name="validate"
+          options={{
+            title: "Validar",
+            headerTitle: "Pendientes de validación",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "shield-checkmark" : "shield-checkmark-outline"}
+                size={25}
+                color={iconColor(color)}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="notices"
+          options={{
+            title: "Avisos",
+            headerTitle: "Avisos del Municipio",
+            // Sin avisos pendientes tiene que ser `undefined`: con `0` o `""`
+            // el badge se dibuja igual, vacío, y queda un punto rojo
+            // permanente.
+            tabBarBadge: formatUnreadBadge(unread),
+            tabBarBadgeStyle: {
+              backgroundColor: "#e53935",
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: "700",
+            },
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "notifications" : "notifications-outline"}
+                size={25}
+                color={iconColor(color)}
+              />
+            ),
+          }}
+        />
+      </Tabs.Protected>
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Perfil",
+          headerShown: false,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={25} color={iconColor(color)} />
+          ),
+        }}
+      />
+      {/* Fuera de la barra pero igual detrás del guard: el detalle del feed no
+          es del operario, y sin esto seguiría siendo alcanzable escribiendo la
+          ruta. Se oculta con `display: "none"` y no con `href: null`: desde
+          expo-router 58 aquello marca la pantalla como `hidden` y la vuelve
+          inalcanzable, y ningún reporte abría su detalle. */}
+      <Tabs.Protected guard={!operator}>
+        <Tabs.Screen
+          name="report/[id]"
+          options={{
+            tabBarItemStyle: { display: "none" },
+            headerShown: true,
+            headerTitle: "Detalle del reporte",
+            headerLeft: () => (
+              <Pressable
+                onPress={() => router.back()}
+                hitSlop={12}
+                style={{ paddingHorizontal: 12 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1a73e8" />
+              </Pressable>
+            ),
+          }}
+        />
+      </Tabs.Protected>
+    </Tabs>
+  );
+}

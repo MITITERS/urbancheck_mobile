@@ -1,0 +1,133 @@
+import * as SecureStore from "expo-secure-store";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+
+import { getSession } from "../api/auth";
+import { setSessionToken, setUnauthorizedHandler } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { getMe, type UserProfile } from "../api/users";
+import { reconcileOnboarding } from "../onboarding/mark";
+
+const SECURE_STORE_KEY = "urbancheck_session_token";
+
+interface AuthState {
+  token: string | null;
+  user: UserProfile | null;
+  isLoading: boolean;
+}
+
+interface AuthContextValue extends AuthState {
+  signIn: (token: string, rememberMe: boolean) => Promise<void>;
+  signOut: () => Promise<void>;
+  setUser: (user: UserProfile) => void;
+  refreshUser: () => Promise<void>;
+  replaceToken: (token: string) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AuthState>({
+    token: null,
+    user: null,
+    isLoading: true,
+  });
+
+  const queryClient = useQueryClient();
+
+  const signOut = useCallback(async () => {
+    setSessionToken(null);
+    await SecureStore.deleteItemAsync(SECURE_STORE_KEY).catch(() => {});
+    setState({ token: null, user: null, isLoading: false });
+    // **Se vacía la caché entera.** Sin esto, quien entre después en el mismo
+    // teléfono vería los reportes, los avisos y el perfil de la sesión
+    // anterior mientras llegan los suyos: la caché sobrevive al cierre de
+    // sesión porque vive en memoria del proceso, no en la sesión.
+    queryClient.clear();
+  }, [queryClient]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(signOut);
+  }, [signOut]);
+
+  // Hydrate session from SecureStore on mount
+  useEffect(() => {
+    async function hydrate() {
+      try {
+        const storedToken = await SecureStore.getItemAsync(SECURE_STORE_KEY);
+        if (!storedToken) {
+          setState((s) => ({ ...s, isLoading: false }));
+          return;
+        }
+        setSessionToken(storedToken);
+        const session = await getSession();
+        const token = session.meta.session_token ?? storedToken;
+        setSessionToken(token);
+        // El perfil se carga acá y no en cada pantalla: el rol, el flag de
+        // contraseña temporal y la marca del tutorial deciden qué se muestra
+        // desde el primer render. Si la marca del tutorial había quedado
+        // pendiente por un error de red, se reintenta ahora (US-051).
+        const user = await reconcileOnboarding(await getMe().catch(() => null));
+        setState({ token, user, isLoading: false });
+      } catch {
+        setSessionToken(null);
+        await SecureStore.deleteItemAsync(SECURE_STORE_KEY).catch(() => {});
+        setState({ token: null, user: null, isLoading: false });
+      }
+    }
+    void hydrate();
+  }, []);
+
+  const signIn = useCallback(async (token: string, rememberMe: boolean) => {
+    setSessionToken(token);
+    if (rememberMe) {
+      await SecureStore.setItemAsync(SECURE_STORE_KEY, token);
+    }
+    const user = await reconcileOnboarding(await getMe().catch(() => null));
+    setState({ token, user, isLoading: false });
+  }, []);
+
+  const setUser = useCallback((user: UserProfile) => {
+    setState((s) => ({ ...s, user }));
+  }, []);
+
+  /** Vuelve a leer el perfil: se usa tras cambiar la contraseña temporal. */
+  const refreshUser = useCallback(async () => {
+    const user = await getMe().catch(() => null);
+    if (user) setState((s) => ({ ...s, user }));
+  }, []);
+
+  /**
+   * Adopta el token nuevo de la misma sesión. allauth lo rota al cambiar la
+   * contraseña (N-04): el viejo deja de valer, y seguir usándolo cerraba la
+   * sesión. Se guarda solo si ya estaba guardado ("recordarme").
+   */
+  const replaceToken = useCallback(async (token: string) => {
+    setSessionToken(token);
+    const stored = await SecureStore.getItemAsync(SECURE_STORE_KEY).catch(() => null);
+    if (stored) {
+      await SecureStore.setItemAsync(SECURE_STORE_KEY, token).catch(() => {});
+    }
+    setState((s) => ({ ...s, token }));
+  }, []);
+
+  return (
+    <AuthContext.Provider
+      value={{ ...state, signIn, signOut, setUser, refreshUser, replaceToken }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
+}
