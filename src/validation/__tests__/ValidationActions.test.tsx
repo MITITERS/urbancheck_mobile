@@ -69,7 +69,7 @@ function deny({ canAskAgain = true } = {}) {
  * salen deshabilitados, y un toque sobre un botón deshabilitado no hace nada.
  */
 async function mount({ granted = false, onCompleted = jest.fn() } = {}) {
-  render(<ValidationActions reportId={42} onCompleted={onCompleted} />);
+  await render(<ValidationActions reportId={42} onCompleted={onCompleted} />);
   if (granted) {
     await waitFor(() => expect(Location.getCurrentPositionAsync).toHaveBeenCalled());
   } else {

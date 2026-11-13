@@ -132,9 +132,9 @@ function signIn(user: UserProfile) {
   mockedUseAuth.mockReturnValue({ user } as unknown as ReturnType<typeof useAuth>);
 }
 
-function renderDetail(report: ReportDetail = detail()) {
+async function renderDetail(report: ReportDetail = detail()) {
   mockedGet.mockResolvedValue(report);
-  return renderWithProviders(
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ReportDetailScreen />
     </SafeAreaProvider>,
@@ -158,13 +158,13 @@ beforeEach(() => {
 describe("Denunciar imagen (US-043)", () => {
   it("CP-043-M03 (US-043 E3) · el autor puede pedir la revisión de su propia foto", async () => {
     signIn(profile({ id: AUTHOR.id }));
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Denunciar imagen")).toBeTruthy();
   });
 
   it("a quien no es el autor se le ofrece Denunciar, no un segundo botón", async () => {
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Denunciar")).toBeTruthy();
     expect(screen.queryByText("Denunciar imagen")).toBeNull();
@@ -172,9 +172,9 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("pide el motivo antes de mandar nada", async () => {
     signIn(profile({ id: AUTHOR.id }));
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByText("Denunciar imagen"));
+    await fireEvent.press(await screen.findByText("Denunciar imagen"));
 
     const labels = lastAlertButtons(alert).map((button) => button.text);
     expect(labels).toContain(PERSONAL_DATA_REASON);
@@ -187,9 +187,9 @@ describe("Denunciar imagen (US-043)", () => {
       detail: "Recibimos tu solicitud. La revisión se hace dentro de las 24 horas.",
     });
     signIn(profile({ id: AUTHOR.id }));
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByText("Denunciar imagen"));
+    await fireEvent.press(await screen.findByText("Denunciar imagen"));
     const reason = lastAlertButtons(alert).find((b) => b.text === PERSONAL_DATA_REASON);
     await act(async () => {
       reason?.onPress?.();
@@ -203,15 +203,15 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("quien no es el autor sale del reporte al cerrar la confirmación", async () => {
     mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
+    await fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
     await act(async () => {
       lastAlertButtons(alert)
         .find((b) => b.text === PERSONAL_DATA_REASON)
         ?.onPress?.();
     });
-    act(() => {
+    await act(() => {
       lastAlertButtons(alert)[0]?.onPress?.();
     });
 
@@ -224,9 +224,9 @@ describe("Denunciar imagen (US-043)", () => {
       code: "privacy_request_pending",
       detail: "Ya presentaste una solicitud sobre esta imagen y está en revisión.",
     });
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
+    await fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
     await act(async () => {
       lastAlertButtons(alert)
         .find((b) => b.text === PERSONAL_DATA_REASON)
@@ -241,9 +241,9 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("CP-043-M06 (US-043 E11) · la foto de un cierre se denuncia indicando cuál", async () => {
     mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
-    renderDetail();
+    await renderDetail();
 
-    fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
+    await fireEvent.press(await screen.findByLabelText("Denunciar la foto del cierre"));
     await act(async () => {
       lastAlertButtons(alert)
         .find((b) => b.text === PERSONAL_DATA_REASON)
@@ -257,7 +257,7 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("CP-043-M07 (US-043 E1) · la foto de una objeción se denuncia indicando cuál", async () => {
     mockedPost.mockResolvedValue({ id: 1, detail: "Recibimos tu solicitud." });
-    renderDetail(
+    await renderDetail(
       detail({
         resolution_appeals: [
           {
@@ -272,7 +272,7 @@ describe("Denunciar imagen (US-043)", () => {
       }),
     );
 
-    fireEvent.press(await screen.findByLabelText("Denunciar la foto de la objeción"));
+    await fireEvent.press(await screen.findByLabelText("Denunciar la foto de la objeción"));
     await act(async () => {
       lastAlertButtons(alert)
         .find((b) => b.text === PERSONAL_DATA_REASON)
@@ -285,7 +285,7 @@ describe("Denunciar imagen (US-043)", () => {
   });
 
   it("CP-043-M08 (US-043 E11) · la foto retirada de una objeción se muestra como retirada", async () => {
-    renderDetail(
+    await renderDetail(
       detail({
         resolution_appeals: [
           {
@@ -309,7 +309,7 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("una cuenta de trabajo no tiene el botón", async () => {
     signIn(profile({ role: "validador" }));
-    renderDetail();
+    await renderDetail();
 
     await screen.findByText("Vereda rota");
     expect(screen.queryByText("Denunciar imagen")).toBeNull();
@@ -317,14 +317,14 @@ describe("Denunciar imagen (US-043)", () => {
 
   it("CP-043-M09 (US-043 E2) · el autor ve su reporte marcado como en revisión, sin volver a denunciar", async () => {
     signIn(profile({ id: AUTHOR.id }));
-    renderDetail(detail({ under_privacy_review: true }));
+    await renderDetail(detail({ under_privacy_review: true }));
 
     expect(await screen.findByText(/Tu reporte está oculto/)).toBeTruthy();
     expect(screen.queryByText("Denunciar imagen")).toBeNull();
   });
 
   it("CP-043-M10 (US-043 E5) · una foto retirada se muestra como retirada y no se puede denunciar", async () => {
-    renderDetail(
+    await renderDetail(
       detail({
         photo: null,
         photo_removed_at: "2026-09-10T10:00:00Z",
@@ -363,7 +363,7 @@ describe("Denunciar imagen (US-043)", () => {
     mockedGet.mockRejectedValue({ status: 404, detail: "No encontrado." });
     const client = createTestQueryClient();
     client.setQueryData(reportKeys.detail(7), detail());
-    renderWithProviders(
+    await renderWithProviders(
       <SafeAreaProvider initialMetrics={METRICS}>
         <ReportDetailScreen />
       </SafeAreaProvider>,
@@ -380,7 +380,7 @@ describe("Denunciar imagen (US-043)", () => {
     jest.useFakeTimers();
     try {
       signIn(profile({ id: AUTHOR.id }));
-      renderDetail(detail({ under_privacy_review: true }));
+      await renderDetail(detail({ under_privacy_review: true }));
       // Con timers falsos, `findBy*`/`waitFor` avanzan el reloj de a 50 ms y
       // esperan entre vueltas: tardaba ~3,6 s y en el CI pasaba los 5 s del
       // test. React Query agenda con timers, así que se avanza el reloj un
@@ -413,11 +413,11 @@ describe("Denunciar desde el detalle (US-021)", () => {
   ];
 
   /** El detalle y el catálogo salen por el mismo `api.get`. */
-  function renderDetailWithReasons(report: ReportDetail = detail()) {
+  async function renderDetailWithReasons(report: ReportDetail = detail()) {
     mockedGet.mockImplementation((url: string) =>
       Promise.resolve(url.includes("complaint-reasons") ? REASONS : report),
     );
-    return renderWithProviders(
+    return await renderWithProviders(
       <SafeAreaProvider initialMetrics={METRICS}>
         <ReportDetailScreen />
       </SafeAreaProvider>,
@@ -426,16 +426,16 @@ describe("Denunciar desde el detalle (US-021)", () => {
 
   async function reportAs(label: string, receipt: Record<string, unknown>) {
     mockedPost.mockResolvedValue(receipt);
-    fireEvent.press(await screen.findByText("Denunciar"));
-    fireEvent.press(await screen.findByText(label));
+    await fireEvent.press(await screen.findByText("Denunciar"));
+    await fireEvent.press(await screen.findByText(label));
     await act(async () => {
-      fireEvent.press(screen.getByText("Enviar denuncia"));
+      await fireEvent.press(screen.getByText("Enviar denuncia"));
     });
   }
 
   it("CP-021-M09 (US-021 E7) · el autor no tiene la acción sobre su propio reporte", async () => {
     signIn(profile({ id: AUTHOR.id }));
-    renderDetail();
+    await renderDetail();
 
     await screen.findByText("Vereda rota");
     expect(screen.queryByText("Denunciar")).toBeNull();
@@ -444,7 +444,7 @@ describe("Denunciar desde el detalle (US-021)", () => {
   it.each(["cancelado", "archivado"] as const)(
     "CP-021-M10 (US-021 E8) · sobre un reporte %s no se ofrece",
     async (status) => {
-      renderDetail(detail({ status }));
+      await renderDetail(detail({ status }));
 
       await screen.findByText("Vereda rota");
       expect(screen.queryByText("Denunciar")).toBeNull();
@@ -453,21 +453,21 @@ describe("Denunciar desde el detalle (US-021)", () => {
 
   it("una cuenta de trabajo no tiene la acción", async () => {
     signIn(profile({ role: "agente_municipal" }));
-    renderDetail();
+    await renderDetail();
 
     await screen.findByText("Vereda rota");
     expect(screen.queryByText("Denunciar")).toBeNull();
   });
 
   it("CP-021-M11 (US-021 E5) · una denuncia de contenido deja al vecino en el reporte", async () => {
-    renderDetailWithReasons();
+    await renderDetailWithReasons();
 
     await reportAs("Reporte falso o inexistente", {
       id: 1,
       recipient: "agente_municipal",
       detail: "Recibimos tu denuncia. La va a revisar el municipio del reporte.",
     });
-    act(() => {
+    await act(() => {
       lastAlertButtons(alert)[0]?.onPress?.();
     });
 
@@ -478,14 +478,14 @@ describe("Denunciar desde el detalle (US-021)", () => {
   });
 
   it("CP-043-M02 (US-043 E2) · una de dato personal lo saca: el reporte acaba de ocultarse", async () => {
-    renderDetailWithReasons();
+    await renderDetailWithReasons();
 
     await reportAs("Dato personal visible", {
       id: 1,
       recipient: "admin_plataforma",
       detail: "Recibimos tu denuncia. La revisión se hace dentro de las 24 horas.",
     });
-    act(() => {
+    await act(() => {
       lastAlertButtons(alert)[0]?.onPress?.();
     });
 

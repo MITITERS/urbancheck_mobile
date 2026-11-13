@@ -39,13 +39,13 @@ beforeEach(() => {
 
 async function submit(password: string) {
   const user = userEvent.setup();
-  renderWithProviders(<DeleteAccountScreen />);
+  await renderWithProviders(<DeleteAccountScreen />);
   if (password) await user.type(screen.getByPlaceholderText(t.passwordPlaceholder), password);
   await user.press(screen.getByText(t.submit));
 }
 
-it("explica qué se borra y qué se conserva", () => {
-  renderWithProviders(<DeleteAccountScreen />);
+it("explica qué se borra y qué se conserva", async () => {
+  await renderWithProviders(<DeleteAccountScreen />);
 
   for (const line of t.consequences) expect(screen.getByText(line)).toBeTruthy();
 });

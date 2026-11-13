@@ -89,8 +89,8 @@ const REPORT = {
   appeal_count: 0,
 };
 
-function renderMobile() {
-  return renderWithProviders(<FeedScreen />);
+async function renderMobile() {
+  return await renderWithProviders(<FeedScreen />);
 }
 
 function feedResponse(overrides: Partial<PaginatedReports> = {}): PaginatedReports {
@@ -137,7 +137,7 @@ beforeEach(() => {
 
 describe("feed acotado al municipio", () => {
   it("pide el feed con la ubicación del vecino", async () => {
-    renderMobile();
+    await renderMobile();
 
     await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
   });
@@ -154,7 +154,7 @@ describe("feed acotado al municipio", () => {
       }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText("Reportes de Villa María")).toBeTruthy();
     expect(screen.getByText(REPORT.description)).toBeTruthy();
@@ -165,7 +165,7 @@ describe("feed acotado al municipio", () => {
       feedResponse({ coverage: { in_coverage: false, municipality: null } }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText(/fuera del área de cobertura/i)).toBeTruthy();
     expect(screen.queryByText(REPORT.description)).toBeNull();
@@ -183,7 +183,7 @@ describe("feed acotado al municipio", () => {
       }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText("Todavía no hay reportes en Villa María.")).toBeTruthy();
   });
@@ -191,7 +191,7 @@ describe("feed acotado al municipio", () => {
   it("sin permiso de ubicación no pide el feed y explica por qué", async () => {
     locationDenied();
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText(/necesitamos tu ubicación/i)).toBeTruthy();
     expect(mockedListReports).not.toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe("feed acotado al municipio", () => {
       feedResponse({ count: 1, results: [REPORT] }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
     expect(mockedListReports).toHaveBeenCalledTimes(1);
@@ -213,7 +213,7 @@ describe("feed acotado al municipio", () => {
   it("un error de carga se muestra en pantalla, no en la consola", async () => {
     mockedListReports.mockRejectedValue({ status: 404, detail: "Página inválida." });
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText(/no pudimos cargar el feed/i)).toBeTruthy();
   });
@@ -223,7 +223,7 @@ describe("feed acotado al municipio", () => {
     // sería lo contrario de lo que pide la pantalla.
     signedInAs(null);
 
-    renderMobile();
+    await renderMobile();
 
     await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, HERE, NO_FILTERS));
   });
@@ -232,7 +232,7 @@ describe("feed acotado al municipio", () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
 
-    renderMobile();
+    await renderMobile();
     await waitFor(() => expect(mockedListReports).toHaveBeenCalled());
     mockedListReports.mockClear();
 
@@ -253,7 +253,7 @@ describe("feed acotado al municipio", () => {
   it("una cuenta de trabajo ve el feed sin acotar y no pide ubicación", async () => {
     signedInAs({ ...CITIZEN, role: "validador", municipality: { id: 4, name: "Villa María" } });
 
-    renderMobile();
+    await renderMobile();
 
     await waitFor(() => expect(mockedListReports).toHaveBeenCalledWith(1, null, NO_FILTERS));
     expect(Location.requestForegroundPermissionsAsync).not.toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe("respuesta oficial en el feed (US-024)", () => {
       }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText("Respuesta oficial")).toBeTruthy();
   });
@@ -279,7 +279,7 @@ describe("respuesta oficial en el feed (US-024)", () => {
   it("no lo destaca cuando todavía no hubo comunicación", async () => {
     mockedListReports.mockResolvedValue(feedResponse({ count: 1, results: [REPORT] }));
 
-    renderMobile();
+    await renderMobile();
 
     await screen.findByText(REPORT.description);
     expect(screen.queryByText("Respuesta oficial")).toBeNull();
@@ -297,7 +297,7 @@ describe("reporte reabierto por una objeción (US-048)", () => {
       }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText("En proceso (objetado)")).toBeTruthy();
   });
@@ -310,7 +310,7 @@ describe("reporte reabierto por una objeción (US-048)", () => {
       }),
     );
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByText("En proceso")).toBeTruthy();
     expect(screen.queryByText("En proceso (objetado)")).toBeNull();
@@ -327,7 +327,7 @@ describe("denunciar desde la tarjeta (US-021)", () => {
   it("la tarjeta de un reporte ajeno ofrece denunciarlo", async () => {
     feedWith(REPORT);
 
-    renderMobile();
+    await renderMobile();
 
     expect(await screen.findByLabelText("Denunciar reporte")).toBeTruthy();
   });
@@ -341,7 +341,7 @@ describe("denunciar desde la tarjeta (US-021)", () => {
       },
     ]);
     feedWith(REPORT);
-    renderMobile();
+    await renderMobile();
 
     await userEvent.press(await screen.findByLabelText("Denunciar reporte"));
 
@@ -352,7 +352,7 @@ describe("denunciar desde la tarjeta (US-021)", () => {
   it("la tarjeta de un reporte propio no la ofrece", async () => {
     feedWith({ ...REPORT, author: { id: CITIZEN.id, name: "Vecina", avatar: null } });
 
-    renderMobile();
+    await renderMobile();
 
     await screen.findByText(REPORT.description);
     expect(screen.queryByLabelText("Denunciar reporte")).toBeNull();
@@ -362,7 +362,7 @@ describe("denunciar desde la tarjeta (US-021)", () => {
     signedInAs({ ...CITIZEN, role: "validador" });
     feedWith(REPORT);
 
-    renderMobile();
+    await renderMobile();
 
     await screen.findByText(REPORT.description);
     expect(screen.queryByLabelText("Denunciar reporte")).toBeNull();

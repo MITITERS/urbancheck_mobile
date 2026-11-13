@@ -25,8 +25,8 @@ const KEYBOARD = 300;
 /** Los listeners que registró el hook, para poder dispararlos desde el test. */
 const listeners: Record<string, (event: unknown) => void> = {};
 
-function showKeyboard() {
-  act(() => {
+async function showKeyboard() {
+  await act(() => {
     // El nombre del evento depende de la plataforma (`Will` en iOS, `Did` en
     // Android): se dispara el que el hook haya registrado.
     for (const event of Object.keys(listeners)) {
@@ -47,30 +47,30 @@ beforeEach(() => {
 });
 
 describe("useKeyboardOffset", () => {
-  it("levanta el alto completo si la ventana no se achica", () => {
+  it("levanta el alto completo si la ventana no se achica", async () => {
     // El caso de iOS, y el de Android en modo edge-to-edge: el teclado se
     // dibuja encima y la ventana queda igual.
-    const { result } = renderHook(() => useKeyboardOffset());
+    const { result } = await renderHook(() => useKeyboardOffset());
 
-    showKeyboard();
+    await showKeyboard();
 
     expect(result.current).toBe(KEYBOARD);
   });
 
-  it("no levanta nada si la ventana ya se achicó sola", () => {
+  it("no levanta nada si la ventana ya se achicó sola", async () => {
     // El `adjustResize` clásico de Android: sumarle el alto del teclado dejaría
     // el cajón flotando a media pantalla.
-    const { result, rerender } = renderHook(() => useKeyboardOffset());
+    const { result, rerender } = await renderHook(() => useKeyboardOffset());
 
     windowHeight.current = 800 - KEYBOARD;
-    showKeyboard();
-    rerender({});
+    await showKeyboard();
+    await rerender({});
 
     expect(result.current).toBe(0);
   });
 
-  it("con el teclado cerrado no levanta nada", () => {
-    const { result } = renderHook(() => useKeyboardOffset());
+  it("con el teclado cerrado no levanta nada", async () => {
+    const { result } = await renderHook(() => useKeyboardOffset());
 
     expect(result.current).toBe(0);
   });

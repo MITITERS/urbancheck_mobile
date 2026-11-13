@@ -8,8 +8,8 @@ jest.mock("@expo/vector-icons", () => {
 });
 
 describe("Notice", () => {
-  it("muestra el título y el mensaje por separado", () => {
-    render(
+  it("muestra el título y el mensaje por separado", async () => {
+    await render(
       <Notice
         visible
         title="Revisá la ubicación"
@@ -24,15 +24,15 @@ describe("Notice", () => {
 
   it("se cierra desde el botón", async () => {
     const onClose = jest.fn();
-    render(<Notice visible title="Título" message="Mensaje" onClose={onClose} />);
+    await render(<Notice visible title="Título" message="Mensaje" onClose={onClose} />);
 
     await userEvent.press(screen.getByText("Entendido"));
 
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("oculto no renderiza nada", () => {
-    render(
+  it("oculto no renderiza nada", async () => {
+    await render(
       <Notice visible={false} title="Título" message="Mensaje" onClose={jest.fn()} />,
     );
 

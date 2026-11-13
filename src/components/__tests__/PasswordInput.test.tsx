@@ -32,22 +32,22 @@ function Controlled({ startVisible = false } = {}) {
 }
 
 describe("PasswordInput", () => {
-  it("oculta lo escrito por defecto", () => {
-    render(<Controlled />);
+  it("oculta lo escrito por defecto", async () => {
+    await render(<Controlled />);
 
     expect(screen.getByPlaceholderText("Contraseña nueva").props.secureTextEntry).toBe(
       true,
     );
   });
 
-  it("el botón dice que va a mostrar la contraseña", () => {
-    render(<Controlled />);
+  it("el botón dice que va a mostrar la contraseña", async () => {
+    await render(<Controlled />);
 
     expect(screen.getByLabelText("Mostrar contraseña")).toBeTruthy();
   });
 
   it("al tocarlo, revela el texto y ofrece volver a ocultarlo", async () => {
-    render(<Controlled />);
+    await render(<Controlled />);
     const user = userEvent.setup();
 
     await user.press(screen.getByLabelText("Mostrar contraseña"));
@@ -59,7 +59,7 @@ describe("PasswordInput", () => {
   });
 
   it("vuelve a ocultarla en el segundo toque", async () => {
-    render(<Controlled startVisible />);
+    await render(<Controlled startVisible />);
     const user = userEvent.setup();
 
     await user.press(screen.getByLabelText("Ocultar contraseña"));
@@ -71,7 +71,7 @@ describe("PasswordInput", () => {
 
   it("propaga lo que se escribe", async () => {
     const onChangeText = jest.fn();
-    render(
+    await render(
       <PasswordInput
         placeholder="Contraseña actual"
         value=""
@@ -86,9 +86,9 @@ describe("PasswordInput", () => {
     expect(onChangeText).toHaveBeenCalled();
   });
 
-  it("no autocorrige ni pone mayúscula inicial", () => {
+  it("no autocorrige ni pone mayúscula inicial", async () => {
     // Las dos ayudas del teclado que corrompen una contraseña en silencio.
-    render(<Controlled />);
+    await render(<Controlled />);
     const input = screen.getByPlaceholderText("Contraseña nueva");
 
     expect(input.props.autoCapitalize).toBe("none");

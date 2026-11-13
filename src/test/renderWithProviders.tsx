@@ -21,10 +21,10 @@ export function createTestQueryClient(): QueryClient {
   });
 }
 
-export function renderWithProviders(ui: ReactElement, client?: QueryClient) {
+export async function renderWithProviders(ui: ReactElement, client?: QueryClient) {
   const queryClient = client ?? createTestQueryClient();
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
-  return { queryClient, ...render(ui, { wrapper: Wrapper }) };
+  return { queryClient, ...(await render(ui, { wrapper: Wrapper })) };
 }

@@ -36,7 +36,7 @@ it("adopta el token rotado antes de releer el perfil", async () => {
     meta: { session_token: "rotado" },
   });
   const user = userEvent.setup();
-  renderWithProviders(<ChangePasswordScreen />);
+  await renderWithProviders(<ChangePasswordScreen />);
 
   await user.type(screen.getByPlaceholderText("Contraseña actual"), "Vieja#2026x");
   await user.type(screen.getByPlaceholderText("Contraseña nueva"), "Nueva#2026x");

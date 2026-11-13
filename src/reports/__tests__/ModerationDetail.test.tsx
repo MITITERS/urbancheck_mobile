@@ -140,8 +140,8 @@ const NOTICE: ModerationNotice = {
   is_moderation_notice: true,
 };
 
-function renderDetail() {
-  return renderWithProviders(
+async function renderDetail() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <ReportDetailScreen />
     </SafeAreaProvider>,
@@ -158,7 +158,7 @@ describe("reporte descartado por moderación", () => {
     signedInAs(99);
     mockedGet.mockResolvedValue(NOTICE as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(REASON)).toBeTruthy();
     expect(screen.getByText(/Reporte descartado/)).toBeTruthy();
@@ -172,11 +172,11 @@ describe("reporte descartado por moderación", () => {
     signedInAs(AUTHOR.id);
     mockedGet.mockResolvedValue(detail() as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(t.bannerTitle)).toBeTruthy();
     expect(screen.getByText(REASON)).toBeTruthy();
-    fireEvent.press(screen.getByText(t.appealButton));
+    await fireEvent.press(screen.getByText(t.appealButton));
     expect(mockPush).toHaveBeenCalledWith("/(app)/moderation-appeal/7");
   });
 
@@ -199,7 +199,7 @@ describe("reporte descartado por moderación", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(t.appealPending)).toBeTruthy();
     expect(screen.queryByText(t.appealButton)).toBeNull();
@@ -224,7 +224,7 @@ describe("reporte descartado por moderación", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(t.appealRejected)).toBeTruthy();
     expect(screen.getByText(/La foto no corresponde/)).toBeTruthy();
@@ -232,8 +232,8 @@ describe("reporte descartado por moderación", () => {
 });
 
 describe("pantalla de apelación", () => {
-  function renderAppeal() {
-    return renderWithProviders(
+  async function renderAppeal() {
+    return await renderWithProviders(
       <SafeAreaProvider initialMetrics={METRICS}>
         <ModerationAppealScreen />
       </SafeAreaProvider>,
@@ -241,10 +241,10 @@ describe("pantalla de apelación", () => {
   }
 
   it("CP-049-M05 (US-049 E6) · avisa que es una sola y exige el motivo", async () => {
-    renderAppeal();
+    await renderAppeal();
 
     expect(screen.getByText(t.formWarning)).toBeTruthy();
-    fireEvent.press(screen.getByText(t.formSubmit));
+    await fireEvent.press(screen.getByText(t.formSubmit));
 
     expect(await screen.findByText(t.missingReasonBody)).toBeTruthy();
     expect(mockedPost).not.toHaveBeenCalled();
@@ -252,10 +252,10 @@ describe("pantalla de apelación", () => {
 
   it("CP-049-M06 (US-049 E6) · manda el motivo al endpoint de moderación y vuelve", async () => {
     mockedPost.mockResolvedValue(detail() as never);
-    renderAppeal();
+    await renderAppeal();
 
-    fireEvent.changeText(screen.getByLabelText(t.reasonLabel), "El bache existe de verdad");
-    fireEvent.press(screen.getByText(t.formSubmit));
+    await fireEvent.changeText(screen.getByLabelText(t.reasonLabel), "El bache existe de verdad");
+    await fireEvent.press(screen.getByText(t.formSubmit));
 
     await screen.findByText(t.formSubmit);
     expect(mockedPost).toHaveBeenCalledWith("/api/reports/7/moderation-appeal/", {
@@ -276,7 +276,7 @@ describe("botón Compartir (US-030 E1)", () => {
       }) as never,
     );
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText("Compartir")).toBeTruthy();
   });
@@ -285,7 +285,7 @@ describe("botón Compartir (US-030 E1)", () => {
     signedInAs(AUTHOR.id);
     mockedGet.mockResolvedValue(detail({ share_url: null }) as never);
 
-    renderDetail();
+    await renderDetail();
 
     expect(await screen.findByText(t.bannerTitle)).toBeTruthy();
     expect(screen.queryByText("Compartir")).toBeNull();

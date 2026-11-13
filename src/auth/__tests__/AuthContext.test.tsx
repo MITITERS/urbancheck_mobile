@@ -67,7 +67,7 @@ beforeEach(() => {
 describe("AuthContext hydration", () => {
   it("ends without token when SecureStore is empty", async () => {
     mockedStore.getItemAsync.mockResolvedValue(null);
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.token).toBeNull();
     expect(mockedGetSession).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("AuthContext hydration", () => {
     mockedGetSession.mockResolvedValue({
       meta: { session_token: "fresh-token" },
     });
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.token).toBe("fresh-token");
     expect(mockedSetSessionToken).toHaveBeenCalledWith("fresh-token");
@@ -87,7 +87,7 @@ describe("AuthContext hydration", () => {
   it("clears stored token when the session is invalid", async () => {
     mockedStore.getItemAsync.mockResolvedValue("stale-token");
     mockedGetSession.mockRejectedValue(new Error("SESSION_EXPIRED"));
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.token).toBeNull();
     expect(mockedStore.deleteItemAsync).toHaveBeenCalledWith(
@@ -103,7 +103,7 @@ describe("signIn", () => {
   });
 
   it("stores the token when rememberMe is true", async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("tok", true));
     expect(result.current.token).toBe("tok");
@@ -115,7 +115,7 @@ describe("signIn", () => {
   });
 
   it("does not persist the token when rememberMe is false", async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("tok", false));
     expect(result.current.token).toBe("tok");
@@ -128,7 +128,7 @@ describe("signIn", () => {
 describe("replaceToken", () => {
   it("adopts the rotated token and keeps it stored if it was", async () => {
     mockedStore.getItemAsync.mockResolvedValue(null);
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("old", true));
     mockedStore.getItemAsync.mockResolvedValue("old");
@@ -145,7 +145,7 @@ describe("replaceToken", () => {
 
   it("does not persist a token that was not remembered", async () => {
     mockedStore.getItemAsync.mockResolvedValue(null);
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("old", false));
 
@@ -159,7 +159,7 @@ describe("replaceToken", () => {
 describe("signOut", () => {
   it("clears token, user and stored session", async () => {
     mockedStore.getItemAsync.mockResolvedValue(null);
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signIn("tok", true));
     await act(() => result.current.signOut());
@@ -184,7 +184,7 @@ describe("signOut", () => {
     queryClient.setQueryData(["reportes", "list", {}], { results: ["secreto"] });
     mockedStore.getItemAsync.mockResolvedValue(null);
 
-    const { result } = renderHook(() => useAuth(), { wrapper: scoped });
+    const { result } = await renderHook(() => useAuth(), { wrapper: scoped });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await act(() => result.current.signOut());
 
@@ -193,8 +193,8 @@ describe("signOut", () => {
 });
 
 describe("useAuth outside provider", () => {
-  it("throws a helpful error", () => {
-    expect(() => renderHook(() => useAuth())).toThrow(
+  it("throws a helpful error", async () => {
+    await expect(renderHook(() => useAuth())).rejects.toThrow(
       "useAuth must be used within AuthProvider",
     );
   });
@@ -205,7 +205,7 @@ describe("profile loading", () => {
     mockedStore.getItemAsync.mockResolvedValue("stored-token");
     mockedGetSession.mockResolvedValue({ meta: { session_token: "fresh-token" } });
 
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.user).toEqual(CITIZEN);
@@ -221,7 +221,7 @@ describe("profile loading", () => {
       is_public: true,
     });
 
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.user?.must_change_password).toBe(true);
@@ -232,7 +232,7 @@ describe("profile loading", () => {
     mockedGetSession.mockResolvedValue({ meta: { session_token: "fresh-token" } });
     mockedGetMe.mockRejectedValue(new Error("offline"));
 
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const { result } = await renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.token).toBe("fresh-token");

@@ -7,7 +7,10 @@ import { getCurrentTerms } from "../../api/users";
 /** RN-10 (C-23) — con términos publicados, aceptarlos es parte del registro. */
 
 jest.mock("expo-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => children,
+  Link: ({ children }: { children: React.ReactNode }) => {
+    const { Text } = jest.requireActual("react-native");
+    return <Text>{children}</Text>;
+  },
 }));
 
 jest.mock("@expo/vector-icons", () => {
@@ -52,7 +55,7 @@ describe("con términos publicados", () => {
   beforeEach(() => mockedTerms.mockResolvedValue(TERMS));
 
   it("no deja registrarse sin aceptarlos", async () => {
-    render(<RegisterScreen />);
+    await render(<RegisterScreen />);
     await screen.findByText("Leí y acepto los términos y condiciones y la política de privacidad");
     await fillForm();
 
@@ -67,7 +70,7 @@ describe("con términos publicados", () => {
   });
 
   it("al aceptarlos manda la aceptación y la versión", async () => {
-    render(<RegisterScreen />);
+    await render(<RegisterScreen />);
     await fillForm();
     await userEvent.press(await screen.findByLabelText("Leí y acepto los términos y condiciones y la política de privacidad"));
 
@@ -85,7 +88,7 @@ describe("con términos publicados", () => {
   });
 
   it("el texto se lee desde el formulario", async () => {
-    render(<RegisterScreen />);
+    await render(<RegisterScreen />);
 
     await userEvent.press(await screen.findByText("Ver términos y política de privacidad"));
 
@@ -97,7 +100,7 @@ describe("sin términos publicados", () => {
   beforeEach(() => mockedTerms.mockResolvedValue(null));
 
   it("no muestra la casilla y registra como antes", async () => {
-    render(<RegisterScreen />);
+    await render(<RegisterScreen />);
     await fillForm();
 
     await userEvent.press(screen.getByText("Registrarse"));

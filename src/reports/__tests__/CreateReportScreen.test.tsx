@@ -137,8 +137,8 @@ async function fillAndSubmit() {
   return user;
 }
 
-function renderScreen() {
-  return renderWithProviders(
+async function renderScreen() {
+  return await renderWithProviders(
     <SafeAreaProvider initialMetrics={METRICS}>
       <CreateReportTab />
     </SafeAreaProvider>,
@@ -152,7 +152,7 @@ beforeEach(() => {
 describe("CreateReportTab when the problem is already reported (US-032)", () => {
   it("CP-032-M07 (US-032 E1) · shows the existing report instead of an error", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
-    renderScreen();
+    await renderScreen();
 
     await fillAndSubmit();
 
@@ -163,7 +163,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
   it("CP-032-M08 (US-032 E2) · joins with a like and opens the existing report", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
     mockedLikeReport.mockResolvedValueOnce({ liked: true, like_count: 4 });
-    renderScreen();
+    await renderScreen();
 
     const user = await fillAndSubmit();
     await user.press(await screen.findByText("Sumar mi apoyo"));
@@ -174,7 +174,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
 
   it("CP-032-M09 (US-032 E3) · goes back keeping what was loaded, without liking", async () => {
     mockedCreateReport.mockRejectedValueOnce(alreadyExists());
-    renderScreen();
+    await renderScreen();
 
     const user = await fillAndSubmit();
     await user.press(await screen.findByText("Volver"));
@@ -192,7 +192,7 @@ describe("CreateReportTab when the problem is already reported (US-032)", () => 
     mockedCreateReport.mockRejectedValueOnce(
       alreadyExists({ ...EXISTING, is_author: true }),
     );
-    renderScreen();
+    await renderScreen();
 
     const user = await fillAndSubmit();
     await user.press(await screen.findByText("Ir a mi reclamo"));
@@ -207,7 +207,7 @@ describe("CreateReportTab when the photo still has to be blurred (US-042)", () =
   async function submitAndReadTheConfirmation() {
     const alerts: { title?: string | null; message?: string | null }[] = [];
     mockedCreateReport.mockResolvedValueOnce({ id: 99 } as never);
-    renderScreen();
+    await renderScreen();
 
     const user = userEvent.setup();
     jest.spyOn(Alert, "alert").mockImplementation((title, message, buttons) => {
@@ -250,7 +250,7 @@ describe("CreateReportTab when the photo still has to be blurred (US-042)", () =
     mockedCreateReport.mockRejectedValueOnce(
       alreadyExists({ ...EXISTING, photo: null, photo_status: "pendiente" }),
     );
-    renderScreen();
+    await renderScreen();
 
     await fillAndSubmit();
 
